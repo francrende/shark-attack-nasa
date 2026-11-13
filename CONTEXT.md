@@ -210,3 +210,54 @@ El proceso que cumple el productor o asesor al utilizar la herramienta sigue cua
 3. **Recepción de la decisión explicada:** El dashboard ejecuta el modelo híbrido y le devuelve el ranking de cultivos y la secuencia de rotación sugerida con una explicación transparente:
    > *"Recomendación: Sembrar Sorgo o Girasol (y evitar repetir Soja o Maíz Temprano). La telemetría de la NASA muestra una saturación radicular del 34% y una anomalía de lluvias de -24%. El Sorgo presenta un 87% de aptitud integral: resiste el estrés hídrico proyectado y aporta el carbono y rastrojo que tu lote necesita después de la Soja."*
 4. **Simulación "What-If" (Opcional):** El productor puede mover un control deslizante (ej. *"¿Qué cambia si llueven 80 mm antes de la siembra?"*) para ver en tiempo real cómo se reacomoda el ranking y planificar su compra de insumos con anticipación.
+
+---
+
+## 7. Guía Rápida de Instalación (Setup del Equipo)
+
+Pasos para dejar el entorno local listo después de clonar o hacer `git pull` del repositorio. No se requiere ningún motor de base de datos externo.
+
+### 7.1. Estructura del Repositorio
+```text
+shark-attack-nasa/
+├── backend/
+│   ├── ml/                # Entrenamiento (train_baseline.py) y modelo (.joblib)
+│   ├── providers/         # Clientes HTTP (NASA POWER API, ISRIC SoilGrids API)
+│   ├── routers/           # Endpoints FastAPI (/api/v1/simulate)
+│   ├── services/          # Lógica de negocio y matriz de rotación agronómica
+│   └── requirements.txt   # Dependencias de Python
+├── frontend/              # Aplicación React + TypeScript + Vite + Leaflet
+└── CONTEXT.md             # Documentación de arquitectura y contratos
+```
+
+### 7.2. Levantar el Frontend (`React + TypeScript + Vite`)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+- El servidor de desarrollo quedará corriendo en `http://localhost:5173`.
+
+### 7.3. Configurar y Levantar el Backend (`Python + FastAPI`)
+```bash
+cd backend
+
+# 1. Crear el entorno virtual
+python -m venv .venv
+
+# 2. Activar el entorno virtual
+# En Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# En Windows (CMD):
+.venv\Scripts\activate.bat
+# En Linux / macOS:
+source .venv/bin/activate
+
+# 3. Instalar dependencias
+pip install -r requirements.txt
+
+# 4. Iniciar el servidor FastAPI (una vez creado main.py)
+uvicorn main:app --reload --port 8000
+```
+- El backend responderá en `http://localhost:8000` (y la documentación interactiva Swagger UI en `http://localhost:8000/docs`).
+
