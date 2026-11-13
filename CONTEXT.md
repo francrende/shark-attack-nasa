@@ -97,36 +97,43 @@ Para evitar el error agronómico de comparar cultivos de invierno contra cultivo
 - **Secuencia Recomendada:** Además de puntuar los cultivos de la campaña seleccionada, el sistema sugiere la **secuencia anual óptima (Invierno $\rightarrow$ Verano)** (ej. *Vicia de cobertura $\rightarrow$ Maíz Tardío* para recuperar nitrógeno y escapar al estrés hídrico de enero).
 
 ### 4.2. Modelo de Machine Learning (`HistGradientBoostingRegressor` / `RandomForestRegressor`)
-- **Qué predice:** El índice de aptitud y estabilidad agroclimática ($S_{\text{clima}}$, de 0 a 100) de cada cultivo candidato frente a las variables de la NASA y del suelo.
+- **Qué predice:** El **Puntaje de Aptitud Hidroclimática ($S_{\text{hidroclimatico}}$, de 0 a 100)** de cada cultivo candidato frente a las variables de clima y agua de la NASA (`GWETROOT`, `PRECTOTCORR`, `T2M_MAX`, `T2M_MIN`, `EVPTRNS`) y la textura del suelo.
 - **Por qué ensambles de árboles:** Capturan umbrales biológicos no lineales (ej. caída abrupta de rinde cuando `T2M_MAX > 35°C` coincide con `GWETROOT < 0.30`), no requieren GPU, corren en `< 15 ms` en producción y proveen explicabilidad por variable (`feature_importances_` / valores SHAP).
 - **Estrategia de Entrenamiento en 2 Fases:**
   1. **Fase 1 (Hackathon — Script `train_baseline.py`):** Generación de un dataset calibrado combinando las curvas oficiales de respuesta al agua y temperatura de la **FAO (FAO-56)** con distribuciones climáticas reales descargadas de **NASA POWER** en puntos representativos de la región pampeana. Garantiza un modelo funcional, coherente y sin cuellos de botella de limpieza de datos en las 48 hs.
   2. **Fase 2 (Producto Comercial — Pipeline de Datos Reales):** Entrenamiento supervisado sobre el dataset histórico de **Estimaciones Agrícolas (SIIA / MAGyP)** cruzado por departamento y campaña con las series diarias de **NASA POWER**, **SMAP** y **MODIS NDVI**, incorporando ajuste fino por lote con datos propios del productor.
 
-### 4.3. Features de Entrada ($X$) del Modelo
+### 4.3. Features de Entrada ($X$) del Modelo ML
 1. `gwetroot_saturacion_pct`: Índice de humedad radicular actual (`GWETROOT * 100` de NASA POWER, o valor simulado por el usuario en modo *What-If*).
 2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm) para viabilidad de emergencia en siembra.
 3. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días respecto a la climatología histórica de 20 años de la NASA en esa coordenada.
 4. `frecuencia_estres_termico`: Días esperados con `T2M_MAX > 34°C` durante la ventana crítica del cultivo.
 5. `frecuencia_riesgo_helada`: Días esperados con `T2M_MIN < 2°C`.
 6. `indice_aridez_evaporativa`: Relación entre precipitación y demanda evaporativa (`PRECTOTCORR / EVPTRNS`).
-7. `textura_arcilla_pct` y `carbono_organico_g_kg`: Propiedades edáficas del lote (vía SoilGrids / perfil regional).
-8. `cultivo_anterior` y `campana_objetivo`: Variables categóricas de contexto rotacional.
+7. `textura_arcilla_pct`: Porcentaje de arcilla del lote (vía SoilGrids / perfil regional) para ajustar retención de agua.
+8. `cultivo_candidato`: Cultivo a evaluar dentro de la campaña seleccionada.
 
-### 4.4. Sub-Scores y Fórmula Dinámica Multicriterio
-Para cada cultivo o secuencia candidata se calculan tres sub-scores normalizados (0 a 100):
-- **$S_{\text{clima}}$ (Aptitud Climática — salida del Modelo ML):** Probabilidad de éxito frente al régimen térmico y de lluvias proyectado en la coordenada.
-- **$S_{\text{suelo}}$ (Salud del Suelo — Matriz de Transición + Edafología):** Evalúa el balance de Carbono y Nitrógeno, aporte de rastrojo y corte de ciclo de plagas/enfermedades respecto a `cultivo_anterior` (ej. penaliza fuertemente el monocultivo `soja -> soja`; premia rotaciones gramínea/leguminosa como `soja -> maiz_tardio` o `soja -> vicia -> maiz`).
-- **$S_{\text{agua}}$ (Eficiencia Hídrica):** Adecuación entre el consumo en mm del cultivo y el agua disponible en el perfil (`GWETROOT`), premiando cultivos de alta eficiencia en uso del agua (`sorgo`, `girasol`, `maiz_tardio`) cuando hay déficit hídrico.
+### 4.4. Los 2 Pilares del Puntaje y Fórmula Dinámica
+Para evitar redundancias, el sistema separa el cálculo en **2 únicos pilares** claramente diferenciados:
 
-$$\text{Score Final} = w_1 \cdot S_{\text{clima}} + w_2 \cdot S_{\text{suelo}} + w_3 \cdot S_{\text{agua}}$$
+1. **$S_{\text{hidroclimatico}}$ (Clima + Agua — Calculado 100% por el Modelo de ML):** Evalúa qué tan viable es el cultivo según la oferta de agua en el perfil (`GWETROOT`), la anomalía de lluvias (`PRECTOTCORR`) y el estrés térmico (`T2M_MAX`/`T2M_MIN`) reportados por la NASA.
+2. **$S_{\text{suelo}}$ (Salud del Suelo y Rotación — Calculado por Matriz Agronómica + SoilGrids):** Tabla determinística de reglas agronómicas que evalúa la transición `cultivo_anterior -> cultivo_candidato` (balance de Carbono/Nitrógeno, aporte de rastrojo y corte de ciclo de plagas) ajustada por el nivel actual de Carbono Orgánico (`soc`) del lote. Por ejemplo, penaliza el monocultivo `soja -> soja` (`20 pts`) y premia rotaciones con gramíneas como `soja -> sorgo` o `soja -> maiz` (`90–95 pts`).
 
-| `objetivo_productor` | Peso Clima ($w_1$) | Peso Suelo ($w_2$) | Peso Agua ($w_3$) | Enfoque de la Recomendación |
-| :--- | :---: | :---: | :---: | :--- |
-| `conservacion_suelo` | `0.20` | **`0.60`** | `0.20` | Prioriza aporte de carbono, cobertura de rastrojo y rotación de familias botánicas. |
-| `eficiencia_hidrica` | `0.25` | `0.15` | **`0.60`** | Prioriza cultivos rústicos de bajo requerimiento hídrico y alta tolerancia a sequía. |
-| `resiliencia_climatica` | **`0.65`** | `0.15` | `0.20` | Minimiza riesgo de pérdida productiva ante golpes de calor, heladas o anomalías de lluvia. |
-| `equilibrio` | `0.34` | `0.33` | `0.33` | Balance integral entre estabilidad climática, regeneración del suelo y uso eficiente del agua. |
+$$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\text{suelo}} \cdot S_{\text{suelo}}$$
+
+| `objetivo_productor` | Peso Hidroclimático ($w_{\text{clima}}$) | Peso Suelo ($w_{\text{suelo}}$) | Enfoque de la Recomendación |
+| :--- | :---: | :---: | :--- |
+| `resiliencia_hidroclimatica` | **`0.75`** | `0.25` | Prioriza asegurar el cultivo frente a sequías, baja humedad radicular o golpes de calor. |
+| `conservacion_suelo` | `0.30` | **`0.70`** | Prioriza regenerar carbono, aportar cobertura de rastrojo y cortar el monocultivo. |
+| `equilibrio` | `0.50` | `0.50` | Balance 50/50 entre seguridad hídrica/climática y sustentabilidad del suelo. |
+
+### 4.5. Flujo de Ejecución: Offline (Entrenamiento) vs. Online (Inferencia en Producción)
+- **Fase Offline (Pre-deploy):** Se ejecuta el script de entrenamiento con series históricas de NASA POWER + curvas FAO/SIIA $\rightarrow$ genera el archivo `modelo_agro.joblib` que queda incluido en el repositorio del backend.
+- **Fase Online (`POST /api/v1/simulate` en `< 1.5s`):**
+  1. FastAPI recibe `coordenadas`, `campana`, `cultivo_anterior` y `objetivo_productor`.
+  2. Consulta en paralelo **NASA POWER API** (filtrando lags `-999.0`) y **SoilGrids API**.
+  3. Construye las features $X$ y ejecuta `modelo_agro.predict(X)` en memoria para obtener $S_{\text{hidroclimatico}}$ de cada cultivo de la campaña.
+  4. Cruza cada cultivo con la **Matriz de Rotación** para obtener $S_{\text{suelo}}$, aplica los pesos ($w_{\text{clima}}, w_{\text{suelo}}$) y devuelve el JSON.
 
 ---
 
@@ -144,7 +151,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   },
   "campana": "verano", // opciones: "invierno", "verano"
   "cultivo_anterior": "soja_primera",
-  "objetivo_productor": "equilibrio", // opciones: "conservacion_suelo", "eficiencia_hidrica", "resiliencia_climatica", "equilibrio"
+  "objetivo_productor": "equilibrio", // opciones: "resiliencia_hidroclimatica", "conservacion_suelo", "equilibrio"
   "simulacion_what_if": {
     "override_humedad_radicular_pct": null, // opcional (0-100): si es null, usa el dato real de NASA POWER
     "variacion_lluvia_esperada_pct": 0 // opcional (-50 a +50): para simular años más secos o húmedos
@@ -171,25 +178,24 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   "recomendacion_principal": {
     "cultivo": "sorgo",
     "secuencia_sugerida": "vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
-    "score_final": 87.2,
+    "score_final": 90.5,
     "sub_scores": {
-      "clima": 86.0,
-      "suelo": 85.0,
-      "agua": 91.0
+      "hidroclimatico": 86.0,
+      "suelo": 95.0
     },
     "factores_clave_ml": [
       "Baja saturación hídrica en zona radicular detectada por NASA (34%)",
       "Alta necesidad de aportar rastrojo de gramínea tras cultivo de Soja",
       "Anomalía de lluvias de -24.2% en los últimos 90 días"
     ],
-    "explicacion": "Recomendación: Sembrar Sorgo (o Maíz Tardío precedido por Vicia). Detectamos vía satélite una reserva hídrica ajustada (34% de saturación radicular) y un déficit de lluvias del 24%. A diferencia del Maíz Temprano (riesgo crítico en floración) o repetir Soja (degradación de carbono del suelo), el Sorgo ofrece un 86% de estabilidad climática y recompone la estructura física del lote."
+    "explicacion": "Recomendación: Sembrar Sorgo (o Maíz Tardío precedido por Vicia). Detectamos vía satélite una reserva hídrica ajustada (34% de saturación radicular) y un déficit de lluvias del 24%. A diferencia del Maíz Temprano (riesgo crítico en floración) o repetir Soja (degradación de carbono del suelo), el Sorgo ofrece un 86% de aptitud hidroclimática y un 95% de beneficio edáfico para recomponer la estructura del lote."
   },
   "ranking_cultivos": [
-    { "cultivo": "sorgo", "score_final": 87.2, "riesgo": "bajo" },
-    { "cultivo": "girasol", "score_final": 84.5, "riesgo": "bajo" },
-    { "cultivo": "maiz_tardio", "score_final": 76.0, "riesgo": "medio" },
-    { "cultivo": "maiz_temprano", "score_final": 44.8, "riesgo": "critico" },
-    { "cultivo": "soja_primera", "score_final": 38.2, "riesgo": "alto" }
+    { "cultivo": "sorgo", "score_final": 90.5, "riesgo": "bajo" },
+    { "cultivo": "maiz_tardio", "score_final": 82.5, "riesgo": "medio" },
+    { "cultivo": "girasol", "score_final": 72.0, "riesgo": "bajo" },
+    { "cultivo": "maiz_temprano", "score_final": 64.0, "riesgo": "critico" },
+    { "cultivo": "soja_primera", "score_final": 31.0, "riesgo": "alto" }
   ]
 }
 ```
@@ -200,7 +206,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
 El proceso que cumple el productor o asesor al utilizar la herramienta sigue cuatro pasos ágiles y accionables:
 
 1. **Selección del lote y detección satelital automática:** Entra a la web, activa las capas visuales de la NASA (Humedad SMAP o Verdor NDVI) y marca su lote en el mapa. El sistema consulta automáticamente a la NASA y al mapa edáfico, mostrándole en pantalla el estado hídrico y térmico actual de su campo sin que tenga que tipear datos complejos.
-2. **Configuración de contexto y objetivo:** Indica de qué cultivo viene el lote (ej. *"Vengo de Soja de 1ra"*), qué campaña va a planificar (*"Campaña de Verano"*) y cuál es su prioridad (*"Conservar salud del suelo"*, *"Eficiencia hídrica"*, *"Resiliencia climática"* o *"Equilibrio"*).
+2. **Configuración de contexto y objetivo:** Indica de qué cultivo viene el lote (ej. *"Vengo de Soja de 1ra"*), qué campaña va a planificar (*"Campaña de Verano"*) y cuál es su prioridad (*"Resiliencia hidroclimática"*, *"Conservación del suelo"* o *"Equilibrio"*).
 3. **Recepción de la decisión explicada:** El dashboard ejecuta el modelo híbrido y le devuelve el ranking de cultivos y la secuencia de rotación sugerida con una explicación transparente:
    > *"Recomendación: Sembrar Sorgo o Girasol (y evitar repetir Soja o Maíz Temprano). La telemetría de la NASA muestra una saturación radicular del 34% y una anomalía de lluvias de -24%. El Sorgo presenta un 87% de aptitud integral: resiste el estrés hídrico proyectado y aporta el carbono y rastrojo que tu lote necesita después de la Soja."*
 4. **Simulación "What-If" (Opcional):** El productor puede mover un control deslizante (ej. *"¿Qué cambia si llueven 80 mm antes de la siembra?"*) para ver en tiempo real cómo se reacomoda el ranking y planificar su compra de insumos con anticipación.
