@@ -105,12 +105,12 @@ Formato estándar de comunicación entre el Frontend y el Backend. Todas las her
    - **Impacto en la salud del suelo** (rotación gramínea/leguminosa respecto a `cultivo_anterior`, cobertura de rastrojo y consumo de agua).
 4. Devuelve un ranking de cultivos recomendados con métricas agroclimáticas e indicadores de riesgo.
 
-```
+---
 
-### Flujo esperado del Backend en `/api/v1/simulate`
-1. Recibe las `coordenadas`, el `cultivo_anterior` y el `objetivo_productor`.
-2. Consulta **NASA POWER API** (`PRECTOTCORR`, `GWETROOT`, `GWETTOP`, `T2M_MAX`, `T2M_MIN`) para obtener el perfil hidroclimático de la ubicación (y usar `GWETROOT` si `humedad_suelo_actual_pct` no fue provisto manualmente).
-3. Evalúa cada cultivo candidato de rotación cruzando:
-   - **Adecuación hídrica y térmica** (según datos NASA).
-   - **Impacto en la salud del suelo** (rotación gramínea/leguminosa respecto a `cultivo_anterior`, cobertura de rastrojo y consumo de agua).
-4. Devuelve un ranking de cultivos recomendados con métricas agroclimáticas e indicadores de riesgo.
+## 5. Flujo del Usuario (User Journey)
+El proceso que cumple el productor al utilizar la herramienta sigue tres pasos simples y accionables:
+
+1. **Selección del lote:** Entra a la web y marca su lote en el mapa interactivo.
+2. **Configuración de contexto y objetivo:** Setea su contexto productivo (ej. *"Vengo de sembrar Soja"*) y elige un objetivo principal (ej. *"Maximizar rentabilidad"*, *"Conservar humedad"*, o *"Equilibrio"*).
+3. **Recepción de la decisión:** El dashboard procesa los datos satelitales y agronómicos y le devuelve una tarjeta clara con la recomendación:
+   > *"Recomendación: Sembrar Girasol. Tenés un 85% de probabilidad de éxito frente a la escasez de lluvia proyectada y un margen económico positivo, a diferencia del Maíz que presenta riesgo crítico de fracaso hídrico."*
