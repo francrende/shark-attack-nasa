@@ -1,5 +1,6 @@
 import {
   Calendar,
+  Info,
   Play,
   RotateCcw,
   Sparkles,
@@ -89,15 +90,18 @@ export function CampaignConfigPanel({
               <Sun size={15} />
               <span>Verano</span>
             </button>
-            <button
-              type="button"
-              className={`campaign-btn winter-btn ${campana === 'invierno' ? 'active' : ''}`}
-              onClick={() => onChangeCampana('invierno')}
-              title="Campaña fina"
-            >
-              <Snowflake size={15} />
-              <span>Invierno</span>
-            </button>
+            <span className="campaign-disabled-wrap" title="A futuro">
+              <button
+                type="button"
+                className="campaign-btn winter-btn"
+                disabled
+                aria-disabled="true"
+              >
+                <Snowflake size={15} />
+                <span>Invierno</span>
+                <Info size={13} className="campaign-info-icon" aria-hidden="true" />
+              </button>
+            </span>
           </div>
         </div>
 

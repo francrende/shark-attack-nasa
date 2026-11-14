@@ -42,7 +42,6 @@ import type {
   Campana,
   Coordenadas,
   CultivoId,
-  GibsLayerId,
   ObjetivoProductor,
   SimulacionWhatIf,
   SimulateResponse,
@@ -104,8 +103,6 @@ export function App() {
     defaultField.centroide
   )
   const [customPolygon, setCustomPolygon] = useState<[number, number][]>([])
-  const [activeGibsLayer, setActiveGibsLayer] =
-    useState<GibsLayerId>('none')
 
   // Estado agronómico y simulación What-If (campaña y cultivo anterior inician sin selección)
   const [campana, setCampana] = useState<Campana | null>(null)
@@ -522,7 +519,6 @@ export function App() {
             selectedFieldId={selectedFieldId}
             isDrawingNewField={isDrawingNewField}
             customPolygon={customPolygon}
-            activeGibsLayer={activeGibsLayer}
             historicalMode={{
               active: activeTab === 'historico',
               year: historicalYear,
@@ -531,7 +527,6 @@ export function App() {
             }}
             onSelectUserField={handleSelectUserField}
             onUpdateCustomPolygon={handleUpdateCustomPolygon}
-            onChangeGibsLayer={setActiveGibsLayer}
           />
         </section>
 

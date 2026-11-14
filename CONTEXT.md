@@ -110,11 +110,11 @@ El listado oficial de recursos del challenge incluye bases de datos gubernamenta
 
 El motor de recomendación está diseñado bajo una interfaz común (`RecommendationEngine`) que combina **Machine Learning basado en Árboles (`scikit-learn`)** con una **Matriz de Transición Agronómica, Topográfica y Scoring Multicriterio (MCDA)**.
 
-### 4.1. Separación por Campaña y Comparación de Estrategias de Rotación
+### 4.1. Separación por Campaña y Recomendación de Campaña Actual
 Para evitar el error agronómico de comparar cultivos de invierno contra cultivos de verano en una misma fecha de siembra, el motor opera sobre **ventanas de campaña explícitas**:
-- **Campaña Fina (`invierno`):** `trigo`, `cebada`, `vicia_cobertura` (leguminosa fijadora de N), `avena_cobertura` (gramínea de cobertura contra erosión), `camelina`.
-- **Campaña Gruesa (`verano`):** `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda` (post-fina), `girasol`, `sorgo`.
-- **Comparación de Secuencias (Requerimiento del Challenge):** Además de puntuar cada cultivo candidato, el sistema contrasta la **rotación recomendada (Invierno $\rightarrow$ Verano)** contra alternativas defensivas y contra la **estrategia testigo (repetir el cultivo anterior / monocultivo con barbecho desnudo)**, evidenciando los meses de suelo descubierto (*bare-field periods*) y el impacto sobre el agua y el carbono.
+- **Campaña Gruesa (`verano` — Activa):** `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda` (post-fina), `girasol`, `sorgo`. Evalúa y recomienda el cultivo óptimo para la campaña actual utilizando los datos satelitales y climáticos del día de hoy.
+- **Campaña Fina (`invierno` — A futuro):** `trigo`, `cebada`, `vicia_cobertura` (leguminosa fijadora de N), `avena_cobertura` (gramínea de cobertura contra erosión), `camelina`. Queda planificada como extensión futura en la interfaz.
+- **Alcance de la Recomendación (`secuencia_sugerida`):** El sistema recomienda únicamente el cultivo (o terna alternativa) para la **campaña actual** en curso, contrastándolo contra alternativas defensivas y contra la **estrategia testigo (repetir el cultivo anterior / monocultivo)** según el estado hídrico y edáfico actual.
 
 ### 4.2. Modelo de Machine Learning (`HistGradientBoostingRegressor` / `RandomForestRegressor`) y Datos de Entrenamiento
 - **Qué predice:** El **Puntaje de Aptitud Hidroclimática y Topográfica ($S_{\text{hidroclimatico}}$, de 0 a 100)** de cada cultivo candidato frente a la telemetría satelital de la NASA (`GWETROOT`, `GWETTOP`, `PRECTOTCORR`, `T2M_MAX`, `T2M_MIN`, `EVPTRNS`), la pendiente del terreno (`SRTM`) y la textura del suelo (`SoilGrids`).
@@ -234,7 +234,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   ],
   "recomendacion_principal": {
     "cultivo": "sorgo",
-    "secuencia_sugerida": "vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
+    "secuencia_sugerida": "sorgo / maiz_tardio (verano)",
     "score_final": 90.5,
     "sub_scores": {
       "hidroclimatico": 86.0,

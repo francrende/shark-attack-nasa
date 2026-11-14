@@ -253,28 +253,18 @@ function classifyRisk(
 function buildSuggestedSequence(
   campana: Campana,
   ganador: CultivoId,
-  segundo: CultivoId,
-  gwetrootPct: number
+  segundo: CultivoId
 ): string {
   const nombreGanador = CULTIVOS_CATALOGO[ganador]?.nombre ?? ganador
   const nombreSegundo = CULTIVOS_CATALOGO[segundo]?.nombre ?? segundo
 
   if (campana === 'verano') {
     if (ganador === 'sorgo' || ganador === 'maiz_tardio') {
-      return 'Vicia de cobertura (invierno) → Sorgo o Maíz tardío (verano)'
+      return 'Sorgo o Maíz tardío (verano)'
     }
-    if (ganador === 'maiz_temprano') {
-      return 'Trigo o Vicia (invierno) → Maíz temprano (verano)'
-    }
-    if (ganador === 'girasol') {
-      return 'Avena de cobertura (invierno) → Girasol (verano)'
-    }
-    return `Trigo (invierno) → ${nombreGanador} o ${nombreSegundo} (verano)`
-  } else {
-    const veranoSugerido =
-      gwetrootPct < 45 ? 'Sorgo o Maíz tardío' : 'Maíz temprano o Soja de 2da'
-    return `${nombreGanador} (invierno) → ${veranoSugerido} (verano)`
+    return `${nombreGanador} o ${nombreSegundo} (verano)`
   }
+  return `${nombreGanador} o ${nombreSegundo} (invierno)`
 }
 
 /**
@@ -491,8 +481,7 @@ export function generateSimulatedResponse(
       secuencia_sugerida: buildSuggestedSequence(
         campana,
         ganador.cultivo as CultivoId,
-        segundo.cultivo as CultivoId,
-        gwetrootEfectivo
+        segundo.cultivo as CultivoId
       ),
       score_final: ganador.score_final,
       sub_scores: ganador.sub_scores,

@@ -53,6 +53,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-20** | Refinamiento de Panel Derecho, Pestañas tipo Carpeta y Header (Tonos Arena, Márgenes y Sombras sin Bordes) | `frontend/src/index.css`, `frontend/src/App.css` | `FRONT-19` | `[x]` |
 | **FRONT-21** | Segundo Header Colapsable de Gestión de Lotes del Usuario y Delimitación de Nuevos Campos (`BACK-4`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-20` | `[x]` |
 | **FRONT-22** | Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación | `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.css` | `FRONT-21` | `[x]` |
+| **FRONT-23** | Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-22` | `[x]` |
 
 ---
 
@@ -563,5 +564,24 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Campañas y cultivo antecesor:** Botones **`Verano`** (tooltip `"Campaña gruesa"`, amarillo) e **`Invierno`** (tooltip `"Campaña fina"`, azul) sin borde, con cambio de tono en `:hover` y color más oscuro al seleccionar; selector con placeholder `"Cultivo"` y exactamente la misma altura (`40px`).
   - **Objetivo:** Renombrado de `"Prioridad de manejo"` a `"Objetivo"`, con las 3 pills del mismo tono tierra sin borde, altura uniforme (`min-height: 56px`) y animación de expansión al hacer `:hover` para mostrar la descripción.
   - **Estrategia de rotación:** Eliminado el encabezado `"Comparativa de cultivos para esta campaña"`, filas del listado expandibles al tocarlas para ver el detalle de cada cultivo, y botón de fundamentos **`+ Mas...`** sin contenedor en la esquina inferior derecha.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-23: Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS
+- **Objetivo:** Unificar la recomendación dentro del listado de cultivos (cada ítem expande su tarjeta completa al tocarlo), enfocar la recomendación exclusivamente en la campaña actual (`verano`), desactivar `Invierno` con tooltip `"A futuro"` y eliminar el panel flotante de capas satelitales sobre el mapa.
+- **Archivos Permitidos:**
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/components/SimulationControls.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/services/apiClient.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Listado único expandible:** Se elimina la tarjeta fija superior y el bloque `"Rotación sugerida para el año"`; al tocar cualquier cultivo del listado se expande su tarjeta completa con anillo de puntaje, barras de pilares y enlace `+ Mas...`.
+  - **Campaña actual (`verano`):** `Invierno` queda desactivado (`disabled`) con ícono de información y tooltip `"A futuro"`, alineado con `CONTEXT.md`.
+  - **Mapa limpio:** Se elimina el panel flotante inferior de capas temáticas NASA GIBS sobre el mapa, conservando el visor satelital base y etiquetas.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

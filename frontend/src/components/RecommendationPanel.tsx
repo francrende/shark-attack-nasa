@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  GitCommitHorizontal,
   Info,
   ShieldAlert,
 } from 'lucide-react'
@@ -51,30 +50,23 @@ export function RecommendationPanel({
   ranking,
   isWhatIfActive = false,
 }: RecommendationPanelProps) {
-  const [showDetail, setShowDetail] = useState<boolean>(false)
-  const [showAllCrops, setShowAllCrops] = useState<boolean>(false)
   const [expandedCropId, setExpandedCropId] = useState<string | null>(null)
-
-  const winnerName = getCultivoDisplayName(recomendacion.cultivo)
-  const winnerMeta = CULTIVOS_CATALOGO[recomendacion.cultivo as CultivoId]
-
-  const roundedFinalScore = Math.round(recomendacion.score_final)
-  const roundedWaterScore = Math.round(recomendacion.sub_scores.hidroclimatico)
-  const roundedSoilScore = Math.round(recomendacion.sub_scores.suelo)
-
-  // Primera oración corta del fundamento como conclusión rápida (< 5s)
-  const headlineReason =
-    recomendacion.factores_clave_ml[0] ??
-    'Presenta la mayor aptitud frente a la disponibilidad hídrica del lote y el balance del suelo.'
+  const [moreOpenCropId, setMoreOpenCropId] = useState<string | null>(null)
+  const [showAllCrops, setShowAllCrops] = useState<boolean>(false)
 
   // Parámetros del anillo SVG del Puntaje general
-  const radius = 38
+  const radius = 34
   const circumference = 2 * Math.PI * radius
-  const strokeDashoffset =
-    circumference - (Math.min(100, roundedFinalScore) / 100) * circumference
 
   // Anti-clutter: mostrar Top 3 por defecto
   const visibleRanking = showAllCrops ? ranking : ranking.slice(0, 3)
+
+  const handleToggleCrop = (cultivoId: string) => {
+    setExpandedCropId((prev) => (prev === cultivoId ? null : cultivoId))
+    if (moreOpenCropId && moreOpenCropId !== cultivoId) {
+      setMoreOpenCropId(null)
+    }
+  }
 
   return (
     <section
@@ -83,7 +75,6 @@ export function RecommendationPanel({
     >
       <div className="section-header-row">
         <div>
-
           <h2 className="section-title">Estrategia de rotación</h2>
         </div>
         {isWhatIfActive && (
@@ -91,144 +82,7 @@ export function RecommendationPanel({
         )}
       </div>
 
-      {/* 1. CONCLUSIÓN PRIMERO: CULTIVO GANADOR + PUNTAJE GENERAL + MOTIVO EN 1 LÍNEA */}
-      <div className="winner-card">
-        <div className="winner-top-row">
-          <div className="winner-main-info">
-            <span className="winner-kicker">Cultivo recomendado</span>
-            <h3 className="winner-crop-name">{winnerName}</h3>
-            <p className="winner-headline-reason">{headlineReason}</p>
-          </div>
-
-          {/* ANILLO SVG DE PUNTAJE GENERAL */}
-          <div
-            className="score-ring-box"
-            title="Puntaje general (combina aptitud hidroclimática y aporte al suelo según la prioridad seleccionada)"
-          >
-            <svg width="96" height="96" viewBox="0 0 96 96">
-              <circle
-                cx="48"
-                cy="48"
-                r={radius}
-                fill="none"
-                stroke={THEME_COLORS.primarySoft}
-                strokeWidth="8"
-              />
-              <circle
-                cx="48"
-                cy="48"
-                r={radius}
-                fill="none"
-                stroke={THEME_COLORS.primary}
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                transform="rotate(-90 48 48)"
-              />
-            </svg>
-            <div className="score-ring-text">
-              <span className="score-ring-number">{roundedFinalScore}</span>
-              <span className="score-ring-unit">/ 100</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. EVIDENCIA EN 2 BARRAS: AGUA/CLIMA (AZUL) Y SUELO (NARANJA) */}
-        <div className="pillars-breakdown">
-          <div className="pillar-item">
-            <div className="pillar-label-row">
-              <span>Aptitud frente al agua y el clima</span>
-              <strong className="pillar-score water">
-                {roundedWaterScore} / 100
-              </strong>
-            </div>
-            <div className="progress-track water-track">
-              <div
-                className="progress-fill water-fill"
-                style={{
-                  width: `${Math.min(100, roundedWaterScore)}%`,
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="pillar-item">
-            <div className="pillar-label-row">
-              <span>Aporte al suelo y la rotación</span>
-              <strong className="pillar-score heat">
-                {roundedSoilScore} / 100
-              </strong>
-            </div>
-            <div className="progress-track heat-track">
-              <div
-                className="progress-fill heat-fill"
-                style={{
-                  width: `${Math.min(100, roundedSoilScore)}%`,
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 3. ROTACIÓN SUGERIDA PARA EL AÑO */}
-        <div className="sequence-banner">
-          <div className="sequence-icon">
-            <GitCommitHorizontal size={18} />
-          </div>
-          <div>
-            <span className="sequence-label">
-              Rotación sugerida para el año
-            </span>
-            <strong className="sequence-value">
-              {recomendacion.secuencia_sugerida}
-            </strong>
-          </div>
-        </div>
-
-        {/* 4. DIVULGACIÓN PROGRESIVA: "+ Mas..." SIN CONTENEDOR EN ESQUINA INFERIOR DERECHA */}
-        <div className="winner-more-row">
-          <button
-            type="button"
-            className="detail-link-btn"
-            onClick={() => setShowDetail((prev) => !prev)}
-            aria-expanded={showDetail}
-          >
-            {showDetail ? '− Menos' : '+ Mas...'}
-          </button>
-        </div>
-
-        {showDetail && (
-          <div className="winner-detail-drawer">
-            <span className="detail-section-subtitle">
-              Factores determinantes del análisis
-            </span>
-            <div className="ml-factors-list">
-              {recomendacion.factores_clave_ml.map((factor, idx) => (
-                <div key={idx} className="ml-factor-item">
-                  <CheckCircle2 size={14} className="ml-factor-icon" />
-                  <span>{factor}</span>
-                </div>
-              ))}
-            </div>
-
-            {winnerMeta && (
-              <p className="winner-crop-subtitle">
-                <strong>Aporte al lote:</strong> {winnerMeta.aporteCarbonoLabel}{' '}
-                · <strong>Consumo de agua:</strong>{' '}
-                {winnerMeta.demandaHidricaLabel}
-              </p>
-            )}
-
-            <div className="explanation-callout">
-              <Info size={16} className="explanation-icon" />
-              <p>{recomendacion.explicacion}</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* LISTADO INTERACTIVO DE RECOMENDACIONES (CLIC PARA EXPANDIR) */}
+      {/* LISTADO ÚNICO INTERACTIVO: AL TOCAR CUALQUIER CULTIVO SE EXPANDE SU CARD COMPLETA */}
       <div className="ranking-box">
         <div className="ranking-list">
           {visibleRanking.map((item, idx) => {
@@ -236,8 +90,28 @@ export function RecommendationPanel({
             const cropMeta = CULTIVOS_CATALOGO[item.cultivo as CultivoId]
             const riskInfo = getRiskLabelAndClass(item.riesgo)
             const isTop = idx === 0
+            const isRecommended = item.cultivo === recomendacion.cultivo
             const roundedScore = Math.round(item.score_final)
             const isExpanded = expandedCropId === item.cultivo
+            const isMoreOpen = moreOpenCropId === item.cultivo
+
+            const waterScore = Math.round(
+              item.sub_scores?.hidroclimatico ??
+                (isRecommended ? recomendacion.sub_scores.hidroclimatico : roundedScore)
+            )
+            const soilScore = Math.round(
+              item.sub_scores?.suelo ??
+                (isRecommended ? recomendacion.sub_scores.suelo : roundedScore)
+            )
+            const strokeDashoffset =
+              circumference - (Math.min(100, roundedScore) / 100) * circumference
+
+            const headlineReason = isRecommended
+              ? (recomendacion.factores_clave_ml[0] ??
+                'Mayor aptitud frente a la disponibilidad hídrica del lote y el balance del suelo.')
+              : cropMeta
+                ? `${cropMeta.aporteCarbonoLabel} · Demanda hídrica: ${cropMeta.demandaHidricaLabel}.`
+                : `Aptitud combinada de ${roundedScore} puntos sobre 100 para las condiciones actuales del lote.`
 
             return (
               <div
@@ -248,11 +122,7 @@ export function RecommendationPanel({
                   type="button"
                   className="ranking-row-trigger"
                   aria-expanded={isExpanded}
-                  onClick={() =>
-                    setExpandedCropId((prev) =>
-                      prev === item.cultivo ? null : item.cultivo
-                    )
-                  }
+                  onClick={() => handleToggleCrop(item.cultivo)}
                 >
                   <div className="ranking-row-head">
                     <div className="ranking-crop-title">
@@ -290,31 +160,150 @@ export function RecommendationPanel({
                 </button>
 
                 {isExpanded && (
-                  <div className="ranking-item-detail">
-                    {item.sub_scores && (
-                      <div className="ranking-detail-pillars">
-                        <span>
-                          <strong>Agua y clima:</strong>{' '}
-                          {Math.round(item.sub_scores.hidroclimatico)} / 100
+                  <div className="winner-card ranking-expanded-card">
+                    <div className="winner-top-row">
+                      <div className="winner-main-info">
+                        <span className="winner-kicker">
+                          {isRecommended
+                            ? 'Cultivo recomendado'
+                            : `Alternativa #${idx + 1}`}
                         </span>
-                        <span>
-                          <strong>Suelo y rotación:</strong>{' '}
-                          {Math.round(item.sub_scores.suelo)} / 100
-                        </span>
+                        <h3 className="winner-crop-name">{cropName}</h3>
+                        <p className="winner-headline-reason">
+                          {headlineReason}
+                        </p>
                       </div>
-                    )}
-                    {cropMeta && (
-                      <p className="ranking-detail-meta">
-                        <strong>Aporte al lote:</strong>{' '}
-                        {cropMeta.aporteCarbonoLabel} ·{' '}
-                        <strong>Consumo de agua:</strong>{' '}
-                        {cropMeta.demandaHidricaLabel}
-                      </p>
-                    )}
-                    {item.cultivo === recomendacion.cultivo && (
-                      <p className="ranking-detail-note">
-                        {recomendacion.explicacion}
-                      </p>
+
+                      {/* ANILLO SVG DE PUNTAJE GENERAL */}
+                      <div
+                        className="score-ring-box"
+                        title="Puntaje general (combina aptitud hidroclimática y aporte al suelo según el objetivo)"
+                      >
+                        <svg width="86" height="86" viewBox="0 0 86 86">
+                          <circle
+                            cx="43"
+                            cy="43"
+                            r={radius}
+                            fill="none"
+                            stroke={THEME_COLORS.primarySoft}
+                            strokeWidth="7"
+                          />
+                          <circle
+                            cx="43"
+                            cy="43"
+                            r={radius}
+                            fill="none"
+                            stroke={THEME_COLORS.primary}
+                            strokeWidth="7"
+                            strokeLinecap="round"
+                            strokeDasharray={circumference}
+                            strokeDashoffset={strokeDashoffset}
+                            transform="rotate(-90 43 43)"
+                          />
+                        </svg>
+                        <div className="score-ring-text">
+                          <span className="score-ring-number">
+                            {roundedScore}
+                          </span>
+                          <span className="score-ring-unit">/ 100</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2 BARRAS DE PILARES: AGUA/CLIMA (AZUL) Y SUELO (NARANJA) */}
+                    <div className="pillars-breakdown">
+                      <div className="pillar-item">
+                        <div className="pillar-label-row">
+                          <span>Aptitud frente al agua y el clima</span>
+                          <strong className="pillar-score water">
+                            {waterScore} / 100
+                          </strong>
+                        </div>
+                        <div className="progress-track water-track">
+                          <div
+                            className="progress-fill water-fill"
+                            style={{
+                              width: `${Math.min(100, waterScore)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pillar-item">
+                        <div className="pillar-label-row">
+                          <span>Aporte al suelo y la rotación</span>
+                          <strong className="pillar-score heat">
+                            {soilScore} / 100
+                          </strong>
+                        </div>
+                        <div className="progress-track heat-track">
+                          <div
+                            className="progress-fill heat-fill"
+                            style={{
+                              width: `${Math.min(100, soilScore)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* "+ Mas..." SIN CONTENEDOR EN ESQUINA INFERIOR DERECHA */}
+                    <div className="winner-more-row">
+                      <button
+                        type="button"
+                        className="detail-link-btn"
+                        onClick={() =>
+                          setMoreOpenCropId((prev) =>
+                            prev === item.cultivo ? null : item.cultivo
+                          )
+                        }
+                        aria-expanded={isMoreOpen}
+                      >
+                        {isMoreOpen ? '− Menos' : '+ Mas...'}
+                      </button>
+                    </div>
+
+                    {isMoreOpen && (
+                      <div className="winner-detail-drawer">
+                        {isRecommended && (
+                          <>
+                            <span className="detail-section-subtitle">
+                              Factores determinantes del análisis
+                            </span>
+                            <div className="ml-factors-list">
+                              {recomendacion.factores_clave_ml.map(
+                                (factor, factorIdx) => (
+                                  <div key={factorIdx} className="ml-factor-item">
+                                    <CheckCircle2
+                                      size={14}
+                                      className="ml-factor-icon"
+                                    />
+                                    <span>{factor}</span>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {cropMeta && (
+                          <p className="winner-crop-subtitle">
+                            <strong>Aporte al lote:</strong>{' '}
+                            {cropMeta.aporteCarbonoLabel} ·{' '}
+                            <strong>Consumo de agua:</strong>{' '}
+                            {cropMeta.demandaHidricaLabel}
+                          </p>
+                        )}
+
+                        <div className="explanation-callout">
+                          <Info size={16} className="explanation-icon" />
+                          <p>
+                            {isRecommended
+                              ? recomendacion.explicacion
+                              : `${cropName} obtiene ${waterScore} puntos en aptitud hidroclimática y ${soilScore} puntos en aporte al suelo/rotación, ubicándose en la posición #${idx + 1} con ${riskInfo.label.toLowerCase()}.`}
+                          </p>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
