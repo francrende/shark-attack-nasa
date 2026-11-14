@@ -36,6 +36,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | ID | Tarea Atómica | Archivos Involucrados | Depende de | Estado |
 | :--- | :--- | :--- | :---: | :---: |
 | `ML-1` | Generación del Dataset con Telemetría Histórica Real NASA POWER (20 años) + SRTM + SoilGrids, Desacople Espacial y Split Temporal (70/15/15) | `backend/ml/generate_dataset.py`, `backend/ml/data/nasa_raw_telemetry.json`, `backend/ml/data/train.csv`, `backend/ml/data/val.csv`, `backend/ml/data/test.csv` | — | `[x]` |
+| `ML-3` | Matriz de Rotación Agronómica, Salud del Suelo ($S_{\text{suelo}}$) y Cobertura 12 Meses (*Bare-Field Periods*) | `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py` | — | `[x]` |
 
 ---
 
@@ -67,3 +68,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   4. Etiquetar `s_hidroclimatico` con las curvas FAO GAEZ v4 / FAO-56 y exportar `train.csv` (11.550 filas), `val.csv` (2.475 filas), `test.csv` (2.475 filas) y `dataset_metadata.json`.
 - **Definition of Done (Comando de Verificación):**
   - `backend\.venv\Scripts\python.exe backend/ml/generate_dataset.py`
+
+### `[x]` ML-3: Matriz de Rotación Agronómica, Salud del Suelo ($S_{\text{suelo}}$) y Cobertura 12 Meses
+- **Objetivo:** Implementar el motor determinístico del Pilar 2 ($S_{\text{suelo}}$, 0–100) en `backend/services/rotation_matrix.py`, evaluando la transición `cultivo_anterior -> cultivo_candidato`, el balance de carbono orgánico (`soc` de SoilGrids), el riesgo erosivo por pendiente (`pendiente_terreno_pct` de SRTM), la textura (`arcilla_pct`), la cobertura mensual de 12 meses (*bare-field periods*) y la comparación de 3 estrategias de rotación para ser consumidos directamente por `ML-4` (`predictor.py`).
+- **Archivos Permitidos:** `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `backend/ml/TASKS_ML.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Catálogo oficial y sincronización `0..10`:** Mismos 11 cultivos de `CONTEXT.md` y `ML-1`, exponiendo `numeric_id` (`0..10`) sincronizado 1:1 con `CROP_CATALOG` de `generate_dataset.py`.
+  - **Monocultivo, barbecho y `soja_segunda`:** Penalización fuerte en monocultivo (`soja -> soja` 25 pts, `girasol -> girasol` 30 pts), penalización específica a `soja_segunda` si viene de cultivo de verano sin fina intermedia (52 pts vs. 88–89 pts en doble cultivo tras trigo/cebada), calibración exacta con el caso testigo de `CONTEXT.md` (`soja_primera -> sorgo` con `soc=18.4` y `pendiente=1.8%` $\rightarrow$ `s_suelo = 95.0`) y base neutra si `cultivo_anterior` es `None`/`"ninguno"`/`"barbecho"`.
+  - **Umbrales SoilGrids (`soc`, `arcilla_pct`, `phh2o`) y SRTM (`pendiente_terreno_pct`):** `soc < 15.0 g/kg` bajo carbono; `pendiente >= 1.0%` moderada y `>= 2.0%` alta; ajuste por suelos arenosos (`< 16%` arcilla) o vertisoles pesados (`> 34%` arcilla); tolerancia total a valores `None`.
+  - **Cobertura 12 meses y comparador de 3 estrategias:** `calendario_12m` distingue `cultivo_candidato`, `cultivo_antecesor`, `rastrojo_protector` y `suelo_desnudo`, y `compare_rotation_strategies(...)` contrasta la Estrategia Testigo (monocultivo), Defensiva Hídrica y Regenerativa de Suelo.
+- **Especificación Técnica:**
+  1. Definir `CROP_PROFILES` para los 11 cultivos con `numeric_id`, familia botánica, aporte de rastrojo, balance de carbono, fijación de N, cobertura inicial, meses activos/rastrojo, secuencia sugerida y perfil de mercado.
+  2. Implementar `evaluate_soil_and_rotation(...)`, `evaluate_campaign_soil(...)` y `compare_rotation_strategies(...)`.
+  3. Validar en `backend/services/test_rotation_matrix.py` sincronización 1:1 con `ML-1`, caso de referencia de `CONTEXT.md`, penalización de `soja_segunda` post-verano, ajustes de textura, calendario 12m y comparador de 3 estrategias.
+- **Definition of Done (Comando de Verificación):**
+  - `.\backend\.venv\Scripts\python.exe -m unittest backend/services/test_rotation_matrix.py -v`
