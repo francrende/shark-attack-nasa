@@ -114,8 +114,12 @@ def to_xy(df: pd.DataFrame, catalog: dict[str, Any]) -> tuple[np.ndarray, np.nda
 # ---------------------------------------------------------------------------
 # Métricas
 # ---------------------------------------------------------------------------
-def predict_clipped(model: Any, X: np.ndarray) -> np.ndarray:
-    return np.clip(model.predict(X), 0.0, 100.0)
+def predict_clipped(model: Any, X: np.ndarray, n_threads: int | None = None) -> np.ndarray:
+    if n_threads is not None and hasattr(model, "_raw_predict") and hasattr(model, "_loss"):
+        raw = model._loss.link.inverse(model._raw_predict(X, n_threads=n_threads).ravel())
+    else:
+        raw = model.predict(X)
+    return np.clip(raw, 0.0, 100.0)
 
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
@@ -286,11 +290,11 @@ def run_sanity_checks(
     if hasattr(model, "n_jobs"):
         model.set_params(n_jobs=1)  # inferencia online: 1 hilo, sin overhead de joblib
     for _ in range(10):
-        predict_clipped(model, X_lote)  # warm-up
+        predict_clipped(model, X_lote, n_threads=1)  # warm-up
     timings = []
     for _ in range(200):
         t0 = time.perf_counter()
-        predict_clipped(model, X_lote)
+        predict_clipped(model, X_lote, n_threads=1)
         timings.append((time.perf_counter() - t0) * 1000.0)
     p50, p95 = float(np.percentile(timings, 50)), float(np.percentile(timings, 95))
     checks["latency_ms_batch_campana"] = {

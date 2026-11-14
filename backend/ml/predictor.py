@@ -18,11 +18,13 @@ Implementa ``AgroPredictor`` (interfaz ``RecommendationEngine`` de CONTEXT.md):
 from __future__ import annotations
 
 import threading
+import warnings
 from pathlib import Path
 from typing import Any, Literal
 
 import joblib
 import numpy as np
+from sklearn.exceptions import InconsistentVersionWarning
 
 try:
     from backend.services.rotation_matrix import (
@@ -406,7 +408,9 @@ class AgroPredictor:
                 f"Ejecutá primero 'backend/ml/train_baseline.py'."
             )
 
-        bundle: dict[str, Any] = joblib.load(self.model_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", InconsistentVersionWarning)
+            bundle: dict[str, Any] = joblib.load(self.model_path)
         self.model = bundle["model"]
         # Asegurar ejecución single-thread sin overhead de procesos para latencia < 15 ms
         if hasattr(self.model, "n_jobs"):
@@ -435,7 +439,14 @@ class AgroPredictor:
             ],
             dtype=float,
         )
-        raw_preds = self.model.predict(X_batch)
+        if hasattr(self.model, "_raw_predict") and hasattr(self.model, "_loss"):
+            # HistGradientBoostingRegressor: forzar n_threads=1 en Cython evita el
+            # overhead de sincronización de OpenMP en lotes chicos (6 cultivos).
+            raw_preds = self.model._loss.link.inverse(
+                self.model._raw_predict(X_batch, n_threads=1).ravel()
+            )
+        else:
+            raw_preds = self.model.predict(X_batch)
         clipped_preds = np.clip(raw_preds, 0.0, 100.0)
 
         return {
