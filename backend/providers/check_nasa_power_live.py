@@ -5,11 +5,22 @@ Uso (desde backend/):  python -m providers.check_nasa_power_live [lat lon]
 
 import asyncio
 import sys
+import time
 
 from providers.nasa_power import PARAMETROS, fetch_daily_window
+from providers.nasa_telemetry import build_telemetria_nasa
 
 
 async def main(lat: float, lon: float) -> None:
+    await imprimir_serie_cruda(lat, lon)
+    print()
+    t0 = time.perf_counter()
+    telemetria = await build_telemetria_nasa(lat, lon)
+    print(f"telemetria_nasa ({time.perf_counter() - t0:.2f} s):")
+    print(telemetria.model_dump_json(indent=2))
+
+
+async def imprimir_serie_cruda(lat: float, lon: float) -> None:
     serie = await fetch_daily_window(lat, lon)
     print(f"NASA POWER @ ({lat}, {lon}) | ventana {serie.start} -> {serie.end}")
     for param in PARAMETROS:

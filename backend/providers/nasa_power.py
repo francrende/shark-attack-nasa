@@ -125,21 +125,46 @@ async def fetch_daily_window(
     lat: float,
     lon: float,
     *,
+    dias: int = VENTANA_DIAS,
     client: httpx.AsyncClient | None = None,
     today: date | None = None,
 ) -> NasaPowerDailySeries:
-    """Descarga la ventana diaria de los últimos 30 días y limpia los ``-999``.
+    """Descarga la ventana diaria de los últimos ``dias`` días (default 30) y limpia los ``-999``.
 
     Raises:
-        ValueError: coordenadas fuera de rango.
+        ValueError: coordenadas fuera de rango o ``dias`` < 1.
+        NasaPowerUnavailable: falla de red, timeout, HTTP no-2xx o JSON inválido.
+    """
+    if dias < 1:
+        raise ValueError(f"'dias' debe ser >= 1: {dias}")
+    end = today or datetime.now(timezone.utc).date()
+    start = end - timedelta(days=dias - 1)
+    return await fetch_daily_range(lat, lon, start, end, PARAMETROS, client=client)
+
+
+async def fetch_daily_range(
+    lat: float,
+    lon: float,
+    start: date,
+    end: date,
+    parametros: list[str],
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> NasaPowerDailySeries:
+    """Descarga la serie diaria [start, end] de los ``parametros`` pedidos y limpia los ``-999``.
+
+    Raises:
+        ValueError: coordenadas fuera de rango, rango de fechas invertido o sin parámetros.
         NasaPowerUnavailable: falla de red, timeout, HTTP no-2xx o JSON inválido.
     """
     _validar_coordenadas(lat, lon)
+    if start > end:
+        raise ValueError(f"Rango de fechas invertido: {start} > {end}")
+    if not parametros:
+        raise ValueError("Se requiere al menos un parámetro")
 
-    end = today or datetime.now(timezone.utc).date()
-    start = end - timedelta(days=VENTANA_DIAS - 1)
     params = {
-        "parameters": ",".join(PARAMETROS),
+        "parameters": ",".join(parametros),
         "community": "AG",
         "longitude": str(lon),
         "latitude": str(lat),
