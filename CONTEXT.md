@@ -294,6 +294,7 @@ shark-attack-nasa/
 │   ├── requirements.txt   # Dependencias de Python
 │   └── TASKS_BACKEND.md   # Tablero y protocolo de tareas atómicas de Backend
 ├── frontend/              # Aplicación React + TypeScript + Vite + Leaflet
+│   ├── SKILLS_FRONTEND.md # Skill y guía de diseño UX/UI agrario, glosario y convenciones de Frontend
 │   └── TASKS_FRONTEND.md  # Tablero y protocolo de tareas atómicas de Frontend
 └── CONTEXT.md             # Documentación de arquitectura, contratos y metodología
 ```
@@ -336,7 +337,7 @@ uvicorn main:app --reload --port 8000
 El proyecto se desarrolla en equipo utilizando **Spec-Driven Development (SDD) con Tareas Atómicas** divididas en **3 tracks independientes** para evitar conflictos en Git (`merge conflicts`):
 - **Track Backend:** [`backend/TASKS_BACKEND.md`](./backend/TASKS_BACKEND.md)
 - **Track ML & Agronomía:** [`backend/ml/TASKS_ML.md`](./backend/ml/TASKS_ML.md)
-- **Track Frontend & GIS UI:** [`frontend/TASKS_FRONTEND.md`](./frontend/TASKS_FRONTEND.md)
+- **Track Frontend & GIS UI:** [`frontend/TASKS_FRONTEND.md`](./frontend/TASKS_FRONTEND.md) y [`frontend/SKILLS_FRONTEND.md`](./frontend/SKILLS_FRONTEND.md)
 
 ### 8.1. Flujo de Trabajo de cada Desarrollador con su Agente
 Cada archivo `TASKS_*.md` comienza vacío, sin tareas ni bocetos pre-impuestos. Al iniciar cada bloque de trabajo:
@@ -344,6 +345,12 @@ Cada archivo `TASKS_*.md` comienza vacío, sin tareas ni bocetos pre-impuestos. 
 2. **Entrevista de Definición (Obligatoria):** Antes de terminar de especificar la tarea o escribir código, el agente **debe hacerle preguntas al desarrollador** para definir todas las decisiones que hayan quedado en el aire (casos borde, umbrales, UX, validaciones, fallbacks).
 3. **Especificación Atómica:** Con las respuestas del desarrollador, el agente redacta la especificación de la **Tarea Atómica** en su archivo `TASKS_*.md` correspondiente.
 4. **Implementación y Verificación (*Definition of Done*):** Una vez aprobada la especificación por el desarrollador, el agente implementa el código respetando su **Scope Exclusivo de Carpetas** y ejecuta el comando de verificación antes de marcar la tarea como completada (`[x]`).
+
+### 8.2. Skill de Frontend y Guía de UX Agraria (`frontend/SKILLS_FRONTEND.md`)
+Para garantizar una interfaz limpia, intuitiva y pensada para el productor rural (sin saturación visual ni siglas científicas crudas), el Track de Frontend cuenta con la skill dedicada [`frontend/SKILLS_FRONTEND.md`](./frontend/SKILLS_FRONTEND.md). Todo agente que trabaje en `frontend/` debe leerla y cumplir sus reglas:
+- **Estética *Analogue-Modern Field Journal*:** Uso exclusivo de variables CSS (`src/index.css` y `src/theme/mapColors.ts`), tipografía editorial `Newsreader` para títulos y `Plus Jakarta Sans` para lectura ágil, con semántica fija de colores (azul `#4A7B9D` = agua/lluvia, naranja `#F05D23` = calor/suelo, verde `#4B5B2D` = decisión/acción, sobre fondo cálido `#FFF5E0`).
+- **Principio *Producer-First* (Cero Jerga Técnica):** Traducción obligatoria de todos los acrónimos de la NASA y edafología al lenguaje cotidiano del productor (ej. `GWETROOT` $\rightarrow$ *"Agua en las raíces"*, `MODIS NDVI` $\rightarrow$ *"Verdor del cultivo"*, `S_hidroclimatico` $\rightarrow$ *"Aptitud frente al agua y el clima"*).
+- **Divulgación Progresiva y Anti-Clutter:** Una pregunta respondida en `< 5 segundos` por pestaña (`Planificación de campaña`, `Info general`, `Información histórica` con línea de tiempo de 10 años sincronizada en vivo con el mapa, y `Chat`), mostrando primero la conclusión y dejando el desglose técnico bajo controles *"Ver detalle"*.
 
 
 
