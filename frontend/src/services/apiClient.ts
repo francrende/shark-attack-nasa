@@ -1,0 +1,522 @@
+import {
+  CULTIVOS_CATALOGO,
+  DEMO_FIELDS,
+  OBJETIVOS_PRODUCTOR_META,
+} from '../data/demoFields'
+import type {
+  Campana,
+  CultivoId,
+  RankingCultivoItem,
+  RiesgoNivel,
+  SimulateRequest,
+  SimulateResponse,
+} from '../types/api'
+
+/**
+ * Por decisión acordada en TASKS_FRONTEND.md (FRONT-1), mientras el equipo de Backend
+ * desarrolla en paralelo su rama, el Frontend opera con datos simulados reactivos 100% fieles
+ * al contrato JSON de la Sección 5 de CONTEXT.md.
+ * Cuando el Backend esté listo, basta cambiar `USE_SIMULATED_MODE = false`.
+ */
+export const USE_SIMULATED_MODE = true
+const BACKEND_API_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1/simulate'
+
+// ============================================================================
+// MATRIZ DE TRANSICIÓN AGRONÓMICA Y SCORING EN FRONTEND (Secciones 4.2 a 4.4)
+// ============================================================================
+
+const CANDIDATOS_POR_CAMPANA: Record<Campana, CultivoId[]> = {
+  invierno: [
+    'trigo',
+    'cebada',
+    'vicia_cobertura',
+    'avena_cobertura',
+    'camelina',
+  ],
+  verano: [
+    'sorgo',
+    'maiz_tardio',
+    'girasol',
+    'maiz_temprano',
+    'soja_primera',
+    'soja_segunda',
+  ],
+}
+
+/**
+ * Calcula el puntaje de salud del suelo y rotación (S_suelo de 0 a 100)
+ * según la transición `cultivo_anterior -> cultivo_candidato` y el carbono orgánico.
+ */
+function computeSoilScore(
+  cultivoAnterior: CultivoId,
+  cultivoCandidato: CultivoId,
+  socGKg: number
+): number {
+  const famAnterior = CULTIVOS_CATALOGO[cultivoAnterior]?.familia ?? 'leguminosa'
+  const famCandidato = CULTIVOS_CATALOGO[cultivoCandidato]?.familia ?? 'graminea'
+
+  // Penalización fuerte al monocultivo directo
+  if (cultivoAnterior === cultivoCandidato) {
+    return 20
+  }
+
+  // Soja -> Soja (ej. soja_primera -> soja_segunda o viceversa)
+  if (
+    (cultivoAnterior === 'soja_primera' || cultivoAnterior === 'soja_segunda') &&
+    (cultivoCandidato === 'soja_primera' || cultivoCandidato === 'soja_segunda')
+  ) {
+    return 24
+  }
+
+  let baseScore = 70
+
+  // Leguminosa (Soja / Vicia) -> Gramínea (Sorgo, Maíz, Trigo, Cebada, Avena): rotación ideal C/N
+  if (famAnterior === 'leguminosa' && famCandidato === 'graminea') {
+    if (cultivoCandidato === 'sorgo' || cultivoCandidato === 'maiz_tardio') {
+      baseScore = 95
+    } else if (cultivoCandidato === 'maiz_temprano') {
+      baseScore = 92
+    } else {
+      baseScore = 90
+    }
+  } else if (famAnterior === 'leguminosa' && famCandidato === 'oleaginosa') {
+    baseScore = 76
+  } else if (famAnterior === 'graminea' && famCandidato === 'leguminosa') {
+    // Gramínea -> Vicia o Soja de 2da/1ra aprovecha fijación biológica y corta ciclo de enfermedades
+    if (cultivoCandidato === 'vicia_cobertura') {
+      baseScore = 94
+    } else if (cultivoCandidato === 'soja_segunda') {
+      baseScore = 86
+    } else {
+      baseScore = 82
+    }
+  } else if (famAnterior === 'graminea' && famCandidato === 'graminea') {
+    // Gramínea tras gramínea requiere más Nitrógeno, pero aporta mucho carbono
+    baseScore = 64
+  } else if (famCandidato === 'crucifera') {
+    baseScore = 78
+  }
+
+  // Ajuste por nivel de Carbono Orgánico (SOC): si el lote tiene bajo SOC (< 17 g/kg),
+  // premiamos aún más a las gramíneas y coberturas y penalizamos cultivos extractivos
+  if (socGKg < 17.5) {
+    if (famCandidato === 'graminea' || cultivoCandidato === 'vicia_cobertura') {
+      baseScore = Math.min(98, baseScore + 4)
+    } else if (
+      cultivoCandidato === 'soja_primera' ||
+      cultivoCandidato === 'soja_segunda'
+    ) {
+      baseScore = Math.max(18, baseScore - 10)
+    }
+  }
+
+  return Math.round(baseScore * 10) / 10
+}
+
+/**
+ * Calcula el puntaje de aptitud hidroclimática (S_hidroclimatico de 0 a 100)
+ * emulando las curvas agroclimáticas FAO-56 + NASA POWER (Sección 4.2).
+ */
+function computeHydroclimaticScore(
+  cultivoCandidato: CultivoId,
+  gwetrootPct: number,
+  anomaliaLluviaPct: number,
+  riesgoTermico: string,
+  arcillaPct: number
+): number {
+  // Índice hídrico combinado (saturación radicular + efecto de anomalía de lluvia)
+  const ofertaHidricaEfectiva = Math.max(
+    5,
+    Math.min(100, gwetrootPct + anomaliaLluviaPct * 0.45)
+  )
+
+  const penalizacionCalor =
+    riesgoTermico === 'extremo'
+      ? 18
+      : riesgoTermico === 'alto'
+        ? 11
+        : riesgoTermico === 'moderado'
+          ? 4
+          : 0
+
+  // Bonus de retención en suelos francos/arcillosos equilibrados (24% a 30%)
+  const bonusRetencion = arcillaPct >= 24 && arcillaPct <= 32 ? 3 : 0
+
+  let score = 70
+
+  switch (cultivoCandidato) {
+    case 'sorgo': {
+      // Muy rústico y eficiente en sequía (30-55% humedad radicular) y resistente al calor
+      if (ofertaHidricaEfectiva < 45) {
+        score = 84 + (ofertaHidricaEfectiva / 45) * 6 - penalizacionCalor * 0.2
+      } else {
+        score = 88 - Math.max(0, (ofertaHidricaEfectiva - 75) * 0.3)
+      }
+      break
+    }
+    case 'maiz_tardio': {
+      // Escapa al estrés térmico de enero, muy plástico en reservas medias (32-65%)
+      score =
+        66 +
+        Math.min(26, ofertaHidricaEfectiva * 0.42) -
+        penalizacionCalor * 0.35 +
+        bonusRetencion
+      break
+    }
+    case 'girasol': {
+      // Raíz pivotante tolerante a déficit hídrico moderado y calor
+      score =
+        76 +
+        Math.min(16, ofertaHidricaEfectiva * 0.25) -
+        Math.max(0, (ofertaHidricaEfectiva - 72) * 0.45) -
+        penalizacionCalor * 0.25
+      break
+    }
+    case 'maiz_temprano': {
+      // Altísimo potencial con buena agua (> 55%), pero cae abruptamente con sequía + calor en floración
+      if (ofertaHidricaEfectiva >= 55) {
+        score = 86 + (ofertaHidricaEfectiva - 55) * 0.3 - penalizacionCalor * 0.5
+      } else {
+        score =
+          38 +
+          (ofertaHidricaEfectiva / 55) * 34 -
+          penalizacionCalor * 0.9 +
+          bonusRetencion
+      }
+      break
+    }
+    case 'soja_primera': {
+      // Sensible a déficit hídrico estival severo
+      score =
+        42 +
+        Math.min(44, ofertaHidricaEfectiva * 0.62) -
+        penalizacionCalor * 0.65
+      break
+    }
+    case 'soja_segunda': {
+      // Requiere buena humedad superficial y recarga estival
+      score =
+        38 +
+        Math.min(45, ofertaHidricaEfectiva * 0.6) -
+        penalizacionCalor * 0.7
+      break
+    }
+    case 'trigo': {
+      score = 52 + Math.min(42, ofertaHidricaEfectiva * 0.65) + bonusRetencion
+      break
+    }
+    case 'cebada': {
+      score = 58 + Math.min(36, ofertaHidricaEfectiva * 0.58)
+      break
+    }
+    case 'vicia_cobertura': {
+      score = 68 + Math.min(26, ofertaHidricaEfectiva * 0.42)
+      break
+    }
+    case 'avena_cobertura': {
+      score = 72 + Math.min(22, ofertaHidricaEfectiva * 0.35)
+      break
+    }
+    case 'camelina': {
+      // Muy tolerante a perfiles invernales más secos
+      score =
+        78 +
+        Math.min(14, ofertaHidricaEfectiva * 0.25) -
+        Math.max(0, (ofertaHidricaEfectiva - 70) * 0.35)
+      break
+    }
+  }
+
+  return Math.round(Math.max(12, Math.min(98, score)) * 10) / 10
+}
+
+function classifyRisk(
+  scoreFinal: number,
+  scoreHidro: number,
+  cultivo: CultivoId,
+  riesgoTermico: string
+): RiesgoNivel {
+  if (
+    cultivo === 'maiz_temprano' &&
+    scoreHidro < 62 &&
+    (riesgoTermico === 'alto' || riesgoTermico === 'extremo')
+  ) {
+    return 'critico'
+  }
+  if (scoreFinal >= 78 && scoreHidro >= 68) return 'bajo'
+  if (scoreFinal >= 65) return 'medio'
+  if (scoreFinal >= 45) return 'alto'
+  return 'critico'
+}
+
+function buildSuggestedSequence(
+  campana: Campana,
+  ganador: CultivoId,
+  segundo: CultivoId,
+  gwetrootPct: number
+): string {
+  if (campana === 'verano') {
+    if (ganador === 'sorgo' || ganador === 'maiz_tardio') {
+      return 'vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)'
+    }
+    if (ganador === 'maiz_temprano') {
+      return 'trigo / vicia_cobertura (invierno) -> maiz_temprano (verano)'
+    }
+    if (ganador === 'girasol') {
+      return 'avena_cobertura (invierno) -> girasol (verano)'
+    }
+    return `trigo (invierno) -> ${ganador} / ${segundo} (verano)`
+  } else {
+    // Campaña de invierno seleccionada
+    const veranoSugerido = gwetrootPct < 45 ? 'sorgo / maiz_tardio' : 'maiz_temprano / soja_segunda'
+    return `${ganador} (invierno) -> ${veranoSugerido} (verano)`
+  }
+}
+
+/**
+ * Encuentra el perfil regional más cercano a las coordenadas elegidas o interpola variaciones
+ * suaves si el usuario hace clic libre o dibuja un polígono nuevo en el mapa.
+ */
+function resolveTelemetryAndSoilForCoords(lat: number, lon: number) {
+  let closest = DEMO_FIELDS[0]
+  let minDistance = Number.POSITIVE_INFINITY
+
+  for (const field of DEMO_FIELDS) {
+    const dLat = lat - field.centroide.lat
+    const dLon = lon - field.centroide.lon
+    const dist = Math.sqrt(dLat * dLat + dLon * dLon)
+    if (dist < minDistance) {
+      minDistance = dist
+      closest = field
+    }
+  }
+
+  // Si está exactamente en el lote demo (distancia < 0.03 grados), devolvemos los datos exactos del lote
+  if (minDistance < 0.03) {
+    return {
+      telemetria: { ...closest.telemetriaBase },
+      suelo: { ...closest.sueloBase },
+    }
+  }
+
+  // Si hizo clic en otro punto del mapa o dibujó un lote nuevo, aplicamos un gradiente geográfico realista:
+  // Hacia el oeste (menor longitud, más continental) baja la humedad y sube la amplitud térmica;
+  // Hacia el sur (menor latitud) baja el estrés térmico estival.
+  const deltaLon = lon - closest.centroide.lon
+  const deltaLat = lat - closest.centroide.lat
+
+  const humedadRadicular = Math.round(
+    Math.max(
+      16,
+      Math.min(
+        85,
+        closest.telemetriaBase.indice_humedad_radicular_pct +
+          deltaLon * 4.2 -
+          deltaLat * 1.5
+      )
+    ) * 10
+  ) / 10
+
+  const humedadSuperficial = Math.round(
+    Math.max(12, Math.min(82, humedadRadicular - 4.5)) * 10
+  ) / 10
+
+  const anomaliaLluvia = Math.round(
+    Math.max(
+      -45,
+      Math.min(35, closest.telemetriaBase.anomalia_lluvia_90d_pct + deltaLon * 5.0)
+    ) * 10
+  ) / 10
+
+  const riesgoTermico =
+    lat > -33.2 && humedadRadicular < 32
+      ? 'extremo'
+      : lat > -35.0 && humedadRadicular < 42
+        ? 'alto'
+        : lat < -36.8
+          ? 'bajo'
+          : 'moderado'
+
+  const soc =
+    Math.round(
+      Math.max(
+        13.5,
+        Math.min(26.0, closest.sueloBase.carbono_organico_g_kg + deltaLon * 0.9)
+      ) * 10
+    ) / 10
+
+  return {
+    telemetria: {
+      fecha_ultimo_dato_valido: closest.telemetriaBase.fecha_ultimo_dato_valido,
+      indice_humedad_radicular_pct: humedadRadicular,
+      indice_humedad_superficial_pct: humedadSuperficial,
+      anomalia_lluvia_90d_pct: anomaliaLluvia,
+      riesgo_termico_verano: riesgoTermico,
+      arcilla_pct: closest.telemetriaBase.arcilla_pct,
+    },
+    suelo: {
+      textura_predominante: closest.sueloBase.textura_predominante,
+      carbono_organico_g_kg: soc,
+      condicion_rotacion_previa: closest.sueloBase.condicion_rotacion_previa,
+    },
+  }
+}
+
+export function generateSimulatedResponse(
+  request: SimulateRequest
+): SimulateResponse {
+  const { coordenadas, campana, cultivo_anterior, objetivo_productor, simulacion_what_if } =
+    request
+
+  const base = resolveTelemetryAndSoilForCoords(coordenadas.lat, coordenadas.lon)
+
+  // Aplicar overrides de la simulación "What-If" si el usuario movió los sliders
+  const gwetrootEfectivo =
+    simulacion_what_if?.override_humedad_radicular_pct !== null &&
+    simulacion_what_if?.override_humedad_radicular_pct !== undefined
+      ? simulacion_what_if.override_humedad_radicular_pct
+      : base.telemetria.indice_humedad_radicular_pct
+
+  const variacionLluvia = simulacion_what_if?.variacion_lluvia_esperada_pct ?? 0
+  const anomaliaEfectiva =
+    Math.round((base.telemetria.anomalia_lluvia_90d_pct + variacionLluvia) * 10) /
+    10
+
+  const gwettopEfectivo =
+    simulacion_what_if?.override_humedad_radicular_pct !== null &&
+    simulacion_what_if?.override_humedad_radicular_pct !== undefined
+      ? Math.round(Math.max(10, Math.min(95, gwetrootEfectivo * 0.88)) * 10) / 10
+      : base.telemetria.indice_humedad_superficial_pct
+
+  // Determinar condición de rotación previa según cultivo_anterior seleccionado
+  const condicionRotacion =
+    cultivo_anterior === 'soja_primera' || cultivo_anterior === 'soja_segunda'
+      ? 'deficit_rastrojo_por_soja'
+      : cultivo_anterior === 'vicia_cobertura'
+        ? 'suelo_enriquecido_en_nitrogeno'
+        : 'buena_cobertura_graminea'
+
+  const { pesoClima, pesoSuelo } = OBJETIVOS_PRODUCTOR_META[objetivo_productor]
+
+  const candidatos = CANDIDATOS_POR_CAMPANA[campana]
+
+  const evaluados: (RankingCultivoItem & {
+    sub_scores: { hidroclimatico: number; suelo: number }
+  })[] = candidatos.map((cultivo) => {
+    const hidro = computeHydroclimaticScore(
+      cultivo,
+      gwetrootEfectivo,
+      anomaliaEfectiva,
+      base.telemetria.riesgo_termico_verano,
+      base.telemetria.arcilla_pct
+    )
+    const suelo = computeSoilScore(
+      cultivo_anterior,
+      cultivo,
+      base.suelo.carbono_organico_g_kg
+    )
+    const scoreFinal =
+      Math.round((pesoClima * hidro + pesoSuelo * suelo) * 10) / 10
+
+    const riesgo = classifyRisk(
+      scoreFinal,
+      hidro,
+      cultivo,
+      base.telemetria.riesgo_termico_verano
+    )
+
+    return {
+      cultivo,
+      score_final: scoreFinal,
+      riesgo,
+      sub_scores: {
+        hidroclimatico: hidro,
+        suelo,
+      },
+    }
+  })
+
+  evaluados.sort((a, b) => b.score_final - a.score_final)
+
+  const ganador = evaluados[0]
+  const segundo = evaluados[1] ?? evaluados[0]
+  const nombreGanador =
+    CULTIVOS_CATALOGO[ganador.cultivo as CultivoId]?.nombre ?? ganador.cultivo
+  const nombreAnterior =
+    CULTIVOS_CATALOGO[cultivo_anterior]?.nombre ?? cultivo_anterior
+
+  const factoresClave: string[] = [
+    gwetrootEfectivo < 42
+      ? `Baja saturación hídrica en zona radicular detectada por NASA (${gwetrootEfectivo}%)`
+      : `Reserva hídrica radicular favorable en perfil SMAP/NASA POWER (${gwetrootEfectivo}%)`,
+    condicionRotacion === 'deficit_rastrojo_por_soja'
+      ? `Alta necesidad de aportar rastrojo de gramínea tras cultivo de ${nombreAnterior}`
+      : `Transición agronómica desde ${nombreAnterior} con foco en balance C/N (${base.suelo.carbono_organico_g_kg} g/kg SOC)`,
+    anomaliaEfectiva < 0
+      ? `Anomalía de lluvias de ${anomaliaEfectiva}% en los últimos 90 días`
+      : `Balance de precipitaciones de +${anomaliaEfectiva}% en los últimos 90 días`,
+  ]
+
+  const explicacion =
+    gwetrootEfectivo < 42
+      ? `Recomendación: Sembrar ${nombreGanador} (secuencia sugerida con cobertura previa). Detectamos vía satélite una reserva hídrica ajustada (${gwetrootEfectivo}% de saturación radicular) y una anomalía de lluvias de ${anomaliaEfectiva}%. Frente a alternativas de mayor vulnerabilidad en floración o repetir ${nombreAnterior}, ${nombreGanador} ofrece un ${ganador.sub_scores.hidroclimatico}% de aptitud hidroclimática y un ${ganador.sub_scores.suelo}% de beneficio edáfico para recomponer la estructura del lote.`
+      : `Recomendación: Sembrar ${nombreGanador}. La telemetría de NASA POWER indica una saturación radicular del ${gwetrootEfectivo}% y una variación de lluvias de ${anomaliaEfectiva >= 0 ? '+' : ''}${anomaliaEfectiva}%. Combinado con el perfil ${base.suelo.textura_predominante.replace(/_/g, ' ')} (${base.suelo.carbono_organico_g_kg} g/kg de carbono orgánico) viniendo de ${nombreAnterior}, ${nombreGanador} alcanza un puntaje integral de ${ganador.score_final} pts (${ganador.sub_scores.hidroclimatico}% hidroclimático y ${ganador.sub_scores.suelo}% edáfico).`
+
+  return {
+    ubicacion: {
+      lat: Math.round(coordenadas.lat * 10000) / 10000,
+      lon: Math.round(coordenadas.lon * 10000) / 10000,
+    },
+    telemetria_nasa: {
+      fecha_ultimo_dato_valido: base.telemetria.fecha_ultimo_dato_valido,
+      indice_humedad_radicular_pct: gwetrootEfectivo,
+      indice_humedad_superficial_pct: gwettopEfectivo,
+      anomalia_lluvia_90d_pct: anomaliaEfectiva,
+      riesgo_termico_verano: base.telemetria.riesgo_termico_verano,
+    },
+    perfil_suelo: {
+      textura_predominante: base.suelo.textura_predominante,
+      carbono_organico_g_kg: base.suelo.carbono_organico_g_kg,
+      condicion_rotacion_previa: condicionRotacion,
+    },
+    recomendacion_principal: {
+      cultivo: ganador.cultivo,
+      secuencia_sugerida: buildSuggestedSequence(
+        campana,
+        ganador.cultivo as CultivoId,
+        segundo.cultivo as CultivoId,
+        gwetrootEfectivo
+      ),
+      score_final: ganador.score_final,
+      sub_scores: ganador.sub_scores,
+      factores_clave_ml: factoresClave,
+      explicacion,
+    },
+    ranking_cultivos: evaluados,
+  }
+}
+
+/**
+ * Cliente principal de simulación. Usa el motor simulado en Frontend por defecto
+ * mientras el equipo de Backend termina su rama, o consulta `POST /api/v1/simulate`.
+ */
+export async function simulateCropRotation(
+  request: SimulateRequest
+): Promise<SimulateResponse> {
+  if (USE_SIMULATED_MODE) {
+    return generateSimulatedResponse(request)
+  }
+
+  const response = await fetch(BACKEND_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Error HTTP ${response.status} al consultar /api/v1/simulate`)
+  }
+
+  return (await response.json()) as SimulateResponse
+}
