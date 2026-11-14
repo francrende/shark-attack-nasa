@@ -110,11 +110,11 @@ El listado oficial de recursos del challenge incluye bases de datos gubernamenta
 
 El motor de recomendación está diseñado bajo una interfaz común (`RecommendationEngine`) que combina **Machine Learning basado en Árboles (`scikit-learn`)** con una **Matriz de Transición Agronómica, Topográfica y Scoring Multicriterio (MCDA)**.
 
-### 4.1. Separación por Campaña y Comparación de Estrategias de Rotación
+### 4.1. Separación por Campaña y Recomendación de Campaña Actual
 Para evitar el error agronómico de comparar cultivos de invierno contra cultivos de verano en una misma fecha de siembra, el motor opera sobre **ventanas de campaña explícitas**:
-- **Campaña Fina (`invierno`):** `trigo`, `cebada`, `vicia_cobertura` (leguminosa fijadora de N), `avena_cobertura` (gramínea de cobertura contra erosión), `camelina`.
-- **Campaña Gruesa (`verano`):** `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda` (post-fina), `girasol`, `sorgo`.
-- **Comparación de Secuencias (Requerimiento del Challenge):** Además de puntuar cada cultivo candidato, el sistema contrasta la **rotación recomendada (Invierno $\rightarrow$ Verano)** contra alternativas defensivas y contra la **estrategia testigo (repetir el cultivo anterior / monocultivo con barbecho desnudo)**, evidenciando los meses de suelo descubierto (*bare-field periods*) y el impacto sobre el agua y el carbono.
+- **Campaña Gruesa (`verano` — Activa):** `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda` (post-fina), `girasol`, `sorgo`. Evalúa y recomienda el cultivo óptimo para la campaña actual utilizando los datos satelitales y climáticos del día de hoy.
+- **Campaña Fina (`invierno` — A futuro):** `trigo`, `cebada`, `vicia_cobertura` (leguminosa fijadora de N), `avena_cobertura` (gramínea de cobertura contra erosión), `camelina`. Queda planificada como extensión futura en la interfaz.
+- **Alcance de la Recomendación (`secuencia_sugerida`):** El sistema recomienda únicamente el cultivo (o terna alternativa) para la **campaña actual** en curso, contrastándolo contra alternativas defensivas y contra la **estrategia testigo (repetir el cultivo anterior / monocultivo)** según el estado hídrico y edáfico actual.
 
 ### 4.2. Modelo de Machine Learning (`HistGradientBoostingRegressor` / `RandomForestRegressor`) y Datos de Entrenamiento
 - **Qué predice:** El **Puntaje de Aptitud Hidroclimática y Topográfica ($S_{\text{hidroclimatico}}$, de 0 a 100)** de cada cultivo candidato frente a la telemetría satelital de la NASA (`GWETROOT`, `GWETTOP`, `PRECTOTCORR`, `T2M_MAX`, `T2M_MIN`, `EVPTRNS`), la pendiente del terreno (`SRTM`) y la textura del suelo (`SoilGrids`).
@@ -240,7 +240,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   ],
   "recomendacion_principal": {
     "cultivo": "sorgo",
-    "secuencia_sugerida": "vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
+    "secuencia_sugerida": "sorgo / maiz_tardio (verano)",
     "score_final": 90.5,
     "sub_scores": {
       "hidroclimatico": 86.0,
@@ -300,6 +300,7 @@ shark-attack-nasa/
 │   ├── requirements.txt   # Dependencias de Python
 │   └── TASKS_BACKEND.md   # Tablero y protocolo de tareas atómicas de Backend
 ├── frontend/              # Aplicación React + TypeScript + Vite + Leaflet
+│   ├── SKILLS_FRONTEND.md # Skill y guía de diseño UX/UI agrario, glosario y convenciones de Frontend
 │   └── TASKS_FRONTEND.md  # Tablero y protocolo de tareas atómicas de Frontend
 └── CONTEXT.md             # Documentación de arquitectura, contratos y metodología
 ```
@@ -342,7 +343,7 @@ uvicorn main:app --reload --port 8000
 El proyecto se desarrolla en equipo utilizando **Spec-Driven Development (SDD) con Tareas Atómicas** divididas en **3 tracks independientes** para evitar conflictos en Git (`merge conflicts`):
 - **Track Backend:** [`backend/TASKS_BACKEND.md`](./backend/TASKS_BACKEND.md)
 - **Track ML & Agronomía:** [`backend/ml/TASKS_ML.md`](./backend/ml/TASKS_ML.md)
-- **Track Frontend & GIS UI:** [`frontend/TASKS_FRONTEND.md`](./frontend/TASKS_FRONTEND.md)
+- **Track Frontend & GIS UI:** [`frontend/TASKS_FRONTEND.md`](./frontend/TASKS_FRONTEND.md) y [`frontend/SKILLS_FRONTEND.md`](./frontend/SKILLS_FRONTEND.md)
 
 ### 8.1. Flujo de Trabajo de cada Desarrollador con su Agente
 Cada archivo `TASKS_*.md` comienza vacío, sin tareas ni bocetos pre-impuestos. Al iniciar cada bloque de trabajo:
@@ -350,6 +351,12 @@ Cada archivo `TASKS_*.md` comienza vacío, sin tareas ni bocetos pre-impuestos. 
 2. **Entrevista de Definición (Obligatoria):** Antes de terminar de especificar la tarea o escribir código, el agente **debe hacerle preguntas al desarrollador** para definir todas las decisiones que hayan quedado en el aire (casos borde, umbrales, UX, validaciones, fallbacks).
 3. **Especificación Atómica:** Con las respuestas del desarrollador, el agente redacta la especificación de la **Tarea Atómica** en su archivo `TASKS_*.md` correspondiente.
 4. **Implementación y Verificación (*Definition of Done*):** Una vez aprobada la especificación por el desarrollador, el agente implementa el código respetando su **Scope Exclusivo de Carpetas** y ejecuta el comando de verificación antes de marcar la tarea como completada (`[x]`).
+
+### 8.2. Skill de Frontend y Guía de UX Agraria (`frontend/SKILLS_FRONTEND.md`)
+Para garantizar una interfaz limpia, intuitiva y pensada para el productor rural (sin saturación visual ni siglas científicas crudas), el Track de Frontend cuenta con la skill dedicada [`frontend/SKILLS_FRONTEND.md`](./frontend/SKILLS_FRONTEND.md). Todo agente que trabaje en `frontend/` debe leerla y cumplir sus reglas:
+- **Estética *Analogue-Modern Field Journal*:** Uso exclusivo de variables CSS (`src/index.css` y `src/theme/mapColors.ts`), tipografía editorial `Newsreader` para títulos y `Plus Jakarta Sans` para lectura ágil, con semántica fija de colores (azul `#4A7B9D` = agua/lluvia, naranja `#F05D23` = calor/suelo, verde `#4B5B2D` = decisión/acción, sobre fondo cálido `#FFF5E0`).
+- **Principio *Producer-First* (Cero Jerga Técnica):** Traducción obligatoria de todos los acrónimos de la NASA y edafología al lenguaje cotidiano del productor (ej. `GWETROOT` $\rightarrow$ *"Agua en las raíces"*, `MODIS NDVI` $\rightarrow$ *"Verdor del cultivo"*, `S_hidroclimatico` $\rightarrow$ *"Aptitud frente al agua y el clima"*).
+- **Divulgación Progresiva y Anti-Clutter:** Una pregunta respondida en `< 5 segundos` por pestaña (`Planificación de campaña`, `Info general`, `Información histórica` con línea de tiempo de 10 años sincronizada en vivo con el mapa, y `Chat`), mostrando primero la conclusión y dejando el desglose técnico bajo controles *"Ver detalle"*.
 
 
 
