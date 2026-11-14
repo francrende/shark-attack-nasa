@@ -3,10 +3,11 @@
 ## 1. Visión General (Elevator Pitch)
 **Shark Attack** es una plataforma AgTech de soporte a la toma de decisiones agronómicas enfocada en la adaptación climática, eficiencia hídrica y planificación de rotaciones inteligentes. Nace en el **NASA Space Apps Challenge 2026** (*Challenge: Field Shift: Adapting Farms with NASA Data*) con una arquitectura pensada desde el día uno para evolucionar hacia un **producto comercial escalable (SaaS)**.
 
-El sistema asiste al productor y al asesor agronómico para definir **estrategias de rotación y elección de cultivos por campaña (Invierno / Verano)** cruzando tres dimensiones:
-- **Clima e Hidrología Satelital (Datos NASA):** Índice de saturación hídrica en zona radicular (`GWETROOT`) y superficial (`GWETTOP`), anomalías de precipitación, estrés térmico y demanda evaporativa, detectados automáticamente al seleccionar el lote en el mapa.
-- **Edafología y Salud del Suelo (NASA + Datos de Suelo):** Propiedades físicas y químicas del lote (textura arcilla/limo/arena, carbono orgánico, retención hídrica), impacto del cultivo antecesor (balance de C/N) y cobertura vegetal histórica (`NDVI`).
-- **Simulación Interactiva ("What-If"):** Capacidad de evaluar escenarios futuros (ej. *"¿Qué pasa con mi rotación si la campaña viene un 20% más seca?"*) ajustando prioridades agronómicas.
+El sistema asiste al productor y al asesor agronómico para definir **estrategias de rotación y elección de cultivos por campaña (Invierno / Verano)** cruzando cuatro dimensiones:
+- **Clima, Hidrología Satelital y Anomalías (NASA POWER + SMAP + GPM + GLDAS):** Índice de saturación hídrica en zona radicular (`GWETROOT`) y superficial (`GWETTOP`), anomalías de precipitación, frecuencia de lluvias extremas, estrés térmico y demanda evaporativa (`EVPTRNS`), detectados automáticamente al seleccionar el lote en el mapa.
+- **Topografía y Riesgo de Escorrentía (NASA SRTM):** Elevación y pendiente del terreno a 30 metros de resolución para evaluar pérdida de agua útil por escorrentía superficial, potencial de infiltración y riesgo de erosión hídrica en períodos de suelo desnudo (*bare ground*).
+- **Edafología, Aptitud Agroecológica y Salud del Suelo (SoilGrids + FAO GAEZ + MODIS/Sentinel-2):** Propiedades físicas y químicas del lote (textura arcilla/limo/arena, carbono orgánico, pH), curvas ecofisiológicas por cultivo (**FAO GAEZ v4 / FAO-56**), impacto del cultivo antecesor (balance de C/N, cobertura de rastrojo) y vigor vegetativo histórico (`NDVI`).
+- **Simulación Interactiva ("What-If"):** Capacidad de evaluar escenarios climáticos futuros (ej. campañas tipo *"La Niña / Seca"* o *"El Niño / Húmeda"*) ajustando prioridades agronómicas y restricciones de mercado.
 
 ---
 
@@ -26,114 +27,155 @@ Para no construir código descartable en la hackathon pero tampoco bloquear el e
 | Módulo / Capa | Fase 1: MVP Hackathon (48 hs) | Fase 2: Producto Comercial Escalable (SaaS) |
 | :--- | :--- | :--- |
 | **Unidad Espacial** | Punto único por coordenadas (`lat`, `lon`). | Polígonos GeoJSON de lotes reales dibujados por el productor o importados (Shapefile/KML). |
-| **Ingesta Climática NASA** | Consulta síncrona a **NASA POWER API** (con caché en memoria/SQLite y filtro de valores `-999`). | Pipeline asíncrono (Celery/Redis + PostGIS) que pre-ingesta **NASA POWER + SMAP L4 + IMERG** diariamente. |
-| **Datos de Suelo** | **ISRIC SoilGrids API** (o fallback regional pre-cacheado de la Pampa Húmeda) para textura y carbono. | Integración con cartas de suelo locales (ej. GeoINTA en Argentina / SSURGO) + carga de análisis de laboratorio del productor. |
-| **Imágenes Satelitales** | Capas globales **NASA GIBS** (MODIS/SMAP a 250m–9km) vía WMTS directo en el mapa. | Recorte por lote en alta resolución (10m–30m) usando **NASA HLS (Landsat + Sentinel-2)** vía STAC/COG para ver variabilidad intralote (ambientación). |
-| **Entrenamiento del ML** | Modelo entrenado sobre curvas agroclimáticas **FAO-56** + series históricas de NASA POWER en puntos testigo. | Re-entrenamiento continuo con **rindes históricos departamentales (SIIA/MAGyP)** y feedback real de cosecha de los usuarios. |
-| **Unidad de Recomendación** | Cultivos filtrados por campaña (`invierno` vs `verano`, diferenciando fecha temprana/tardía) o secuencias anuales. | Planificador plurianual (rotación a 3–5 años) con balance acumulado de Carbono, Nitrógeno, Fósforo y huella hídrica. |
+| **Ingesta Climática e Hidrológica** | Consulta síncrona a **NASA POWER API** (asimilación **SMAP + GLDAS + GPM IMERG**, con caché y filtro de `-999`). | Pipeline asíncrono (Celery/Redis + PostGIS) que pre-ingesta **NASA POWER + SMAP L4 + GPM IMERG + ERA5** diariamente. |
+| **Topografía y Terreno** | **NASA SRTM (30m)** vía **OpenTopoData API** (con fallback a la elevación embebida en `NASA POWER`) para pendiente y escorrentía. | Modelo Digital de Elevación (DEM) intralote de alta resolución para mapas de flujo de agua y microcuencas de anegamiento. |
+| **Datos de Suelo** | **ISRIC SoilGrids API** (o fallback regional pre-cacheado de la Pampa Húmeda) para textura, pH y carbono orgánico. | Integración con cartas de suelo locales (**GeoINTA** en Argentina / **USDA SSURGO & WSS** en EE.UU.) + análisis de laboratorio. |
+| **Imágenes Satelitales** | Capas globales **NASA GIBS** (MODIS / VIIRS / SMAP / IMERG) vía WMTS directo en el mapa. | Recorte por lote en alta resolución (10m–30m) usando **NASA HLS (Landsat 8/9 + Copernicus Sentinel-2)** vía STAC/COG para mapeo de suelo desnudo (*bare soil*) y variabilidad intralote. |
+| **Entrenamiento del ML** | Modelo entrenado sobre curvas agroecológicas **FAO GAEZ v4 / FAO-56** + series históricas de **NASA POWER** y topografía **SRTM** en puntos testigo. | Re-entrenamiento continuo con **rindes históricos departamentales (SIIA/MAGyP o USDA NASS QuickStats)** y feedback real de cosecha. |
+| **Unidad de Recomendación** | Ranking de cultivos por campaña (`invierno` vs `verano`, fecha temprana/tardía) y comparación de secuencias anuales (incluyendo la rotación actual). | Planificador plurianual (rotación a 3–5 años) con balance acumulado de Carbono, Nitrógeno, Fósforo, huella hídrica y margen de mercado. |
 
 ---
 
-## 3. Catálogo de APIs y Fuentes de Datos (NASA & Edafología)
+## 3. Catálogo de APIs y Fuentes de Datos (NASA, Topografía, Edafología y Agronomía)
 
-### 3.1. APIs Core para el Backend (Datos numéricos por `lat`/`lon`)
+### 3.1. APIs Core para el Backend (Datos numéricos en tiempo real por `lat`/`lon`)
 
-#### A. NASA POWER API (Prediction Of Worldwide Energy Resources) — *[Prioridad Alta - Fase 1 y 2]*
-API RESTful abierta (no requiere API Key) optimizada para aplicaciones agroclimáticas (`community=AG`). Devuelve JSON directo por coordenadas con series diarias, mensuales y climatologías históricas.
+#### A. NASA POWER API (Prediction Of Worldwide Energy Resources — Integración SMAP, GLDAS y GPM) — *[Prioridad Alta - Fase 1 y 2]*
+API RESTful abierta (no requiere API Key) optimizada para aplicaciones agroclimáticas (`community=AG`). Devuelve JSON directo por coordenadas con series diarias, mensuales y climatologías históricas, integrando observaciones de **SMAP**, modelos de asimilación terrestre **GLDAS**, precipitación satelital **GPM/IMERG** y reanálisis **MERRA-2**.
 - **Endpoint base:** `https://power.larc.nasa.gov/api/temporal/{daily|monthly|climatology}/point`
 - **Parámetros clave:**
-  - `PRECTOTCORR`: Precipitación total corregida (mm/día) — cálculo de oferta hídrica acumulada y anomalías.
-  - `GWETROOT`: **Fracción de saturación hídrica en la zona radicular (`0.0` a `1.0`, hasta 1m)** asimilada de modelos terrestres y SMAP. *Nota agronómica:* Al ser una fracción de saturación relativa al tipo de suelo y no humedad volumétrica cruda, evita sesgos entre suelos arenosos y arcillosos.
-  - `GWETTOP`: Fracción de humedad superficial (0–5 cm) — determina ventana óptima de siembra.
-  - `GWETPROF`: Humedad total del perfil del suelo.
-  - `T2M`, `T2M_MAX`, `T2M_MIN`: Temperatura a 2 metros (media, máxima y mínima en °C) — detección de golpes de calor en período crítico y riesgo de heladas.
-  - `ALLSKY_SFC_SW_DWN` / `EVPTRNS`: Radiación solar incidente y flujo de evapotranspiración.
-- **Regla técnica obligatoria (Manejo del lag `-999`):** Los datos satelitales de NASA POWER (especialmente `GWETROOT`) tienen una latencia de procesamiento de **3 a 7 días**. Los últimos días del calendario suelen devolver `-999.0`. El cliente HTTP del backend **siempre debe pedir una ventana de los últimos 30 días** y tomar el último valor válido (`!= -999.0`).
+  - `PRECTOTCORR`: Precipitación total corregida (mm/día, derivada de **GPM/IMERG** y estaciones) — cálculo de oferta hídrica acumulada, anomalías de 90 días y frecuencia de tormentas extremas (`> 50 mm/día`).
+  - `GWETROOT`: **Fracción de saturación hídrica en la zona radicular (`0.0` a `1.0`, hasta 1m)** asimilada de **GLDAS y SMAP**. *Nota agronómica:* Al ser una fracción de saturación relativa al tipo de suelo y no humedad volumétrica cruda, evita sesgos entre suelos arenosos y arcillosos.
+  - `GWETTOP`: Fracción de humedad superficial (0–5 cm) — determina ventana óptima de siembra y permite medir la velocidad de secado superficial.
+  - `GWETPROF`: Humedad total del perfil profundo del suelo.
+  - `T2M`, `T2M_MAX`, `T2M_MIN`: Temperatura a 2 metros (media, máxima y mínima en °C) — detección de golpes de calor en período crítico y riesgo de heladas / estado de congelamiento (*freeze/thaw*).
+  - `ALLSKY_SFC_SW_DWN` / `EVPTRNS`: Radiación solar incidente y flujo de evapotranspiración / demanda evaporativa.
+- **Dato topográfico incluido:** El bloque `geometry.coordinates` de la respuesta de NASA POWER devuelve `[lon, lat, elevacion_msnm]`, sirviendo como fallback instantáneo de altimetría.
+- **Regla técnica obligatoria (Manejo del lag `-999`):** Los datos satelitales de NASA POWER (especialmente `GWETROOT`) tienen una latencia de procesamiento de **3 a 7 días**. Los últimos días del calendario suelen devolver `-999.0`. El cliente HTTP del backend **siempre debe pedir una ventana de los últimos 30 a 90 días** y tomar el último valor válido (`!= -999.0`).
 
-#### B. ISRIC SoilGrids API (Complemento Edáfico para datos NASA) — *[Prioridad Alta - Fase 1 y 2]*
-El desafío de la NASA pide cruzar observaciones satelitales con información local del suelo. SoilGrids provee propiedades edáficas globales a 250m de resolución vía REST JSON por `lat`/`lon`.
+#### B. NASA SRTM (Shuttle Radar Topography Mission - 30m) vía OpenTopoData API — *[Prioridad Alta - Fase 1 y 2]*
+El recurso oficial **NASA SRTM** provee el modelo digital de elevación global a 30 metros de resolución para analizar pendiente (*slope*), escorrentía superficial (*runoff*), potencial de infiltración y riesgo de erosión hídrica.
+- **Endpoint REST (sin API Key):** `https://api.opentopodata.org/v1/srtm30m?locations={lat},{lon}|{lat_offset},{lon}`
+- **Variables calculadas en el Backend:**
+  - `elevacion_m`: Altitud del lote en metros sobre el nivel del mar (con fallback automático a `geometry.coordinates[2]` de NASA POWER si el servicio externo demora).
+  - `pendiente_terreno_pct`: Pendiente topográfica local (%) estimada comparando la cota del lote con puntos adyacentes a ~100 m (`±0.001°`). Permite cuantificar la pérdida de agua de lluvia por escorrentía y el peligro de erosión en lotes con pendiente y baja cobertura vegetal.
+
+#### C. ISRIC SoilGrids API (Complemento Edáfico Global — Equivalente a USDA SSURGO / WSS) — *[Prioridad Alta - Fase 1 y 2]*
+Cruza las observaciones satelitales de la NASA con las propiedades físicas y químicas locales del suelo a 250m de resolución vía REST JSON por `lat`/`lon`.
 - **Endpoint base:** `https://rest.isric.org/soilgrids/v2.0/properties/query`
-- **Variables clave:** `clay` (arcilla), `sand` (arena), `silt` (limo), `soc` (carbono orgánico del suelo) y `phh2o` (pH). Permite ajustar la retención hídrica real y el score de salud del suelo.
+- **Variables clave:** `clay` (arcilla), `sand` (arena), `silt` (limo), `soc` (carbono orgánico del suelo) y `phh2o` (pH). Permite ajustar la retención hídrica real, el riesgo de erodabilidad y el score de salud del suelo.
 
-#### C. NASA AppEEARS API (Application for Extracting and Exploring Analysis Ready Samples) — *[Prioridad Media - Fase 2 / Pre-caché]*
-API de LP DAAC que extrae series históricas de sensores como **MODIS**, **SMAP**, **ECOSTRESS** y **HLS**.
-- **Particularidad técnica:** Requiere token de *NASA Earthdata Login* y opera mediante colas de trabajo asíncronas (`jobs`). En el MVP se usa solo para descargar datasets de entrenamiento offline; en la **Fase 2 (Producto Comercial)** se integra mediante workers en background para monitorear lotes suscriptos.
-- **Productos destacados:** `MOD13Q1` (NDVI cada 16 días a 250m), `ECO3ETPTJPL` (Evapotranspiración ECOSTRESS a 70m), `SPL4SMGP` (SMAP Root Zone Soil Moisture a 9km).
+#### D. FAO GAEZ v4 (Global Agro-Ecological Zones) & FAO-56 — *[Base de Conocimiento Ecofisiológico Offline - Fase 1 y 2]*
+Recurso oficial del challenge que define las curvas de aptitud agroclimática, requerimientos térmicos/hídricos, restricciones edáficas/topográficas y factores de reducción de rinde ($K_y$) para decenas de cultivos a escala global.
+- **Modo de consumo (Latencia 0 ms):** Para no penalizar el tiempo de respuesta con descargas raster pesadas en vivo, los umbrales fenológicos y curvas de respuesta de **FAO GAEZ v4 y FAO-56** se integran de forma tabulada en el script de entrenamiento (`backend/ml/train_baseline.py`) y en el motor agronómico (`backend/services/rotation_matrix.py`).
+
+#### E. NASA AppEEARS API (MODIS, SMAP, ECOSTRESS y HLS) — *[Prioridad Media - Fase 2 / Pre-caché Offline]*
+API de LP DAAC que extrae series históricas de sensores como **MODIS/VIIRS**, **SMAP**, **ECOSTRESS** (temperatura superficial LST y evapotranspiración a 70m) y **HLS**.
+- **Particularidad técnica:** Requiere token de *NASA Earthdata Login* y opera mediante colas de trabajo asíncronas (`jobs`). En el MVP se utiliza para validación y descarga offline; en la **Fase 2 (Producto Comercial)** se integra mediante workers en background.
 
 ---
 
 ### 3.2. APIs de Imágenes Satelitales y Capas Visuales para el Frontend (Mapas)
 
-#### D. NASA GIBS (Global Imagery Browse Services) / Worldview — *[Prioridad Alta UI/UX - Fase 1]*
+#### F. NASA GIBS (Global Imagery Browse Services) / Worldview — *[Prioridad Alta UI/UX - Fase 1]*
 Servicio de teselas (WMTS / WMS / XYZ tiles) que permite superponer capas satelitales de la NASA directamente en **Leaflet** o **Mapbox** en tiempo real, sin procesar rasters en el backend ni requerir API Keys.
 - **Endpoint WMTS base:** `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/{Layer}/default/{Time}/{TileMatrixSet}/{z}/{y}/{x}.{format}`
 - **Capas recomendadas para el Frontend:**
-  - `MODIS_Terra_CorrectedReflectance_TrueColor` o `VIIRS_SNPP_CorrectedReflectance_TrueColor`: Imagen satelital real actualizada diariamente.
+  - `MODIS_Terra_CorrectedReflectance_TrueColor` o `VIIRS_SNPP_CorrectedReflectance_TrueColor`: Imagen satelital diaria para inspección visual y detección de suelo desnudo (*bare ground*).
   - `SMAP_L4_Analyzed_Root_Zone_Soil_Moisture`: Mapa de calor global de humedad en zona radicular.
-  - `MODIS_Terra_NDVI_8Day`: Capa visual de índice de vegetación (biomasa activa).
-  - `MODIS_Terra_Land_Surface_Temp_Day`: Temperatura superficial terrestre (LST) para visualizar estrés térmico regional.
+  - `MODIS_Terra_NDVI_8Day`: Capa visual de índice de vegetación (vigor y biomasa activa).
+  - `MODIS_Terra_Land_Surface_Temp_Day`: Temperatura superficial terrestre (LST, proxy de **ECOSTRESS/MODIS**) para visualizar focos de estrés térmico.
   - `IMERG_Precipitation_Rate`: Tasa de precipitación derivada de la misión **GPM**.
 
-#### E. NASA Earthdata CMR-STAC / Harmonized Landsat Sentinel-2 (HLS) — *[Fase 2: Escala de Lote]*
-API basada en el estándar **STAC** (`https://cmr.earthdata.nasa.gov/stac/LPCLOUD`) para consultar recortes ópticos multiespectrales de **30 metros de resolución** (Landsat 8/9 + Sentinel-2). Base para ofrecer lectura de NDVI/NDWI intralote en la versión comercial.
+#### G. NASA Earthdata CMR-STAC / Harmonized Landsat & Copernicus Sentinel-2 (HLS) — *[Fase 2: Escala de Lote]*
+API basada en el estándar **STAC** (`https://cmr.earthdata.nasa.gov/stac/LPCLOUD`) que combina **Landsat 8/9 (NASA/USGS)** y **Sentinel-2 (ESA Copernicus)** a 10m–30m de resolución para lectura de NDVI/NDWI intralote y mapeo fino de períodos de suelo desnudo.
 
 ---
 
-### 3.3. Otras Fuentes del Ecosistema NASA (Referencia y Validación)
-- **Crop-CASMA (NASA + USDA):** Referencia metodológica para anomalías de humedad de suelo (SMAP 1 km) y condición vegetativa.
-- **NASA GPM (IMERG) & GRACE-FO:** Medición de tormentas en tiempo casi real y variaciones de agua subterránea/acuíferos a largo plazo.
-- **NASA Giovanni:** Herramienta de análisis geofísico para validar correlaciones históricas durante el desarrollo.
+### 3.3. Equivalencia de Recursos del Challenge (Estándar EE.UU. vs. Implementación Global / Argentina)
+
+El listado oficial de recursos del challenge incluye bases de datos gubernamentales de EE.UU. (USDA/USGS). Para que **Shark Attack** opere en la **Región Pampeana (Argentina)** y sea escalable globalmente, la arquitectura implementa sus equivalentes exactos:
+
+| Recurso Oficial del Challenge (EE.UU.) | Función en el Challenge | Implementación en **Shark Attack** (Global / Argentina) |
+| :--- | :--- | :--- |
+| **USDA SSURGO / Web Soil Survey (WSS)** | Textura, materia orgánica, drenaje y retención hídrica del suelo. | **ISRIC SoilGrids API** (Global 250m) + **Cartas de Suelo GeoINTA**. |
+| **USDA NASS QuickStats & CDL (CropScape)** | Rindes históricos por condado y secuencias de cultivos previas. | **SIIA / MAGyP (Estimaciones Agrícolas)** por departamento y campaña. |
+| **USDA AMS Market News** | Precios de commodities, liquidez y viabilidad comercial de la rotación. | **Indicador de Aptitud de Mercado / Riesgo Financiero** en la matriz de cultivos (liquidez comercial vs. inversión en cultivo de servicio). |
+| **PRISM Climate Data & CoCoRaHS** | Normales climáticas de 30 años y validación de lluvias extremas. | Climatología histórica de 20–30 años de **NASA POWER** y reanálisis **ERA5 (ECMWF/ESA)**. |
+| **OpenET** | Evapotranspiración a escala de lote para manejo del agua. | Flujo de evapotranspiración `EVPTRNS` (**NASA POWER / GLDAS**) + **NASA ECOSTRESS**. |
 
 ---
 
-## 4. Arquitectura de Machine Learning y Motor de Decisión
+## 4. Arquitectura de Machine Learning, Detección de Anomalías y Motor de Decisión
 
-El motor de recomendación está diseñado bajo una interfaz común (`RecommendationEngine`) que combina **Machine Learning basado en Árboles (`scikit-learn`)** con una **Matriz de Transición Agronómica y Scoring Multicriterio (MCDA)**.
+El motor de recomendación está diseñado bajo una interfaz común (`RecommendationEngine`) que combina **Machine Learning basado en Árboles (`scikit-learn`)** con una **Matriz de Transición Agronómica, Topográfica y Scoring Multicriterio (MCDA)**.
 
-### 4.1.Separación por Campaña y Secuencias de Rotación
+### 4.1. Separación por Campaña y Comparación de Estrategias de Rotación
 Para evitar el error agronómico de comparar cultivos de invierno contra cultivos de verano en una misma fecha de siembra, el motor opera sobre **ventanas de campaña explícitas**:
-- **Campaña Fina (`invierno`):** `trigo`, `cebada`, `vicia_cobertura` (leguminosa de servicio), `avena_cobertura`, `camelina`.
+- **Campaña Fina (`invierno`):** `trigo`, `cebada`, `vicia_cobertura` (leguminosa fijadora de N), `avena_cobertura` (gramínea de cobertura contra erosión), `camelina`.
 - **Campaña Gruesa (`verano`):** `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda` (post-fina), `girasol`, `sorgo`.
-- **Secuencia Recomendada:** Además de puntuar los cultivos de la campaña seleccionada, el sistema sugiere la **secuencia anual óptima (Invierno $\rightarrow$ Verano)** (ej. *Vicia de cobertura $\rightarrow$ Maíz Tardío* para recuperar nitrógeno y escapar al estrés hídrico de enero).
+- **Comparación de Secuencias (Requerimiento del Challenge):** Además de puntuar cada cultivo candidato, el sistema contrasta la **rotación recomendada (Invierno $\rightarrow$ Verano)** contra alternativas defensivas y contra la **estrategia testigo (repetir el cultivo anterior / monocultivo con barbecho desnudo)**, evidenciando los meses de suelo descubierto (*bare-field periods*) y el impacto sobre el agua y el carbono.
 
-### 4.2. Modelo de Machine Learning (`HistGradientBoostingRegressor` / `RandomForestRegressor`)
-- **Qué predice:** El **Puntaje de Aptitud Hidroclimática ($S_{\text{hidroclimatico}}$, de 0 a 100)** de cada cultivo candidato frente a las variables de clima y agua de la NASA (`GWETROOT`, `PRECTOTCORR`, `T2M_MAX`, `T2M_MIN`, `EVPTRNS`) y la textura del suelo.
-- **Por qué ensambles de árboles:** Capturan umbrales biológicos no lineales (ej. caída abrupta de rinde cuando `T2M_MAX > 35°C` coincide con `GWETROOT < 0.30`), no requieren GPU, corren en `< 15 ms` en producción y proveen explicabilidad por variable (`feature_importances_` / valores SHAP).
-- **Estrategia de Entrenamiento en 2 Fases:**
-  1. **Fase 1 (Hackathon — Script `train_baseline.py`):** Generación de un dataset calibrado combinando las curvas oficiales de respuesta al agua y temperatura de la **FAO (FAO-56)** con distribuciones climáticas reales descargadas de **NASA POWER** en puntos representativos de la región pampeana. Garantiza un modelo funcional, coherente y sin cuellos de botella de limpieza de datos en las 48 hs.
-  2. **Fase 2 (Producto Comercial — Pipeline de Datos Reales):** Entrenamiento supervisado sobre el dataset histórico de **Estimaciones Agrícolas (SIIA / MAGyP)** cruzado por departamento y campaña con las series diarias de **NASA POWER**, **SMAP** y **MODIS NDVI**, incorporando ajuste fino por lote con datos propios del productor.
+### 4.2. Modelo de Machine Learning (`HistGradientBoostingRegressor` / `RandomForestRegressor`) y Datos de Entrenamiento
+- **Qué predice:** El **Puntaje de Aptitud Hidroclimática y Topográfica ($S_{\text{hidroclimatico}}$, de 0 a 100)** de cada cultivo candidato frente a la telemetría satelital de la NASA (`GWETROOT`, `GWETTOP`, `PRECTOTCORR`, `T2M_MAX`, `T2M_MIN`, `EVPTRNS`), la pendiente del terreno (`SRTM`) y la textura del suelo (`SoilGrids`).
+- **Por qué ensambles de árboles:** Capturan interacciones no lineales críticas (ej. caída abrupta de aptitud cuando `T2M_MAX > 34°C` coincide con `GWETROOT < 0.30`, o pérdida de eficiencia de lluvia cuando `pendiente_terreno_pct > 2.0%` en suelos con baja infiltración), no requieren GPU, corren en `< 15 ms` en producción y proveen explicabilidad (`feature_importances_`).
+- **Con qué datos se entrena (Estrategia en 2 Fases):**
+  1. **Fase 1 (Hackathon — Script `train_baseline.py`):** Se construye un dataset de entrenamiento combinando:
+     - **Distribuciones climáticas e hidrológicas reales** extraídas de series históricas diarias de 20 años de **NASA POWER (SMAP/GLDAS/IMERG)**, perfiles de pendiente de **NASA SRTM** y texturas de **SoilGrids** en puntos representativos de la región agrícola.
+     - **Funciones de respuesta ecofisiológica de FAO GAEZ v4 y FAO-56:** Los umbrales térmicos (óptimos, corte por calor y helada), coeficientes de cultivo ($K_c$), sensibilidad al déficit hídrico ($K_y$) y penalizaciones por pendiente/drenaje de la FAO se utilizan para etiquetar el target ($S_{\text{hidroclimatico}}$) sobre los escenarios históricos reales. Esto garantiza un modelo físicamente consistente, sin sobreajuste y listo en las 48 hs.
+  2. **Fase 2 (Producto Comercial — Pipeline de Datos Reales):** Entrenamiento supervisado cruzando la serie histórica de **rindes departamentales reales (SIIA / MAGyP en Argentina o USDA NASS QuickStats en EE.UU.)** con las anomalías de **NASA POWER**, **ERA5**, **SMAP**, **SRTM** y **MODIS/Sentinel-2 NDVI** de cada campaña.
 
 ### 4.3. Features de Entrada ($X$) del Modelo ML
-1. `gwetroot_saturacion_pct`: Índice de humedad radicular actual (`GWETROOT * 100` de NASA POWER, o valor simulado por el usuario en modo *What-If*).
-2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm) para viabilidad de emergencia en siembra.
-3. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días respecto a la climatología histórica de 20 años de la NASA en esa coordenada.
-4. `frecuencia_estres_termico`: Días esperados con `T2M_MAX > 34°C` durante la ventana crítica del cultivo.
-5. `frecuencia_riesgo_helada`: Días esperados con `T2M_MIN < 2°C`.
-6. `indice_aridez_evaporativa`: Relación entre precipitación y demanda evaporativa (`PRECTOTCORR / EVPTRNS`).
-7. `textura_arcilla_pct`: Porcentaje de arcilla del lote (vía SoilGrids / perfil regional) para ajustar retención de agua.
-8. `cultivo_candidato`: Cultivo a evaluar dentro de la campaña seleccionada.
+Todas las features se calculan de forma determinística a partir de las respuestas de **NASA POWER**, **NASA SRTM (OpenTopoData)** e **ISRIC SoilGrids**:
 
-### 4.4. Los 2 Pilares del Puntaje y Fórmula Dinámica
-Para evitar redundancias, el sistema separa el cálculo en **2 únicos pilares** claramente diferenciados:
+1. `gwetroot_saturacion_pct`: Índice de humedad en zona radicular actual (`GWETROOT * 100`, de NASA POWER / SMAP-GLDAS, o valor simulado en modo *What-If*).
+2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm, `GWETTOP * 100`) para viabilidad de emergencia en siembra y detección de desacople con la raíz.
+3. `tendencia_humedad_15d_pct`: Variación neta de humedad superficial/radicular en los últimos 15 días válidos (mide la velocidad de secado o recarga reciente del perfil).
+4. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días respecto a la climatología histórica de 20 años de NASA POWER en esa coordenada.
+5. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia intensa (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en la ventana estacional — indicador de lluvia torrencial no aprovechable por escorrentía.
+6. `frecuencia_estres_termico`: Días esperados con `T2M_MAX > 34°C` durante la ventana crítica del cultivo (golpes de calor).
+7. `frecuencia_riesgo_helada`: Días esperados con `T2M_MIN < 2°C` (riesgo de helada / congelamiento superficial).
+8. `indice_aridez_evaporativa`: Relación entre precipitación reciente y demanda evaporativa (`PRECTOTCORR / EVPTRNS`).
+9. `pendiente_terreno_pct`: Pendiente topográfica local (%) obtenida de **NASA SRTM (30m)** (modifica la infiltración efectiva del agua de lluvia y el riesgo de erosión).
+10. `elevacion_m`: Altitud sobre el nivel del mar (msnm) vía **NASA SRTM / NASA POWER**.
+11. `textura_arcilla_pct`: Porcentaje de arcilla del lote vía **ISRIC SoilGrids** (regula la capacidad de retención hídrica y el drenaje).
+12. `cultivo_candidato`: Identificador/codificación del cultivo a evaluar dentro de la campaña seleccionada.
 
-1. **$S_{\text{hidroclimatico}}$ (Clima + Agua — Calculado 100% por el Modelo de ML):** Evalúa qué tan viable es el cultivo según la oferta de agua en el perfil (`GWETROOT`), la anomalía de lluvias (`PRECTOTCORR`) y el estrés térmico (`T2M_MAX`/`T2M_MIN`) reportados por la NASA.
-2. **$S_{\text{suelo}}$ (Salud del Suelo y Rotación — Calculado por Matriz Agronómica + SoilGrids):** Tabla determinística de reglas agronómicas que evalúa la transición `cultivo_anterior -> cultivo_candidato` (balance de Carbono/Nitrógeno, aporte de rastrojo y corte de ciclo de plagas) ajustada por el nivel actual de Carbono Orgánico (`soc`) del lote. Por ejemplo, penaliza el monocultivo `soja -> soja` (`20 pts`) y premia rotaciones con gramíneas como `soja -> sorgo` o `soja -> maiz` (`90–95 pts`).
+### 4.4. Detección Basada en Evidencia de Fenómenos Meteorológicos Inusuales (Sin Predicciones Forzadas)
+> **Principio de Rigor Técnico:** Los datasets satelitales de observación de la Tierra (**SMAP, GPM, MODIS, SRTM, NASA POWER**) miden el **estado físico actual y la climatología histórica**, no son modelos meteorológicos de pronóstico a 6 meses ni modelos oceánicos del Pacífico. Por lo tanto, **el sistema NO fuerza predicciones meteorológicas futuras que los datos no pueden sostener**.
+
+En su lugar, el backend combina la telemetría de los últimos 90 días con la estadística histórica de 20 años de la NASA para **detectar anomalías físicas ya en curso** y **cuantificar riesgos empíricos reales** en el lote:
+
+1. **Pulso de Secado Rápido (*Flash Drought Onset*):**
+   - *Qué sí podemos saber con los datos:* Si en los últimos 15 días `tendencia_humedad_15d_pct` muestra una caída brusca (ej. `< -15%`) coincidiendo con temperaturas altas (`T2M_MAX`) y alta demanda evaporativa (`EVPTRNS`). Se informa una alerta temprana de **secado acelerado en curso**, sin inventar si lloverá el mes próximo.
+2. **Trampa de "Falsa Recarga" Superficial (`GWETTOP` vs. `GWETROOT`):**
+   - *Qué sí podemos saber con los datos:* Si una lluvia reciente humedeció los primeros 5 cm (`GWETTOP > 60%`, dando falsa sensación de humedad para sembrar), pero el metro profundo sigue seco (`GWETROOT < 35%`). El sistema advierte que el lote **no tiene reserva profunda** para sostener un cultivo demandante si se cortan las lluvias en verano.
+3. **Peligro de Escorrentía y Erosión por Lluvias Torrenciales (`GPM/PRECTOTCORR` + `SRTM`):**
+   - *Qué sí podemos saber con los datos:* Cruzando la frecuencia de tormentas intensas (`> 50 mm/día`) con la pendiente real de **SRTM (`pendiente_terreno_pct`)** y la textura de **SoilGrids**, el sistema identifica si el lote es propenso a perder agua por escorrentía y sufrir lavado de suelo cuando queda desnudo (*bare ground*).
+4. **Exposición Histórica a Extremos Térmicos (Climatología NASA POWER) y Simulación de Escenarios (ENSO):**
+   - El sistema reporta la frecuencia estadística histórica de golpes de calor y heladas en esa coordenada. Para evaluar qué pasaría si la campaña entrante resulta atípicamente seca (*tipo La Niña*) o húmeda (*tipo El Niño*), **no se adivina el pronóstico estacional**, sino que se proveen **Presets Climáticos en el simulador *What-If*** para que el productor o su agrónomo evalúen la sensibilidad de cada rotación bajo cada escenario.
+
+### 4.5. Los 2 Pilares del Puntaje, Viabilidad de Mercado y Fórmula Dinámica
+Para mantener la transparencia matemática, el sistema separa el cálculo en **2 pilares cuantitativos** complementados con metadatos de riesgo, mercado y validación local:
+
+1. **$S_{\text{hidroclimatico}}$ (Clima + Agua + Topografía Hídrica — Calculado 100% por el Modelo de ML):** Evalúa qué tan viable es el cultivo según la reserva radicular (`GWETROOT`), el secado reciente, la anomalía de lluvias (`PRECTOTCORR`), el estrés térmico (`T2M_MAX`/`T2M_MIN`), la demanda evaporativa (`EVPTRNS`) y la eficiencia de infiltración según pendiente (`SRTM`) y arcilla (`SoilGrids`).
+2. **$S_{\text{suelo}}$ (Salud del Suelo, Cobertura y Control de Erosión — Calculado por Matriz Agronómica + SoilGrids + SRTM):** Evalúa la transición `cultivo_anterior -> cultivo_candidato` (balance de Carbono/Nitrógeno, aporte de rastrojo, reducción de meses de suelo desnudo y corte de ciclo de plagas) ajustada por el nivel actual de Carbono Orgánico (`soc`) y penalizando doblemente los cultivos de baja cobertura en lotes con pendiente elevada (`pendiente_terreno_pct` de SRTM).
 
 $$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\text{suelo}} \cdot S_{\text{suelo}}$$
 
 | `objetivo_productor` | Peso Hidroclimático ($w_{\text{clima}}$) | Peso Suelo ($w_{\text{suelo}}$) | Enfoque de la Recomendación |
 | :--- | :---: | :---: | :--- |
 | `resiliencia_hidroclimatica` | **`0.75`** | `0.25` | Prioriza asegurar el cultivo frente a sequías, baja humedad radicular o golpes de calor. |
-| `conservacion_suelo` | `0.30` | **`0.70`** | Prioriza regenerar carbono, aportar cobertura de rastrojo y cortar el monocultivo. |
+| `conservacion_suelo` | `0.30` | **`0.70`** | Prioriza regenerar carbono, proteger pendientes contra la erosión, aportar rastrojo y cortar el monocultivo. |
 | `equilibrio` | `0.50` | `0.50` | Balance 50/50 entre seguridad hídrica/climática y sustentabilidad del suelo. |
 
-### 4.5. Flujo de Ejecución: Offline (Entrenamiento) vs. Online (Inferencia en Producción)
-- **Fase Offline (Pre-deploy):** Se ejecuta el script de entrenamiento con series históricas de NASA POWER + curvas FAO/SIIA $\rightarrow$ genera el archivo `modelo_agro.joblib` que queda incluido en el repositorio del backend.
+### 4.6. Flujo de Ejecución: Offline (Entrenamiento) vs. Online (Inferencia en Producción)
+- **Fase Offline (Pre-deploy):** Se ejecuta el script `train_baseline.py` con series históricas de NASA POWER + topografía SRTM + curvas FAO GAEZ/FAO-56 $\rightarrow$ genera el archivo `modelo_agro.joblib` incluido en el repositorio del backend.
 - **Fase Online (`POST /api/v1/simulate` en `< 1.5s`):**
-  1. FastAPI recibe `coordenadas`, `campana`, `cultivo_anterior` y `objetivo_productor`.
-  2. Consulta en paralelo **NASA POWER API** (filtrando lags `-999.0`) y **SoilGrids API**.
-  3. Construye las features $X$ y ejecuta `modelo_agro.predict(X)` en memoria para obtener $S_{\text{hidroclimatico}}$ de cada cultivo de la campaña.
-  4. Cruza cada cultivo con la **Matriz de Rotación** para obtener $S_{\text{suelo}}$, aplica los pesos ($w_{\text{clima}}, w_{\text{suelo}}$) y devuelve el JSON.
+  1. FastAPI recibe `coordenadas`, `campana`, `cultivo_anterior`, `objetivo_productor` y (opcionalmente) `simulacion_what_if`.
+  2. Consulta en paralelo **NASA POWER API** (filtrando lags `-999.0`), **OpenTopoData SRTM API** (con fallback a la elevación de NASA POWER) e **ISRIC SoilGrids API**.
+  3. Calcula las 12 features $X$, evalúa las alertas de anomalías físicas en curso (sin forzar predicciones sin sustento) y ejecuta `modelo_agro.predict(X)` en memoria para obtener $S_{\text{hidroclimatico}}$.
+  4. Cruza cada cultivo con la **Matriz de Rotación y Pendiente** para obtener $S_{\text{suelo}}$, aplica los pesos ($w_{\text{clima}}, w_{\text{suelo}}$) e incluye las notas de incertidumbre y validación agronómica local requeridas por el challenge.
 
 ---
 
@@ -141,7 +183,7 @@ $$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\te
 Formato estándar de comunicación entre el Frontend y el Backend.
 
 ### Request: `POST /api/v1/simulate`
-> **Nota de UX:** El usuario **no necesita ingresar la humedad del suelo manualmente**; el backend la detecta automáticamente vía satélite (`GWETROOT` de NASA POWER). El campo `simulacion_what_if` es **opcional** y solo se envía cuando el usuario mueve los sliders en la UI para simular escenarios hipotéticos.
+> **Nota de UX:** El usuario **no necesita ingresar la humedad del suelo ni la pendiente manualmente**; el backend las detecta automáticamente vía satélite (`GWETROOT` de NASA POWER y pendiente de NASA SRTM). El campo `simulacion_what_if` es **opcional** y permite simular escenarios hipotéticos (ej. botones rápidos de escenario *"Seco / La Niña"*, *"Neutro"* o *"Húmedo / El Niño"*, o sliders manuales).
 
 ```json
 {
@@ -154,7 +196,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   "objetivo_productor": "equilibrio", // opciones: "resiliencia_hidroclimatica", "conservacion_suelo", "equilibrio"
   "simulacion_what_if": {
     "override_humedad_radicular_pct": null, // opcional (0-100): si es null, usa el dato real de NASA POWER
-    "variacion_lluvia_esperada_pct": 0 // opcional (-50 a +50): para simular años más secos o húmedos
+    "variacion_lluvia_esperada_pct": 0 // opcional (-50 a +50): ej. -25 para simular escenario seco, +25 para húmedo
   }
 }
 ```
@@ -167,14 +209,29 @@ Formato estándar de comunicación entre el Frontend y el Backend.
     "fecha_ultimo_dato_valido": "2026-11-08",
     "indice_humedad_radicular_pct": 34.0,
     "indice_humedad_superficial_pct": 28.5,
+    "tendencia_humedad_15d_pct": -12.0,
     "anomalia_lluvia_90d_pct": -24.2,
+    "frecuencia_tormentas_extremas_90d": 1,
     "riesgo_termico_verano": "alto"
+  },
+  "topografia_srtm": {
+    "elevacion_m": 78.5,
+    "pendiente_terreno_pct": 1.8,
+    "riesgo_erosion_escorrentia": "medio"
   },
   "perfil_suelo": {
     "textura_predominante": "franco_limoso",
+    "arcilla_pct": 24.5,
     "carbono_organico_g_kg": 18.4,
     "condicion_rotacion_previa": "deficit_rastrojo_por_soja"
   },
+  "anomalias_detectadas": [
+    {
+      "tipo": "deficit_hidrico_radicular",
+      "severidad": "alta",
+      "evidencia": "Reserva radicular en 34% con anomalía de lluvias de -24.2% en los últimos 90 días (NASA POWER / SMAP)."
+    }
+  ],
   "recomendacion_principal": {
     "cultivo": "sorgo",
     "secuencia_sugerida": "vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
@@ -183,12 +240,13 @@ Formato estándar de comunicación entre el Frontend y el Backend.
       "hidroclimatico": 86.0,
       "suelo": 95.0
     },
+    "perfil_mercado": "Bajo costo de implantación y alta estabilidad defensiva; grano comercializable como forraje o exportación.",
     "factores_clave_ml": [
       "Baja saturación hídrica en zona radicular detectada por NASA (34%)",
-      "Alta necesidad de aportar rastrojo de gramínea tras cultivo de Soja",
+      "Pendiente de 1.8% (SRTM) requiere rastrojo de gramínea tras Soja para frenar escorrentía",
       "Anomalía de lluvias de -24.2% en los últimos 90 días"
     ],
-    "explicacion": "Recomendación: Sembrar Sorgo (o Maíz Tardío precedido por Vicia). Detectamos vía satélite una reserva hídrica ajustada (34% de saturación radicular) y un déficit de lluvias del 24%. A diferencia del Maíz Temprano (riesgo crítico en floración) o repetir Soja (degradación de carbono del suelo), el Sorgo ofrece un 86% de aptitud hidroclimática y un 95% de beneficio edáfico para recomponer la estructura del lote."
+    "explicacion": "Recomendación: Sembrar Sorgo (o Maíz Tardío precedido por Vicia). Detectamos vía satélite una reserva hídrica ajustada (34% de saturación radicular), un déficit de lluvias del 24% y una pendiente del 1.8% (SRTM). A diferencia del Maíz Temprano (riesgo crítico en floración) o repetir Soja (degradación de carbono y riesgo de erosión por suelo desnudo), el Sorgo ofrece un 86% de aptitud hidroclimática y un 95% de beneficio edáfico para proteger y recomponer la estructura del lote."
   },
   "ranking_cultivos": [
     { "cultivo": "sorgo", "score_final": 90.5, "riesgo": "bajo" },
@@ -196,7 +254,15 @@ Formato estándar de comunicación entre el Frontend y el Backend.
     { "cultivo": "girasol", "score_final": 72.0, "riesgo": "bajo" },
     { "cultivo": "maiz_temprano", "score_final": 64.0, "riesgo": "critico" },
     { "cultivo": "soja_primera", "score_final": 31.0, "riesgo": "alto" }
-  ]
+  ],
+  "validacion_local_requerida": {
+    "nota_resolucion_satelital": "Humedad satelital (NASA POWER/SMAP) estimada a escala regional (~9 km), topografía SRTM a 30 m y suelo a 250 m.",
+    "brechas_informacion": [
+      "No mide profundidad de napa freática local ni compactación subsuperficial (piso de arado)",
+      "No reemplaza el pronóstico meteorológico estacional ni el análisis químico de laboratorio (Fósforo/Nitrógeno)"
+    ],
+    "recomendacion_experto": "Validar agua útil real con muestreo de barreno a 1 metro y consultar al ingeniero agrónomo local antes de definir la densidad de siembra."
+  }
 }
 ```
 
@@ -222,7 +288,7 @@ Pasos para dejar el entorno local listo después de clonar o hacer `git pull` de
 shark-attack-nasa/
 ├── backend/
 │   ├── ml/                # Entrenamiento (train_baseline.py), predictor y TASKS_ML.md
-│   ├── providers/         # Clientes HTTP (NASA POWER API, ISRIC SoilGrids API)
+│   ├── providers/         # Clientes HTTP (NASA POWER API, NASA SRTM / OpenTopoData, ISRIC SoilGrids API)
 │   ├── routers/           # Endpoints FastAPI (/api/v1/simulate)
 │   ├── services/          # Lógica de negocio y matriz de rotación agronómica
 │   ├── requirements.txt   # Dependencias de Python
