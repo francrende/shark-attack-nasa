@@ -22,9 +22,6 @@ from __future__ import annotations
 import asyncio
 import json
 import math
-import time
-from collections import deque
-from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -62,25 +59,10 @@ ADV_SIN_TEXTURA = "Arena/limo no disponibles: no se pudo determinar la clase tex
 
 Fuente = Literal["isric_soilgrids_v2", "isric_soilgrids_v2_vecino", "precache", "fallback_regional"]
 
-# Copia de AGRO_LOCATIONS (backend/ml/generate_dataset.py): arcilla de respaldo calibrada
-# con Cartas de Suelo GeoINTA. Se copia (no se importa) para no acoplarse al track de ML.
-LOCALIDADES_GEOINTA: tuple[dict[str, Any], ...] = (
-    {"id": "pergamino_ba", "nombre": "Pergamino (Pampa Ondulada)", "lat": -33.89, "lon": -60.57, "arcilla_pct": 25.4},
-    {"id": "venado_tuerto_sf", "nombre": "Venado Tuerto (Sur Santa Fe)", "lat": -33.75, "lon": -61.97, "arcilla_pct": 23.8},
-    {"id": "marcos_juarez_cba", "nombre": "Marcos Juárez (Sudeste Córdoba)", "lat": -32.70, "lon": -62.10, "arcilla_pct": 24.5},
-    {"id": "rio_cuarto_cba", "nombre": "Río Cuarto (Suroeste Córdoba)", "lat": -33.12, "lon": -64.35, "arcilla_pct": 17.2},
-    {"id": "trenque_lauquen_ba", "nombre": "Trenque Lauquen (Pampa Arenosa)", "lat": -35.97, "lon": -62.73, "arcilla_pct": 15.8},
-    {"id": "tandil_ba", "nombre": "Tandil (Pampa Serrana / Sudeste)", "lat": -37.32, "lon": -59.13, "arcilla_pct": 27.6},
-    {"id": "balcarce_ba", "nombre": "Balcarce (Sudeste Bonaerense)", "lat": -37.85, "lon": -58.26, "arcilla_pct": 26.8},
-    {"id": "tres_arroyos_ba", "nombre": "Tres Arroyos (Sur Bonaerense / Fina)", "lat": -38.37, "lon": -60.28, "arcilla_pct": 24.9},
-    {"id": "chascomus_ba", "nombre": "Chascomús (Cuenca del Salado)", "lat": -35.57, "lon": -58.01, "arcilla_pct": 33.5},
-    {"id": "parana_er", "nombre": "Paraná (Lomadas Entrerrianas)", "lat": -31.74, "lon": -60.51, "arcilla_pct": 37.2},
-    {"id": "rafaela_sf", "nombre": "Rafaela (Centro Santa Fe)", "lat": -31.25, "lon": -61.49, "arcilla_pct": 28.4},
-    {"id": "general_pico_lp", "nombre": "General Pico (Noreste La Pampa)", "lat": -35.66, "lon": -63.75, "arcilla_pct": 14.9},
-    {"id": "junin_ba", "nombre": "Junín (Noroeste Bonaerense)", "lat": -34.58, "lon": -60.95, "arcilla_pct": 21.6},
-    {"id": "azul_ba", "nombre": "Azul (Centro Bonaerense)", "lat": -36.78, "lon": -59.86, "arcilla_pct": 29.8},
-    {"id": "victoria_er", "nombre": "Victoria (Sur Entre Ríos - Vertisoles)", "lat": -32.62, "lon": -60.15, "arcilla_pct": 38.5},
-)
+# Tabla GeoINTA, limitador y corte automático: compartidos con el provider de SRTM (BACK-5).
+# Se reexportan con los mismos nombres para no romper a quien ya los importa desde acá.
+from providers.regional import LOCALIDADES_GEOINTA, haversine_km, localidad_mas_cercana  # noqa: E402
+from providers.resiliencia import CorteAutomatico, LimitadorTasa  # noqa: E402,F401
 
 
 class SoilGridsUnavailable(Exception):
@@ -119,66 +101,9 @@ def dict_a_perfil(datos: dict[str, Any]) -> PerfilSueloSatelital:
 # ---------------------------------------------------------------------------
 
 
-class LimitadorTasa:
-    """Ventana deslizante: como máximo ``max_llamadas`` en los últimos ``ventana_s`` segundos."""
-
-    def __init__(
-        self,
-        max_llamadas: int = LIMITE_LLAMADAS,
-        ventana_s: float = VENTANA_LIMITE_S,
-        reloj: Callable[[], float] = time.monotonic,
-    ) -> None:
-        self.max_llamadas = max_llamadas
-        self.ventana_s = ventana_s
-        self._reloj = reloj
-        self._marcas: deque[float] = deque()
-
-    def _purgar(self, ahora: float) -> None:
-        while self._marcas and ahora - self._marcas[0] >= self.ventana_s:
-            self._marcas.popleft()
-
-    def reservar_hasta(self, cantidad: int) -> int:
-        """Reserva hasta ``cantidad`` llamadas y devuelve cuántas se concedieron (0..cantidad)."""
-        ahora = self._reloj()
-        self._purgar(ahora)
-        concedidas = max(0, min(cantidad, self.max_llamadas - len(self._marcas)))
-        self._marcas.extend([ahora] * concedidas)
-        return concedidas
-
-
-class CorteAutomatico:
-    """Circuit breaker: 1 timeout/429 corta ``duracion_s``; luego permite 1 llamada de prueba."""
-
-    def __init__(self, duracion_s: float = DURACION_CORTE_S, reloj: Callable[[], float] = time.monotonic) -> None:
-        self.duracion_s = duracion_s
-        self._reloj = reloj
-        self._abierto_hasta: float | None = None
-        self._prueba_en_curso = False
-
-    @property
-    def cortado(self) -> bool:
-        return self._abierto_hasta is not None
-
-    def permite_llamada(self) -> bool:
-        if self._abierto_hasta is None:
-            return True
-        if self._reloj() < self._abierto_hasta or self._prueba_en_curso:
-            return False
-        self._prueba_en_curso = True  # pasaron los 5 min: se habilita 1 llamada de prueba
-        return True
-
-    def registrar_exito(self) -> None:
-        self._abierto_hasta = None
-        self._prueba_en_curso = False
-
-    def registrar_falla(self) -> None:
-        self._abierto_hasta = self._reloj() + self.duracion_s
-        self._prueba_en_curso = False
-
-
 _SIN_DATO = {"sin_dato": True}  # entrada de caché: punto + 4 vecinos sin dato (determinístico)
-_limitador = LimitadorTasa()
-_corte = CorteAutomatico()
+_limitador = LimitadorTasa(LIMITE_LLAMADAS, VENTANA_LIMITE_S)
+_corte = CorteAutomatico(DURACION_CORTE_S)
 _lotes_ejemplo: list[dict[str, Any]] | None = None
 
 
@@ -190,8 +115,8 @@ def reiniciar_estado(
     """Reinicia limitador, corte y lotes de ejemplo (uso en tests). La caché se configura
     aparte con ``providers.cache.configurar_cache``."""
     global _limitador, _corte, _lotes_ejemplo
-    _limitador = limitador or LimitadorTasa()
-    _corte = corte or CorteAutomatico()
+    _limitador = limitador or LimitadorTasa(LIMITE_LLAMADAS, VENTANA_LIMITE_S)
+    _corte = corte or CorteAutomatico(DURACION_CORTE_S)
     _lotes_ejemplo = lotes_ejemplo
 
 
@@ -284,20 +209,11 @@ def clasificar_textura_usda(arena: float, limo: float, arcilla: float) -> str:
     return "arcilloso"
 
 
-def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    r = 6371.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp, dl = p2 - p1, math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+_haversine_km = haversine_km  # alias histórico (tests y código de BACK-3)
 
 
 def _localidad_mas_cercana(lat: float, lon: float) -> tuple[dict[str, Any], float] | None:
-    mejor = min(
-        ((loc, _haversine_km(lat, lon, loc["lat"], loc["lon"])) for loc in LOCALIDADES_GEOINTA),
-        key=lambda par: par[1],
-    )
-    return mejor if mejor[1] <= RADIO_FALLBACK_KM else None
+    return localidad_mas_cercana(lat, lon, RADIO_FALLBACK_KM)
 
 
 def _vecinos(lat: float, lon: float) -> list[tuple[float, float]]:

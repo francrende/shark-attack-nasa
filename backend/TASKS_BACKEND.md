@@ -42,6 +42,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | BACK-2 | Bloque `telemetria_nasa` (humedad, tendencia de 15 días, anomalía de lluvia de 90 días, tormentas extremas, riesgo térmico de verano) | `backend/schemas.py`, `backend/providers/nasa_power.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_nasa_power_live.py` | BACK-1 | `[x]` |
 | BACK-3 | Provider ISRIC SoilGrids (0–30 cm ponderado, vecinos ante `null`, fallback GeoINTA, caché) | `backend/providers/soilgrids.py`, `backend/providers/test_soilgrids.py`, `backend/providers/check_soilgrids_live.py` | — | `[x]` |
 | BACK-4 | Resiliencia y latencia: caché en capas, caché de NASA por celda de grilla, climatología pampeana precalculada, corte automático de SoilGrids, lotes de ejemplo | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | BACK-2, BACK-3 | `[x]` |
+| BACK-5 | Provider SRTM (OpenTopoData): elevación + pendiente con grilla 3×3 a 300 m (Horn), cascada de fallback, caché y corte automático | `backend/providers/srtm.py`, `backend/providers/regional.py`, `backend/providers/resiliencia.py`, `backend/providers/soilgrids.py`, `backend/providers/nasa_power.py`, `backend/providers/test_srtm.py`, `backend/providers/check_srtm_live.py` | BACK-4 | `[x]` |
 
 ---
 
@@ -337,6 +338,75 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m providers.generar_precache nasa`: genera `data/climatologia_pampa.json` con unas 300 celdas.
   - (Cuando ISRIC esté disponible) `cd backend && python -m providers.generar_precache suelo`.
 - **Riesgo anotado (fuera de alcance de BACK-4):** el plan gratuito de Render **duerme el servicio** tras 15 minutos sin tráfico, y el primer jurado espera unos 30–60 s. Hace falta un **ping cada 10 minutos** (por ejemplo, un cron externo o UptimeRobot a un `/health`). Tarea de deploy, coordinar con quien tenga `main.py`.
+
+### `[x]` BACK-5: Provider SRTM (OpenTopoData)
+> **Verificación (14/11/2026):** pasan los 133 tests de `providers/` (26 nuevos; SoilGrids sigue en verde tras el refactor). En vivo, con dato real de SRTM:
+> - Pergamino: 69 m, **0,82 %**, en 0,96 s.
+> - Tandil: 187 m, 1,53 %, en 0,56 s.
+> - Paraná: 62 m, 1,46 %, en 1,00 s.
+- **Objetivo:** Devolver `elevacion_m` y `pendiente_terreno_pct` de un punto, que son los datos del bloque `topografia_srtm` del contrato §5 y dos features del ML. Sin `riesgo_erosion_escorrentia`, que se arma en `/simulate` cuando estén definidas las tormentas esperadas, y sin endpoint.
+- **Archivos Permitidos:**
+  - `backend/providers/srtm.py` (nuevo): el provider.
+  - `backend/providers/regional.py` (nuevo): la tabla GeoINTA compartida (arcilla, pendiente y elevación de las 15 localidades), la distancia haversine y la búsqueda de la localidad más cercana.
+  - `backend/providers/resiliencia.py` (nuevo): se mueven ahí `LimitadorTasa` y `CorteAutomatico` desde `soilgrids.py`, para compartirlos.
+  - `backend/providers/soilgrids.py`: importa desde `regional.py` y `resiliencia.py`, sin cambiar su comportamiento.
+  - `backend/providers/nasa_power.py`: captura la elevación de `geometry.coordinates[2]`.
+  - `backend/providers/test_srtm.py` y `backend/providers/check_srtm_live.py` (nuevos).
+- **Hallazgos de la API real (14/11/2026):**
+  - Responde en 0,5–1 s.
+  - SRTM 30 m viene en **metros enteros**. Con vecinos a 100 m, el redondeo domina en la llanura: Pergamino da 2,24 % y Tandil 2,06 %. Con vecinos a 300 m, Pergamino da 0,83 %, Tandil 2,06 % y Paraná 1,94 %, que es el orden esperable.
+  - Límites públicos documentados: 1 llamada por segundo, 1000 por día y hasta 100 puntos por llamada.
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Pendiente:** se usa una **grilla 3×3 con 300 m de separación** (unos 600 × 600 m), los 9 puntos en **una sola llamada**, y la fórmula de **Horn** (diferencias ponderadas en las dos direcciones). `pendiente % = √((dz/dx)² + (dz/dy)²) × 100`.
+    - ⚠️ **Avisar al track de ML:** el entrenamiento usa 1 vecino al norte a 111 m mezclado 50/50 con la pendiente GeoINTA de la localidad ([generate_dataset.py:450-464](ml/generate_dataset.py#L450-L464)). Eso no se puede replicar para un punto arbitrario. Conviene que reentrenen con el mismo cálculo de 3×3 a 300 m.
+  - **Elevación:** la del punto central de la grilla.
+  - **Cascada de fallback**, igual que el suelo:
+    1. OpenTopoData con los 9 puntos.
+    2. Si falla, tarda o se activa el corte:
+       - **Elevación de NASA POWER** (`geometry.coordinates[2]`, promedio de la celda de unos 50 km).
+       - **Pendiente de la localidad GeoINTA más cercana**, hasta 100 km.
+       - `fuente = "fallback_regional"`, con advertencia visible y `reintentar_srtm = True`.
+    3. Más de 100 km → `SrtmUnavailable` (503).
+  - **Corte automático:** igual que en SoilGrids. Un timeout o un 429 corta 5 minutos, y después se hace 1 llamada de prueba.
+  - **Fuera de alcance:** `riesgo_erosion_escorrentia`, que va en `/simulate`.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Timeout de 5 s, sin reintento:** la API responde en menos de 1 s.
+  - **Límite de 1 llamada por segundo:** si hace falta, se **espera** (como mucho 1 s) en lugar de ir al fallback. **Límite de 1000 por día UTC:** al superarlo, va al fallback.
+  - **Puntos sin dato:** si alguno de los 9 viene `null` (mar o fuera de la cobertura de SRTM), es **determinístico**. Se va al fallback con `reintentar_srtm = False` y se cachea `{"sin_dato": true}`.
+  - **Caché:** espacio `topografia`, clave `clave_coordenada` (unos 100 m), **sin vencimiento**. Solo guarda datos reales y el "sin dato". Nunca guarda los fallbacks transitorios.
+  - **Elevación de respaldo:** primero se busca en la ventana reciente de NASA que ya esté en caché para esa celda. Si no está, se hace un pedido mínimo a NASA POWER (1 día, 1 parámetro) y la elevación se cachea por celda en el espacio `nasa_elevacion`, sin vencimiento. Si NASA también falla, se usa la elevación de la localidad GeoINTA.
+  - **`NasaPowerDailySeries` gana `elevacion_m: float | None = None`**, al final, sin romper BACK-1. `serie_a_dict` y `dict_a_serie` lo incluyen.
+  - **Advertencia del fallback:** *"Topografía estimada regionalmente: pendiente de {localidad} (a {X} km) y elevación promedio de la zona. El ajuste por pendiente es aproximado."*
+  - **Redondeo:** la pendiente a 2 decimales y la elevación a 1.
+- **Especificación Técnica:**
+  1. `regional.py`:
+     - `LOCALIDADES_GEOINTA` con `arcilla_pct`, `pendiente_pct` y `elevacion_m`, copiados de `AGRO_LOCATIONS`.
+     - `haversine_km()`.
+     - `localidad_mas_cercana(lat, lon, radio_km=100)`.
+  2. `resiliencia.py`: `LimitadorTasa` y `CorteAutomatico`, movidos sin cambios. `soilgrids.py` los reexporta para que los tests sigan importando igual.
+  3. `srtm.py`:
+     - `dataclass TopografiaSrtm`, con los campos `elevacion_m`, `pendiente_terreno_pct`, `fuente`, `fuente_elevacion` (`"srtm30m" | "nasa_power" | "geointa"`), `distancia_fuente_km`, `localidad_fallback`, `advertencias`, `reintentar_srtm`.
+     - `grilla_3x3(lat, lon, paso_m=300)`.
+     - `pendiente_horn(elevaciones_3x3, paso_m)`, una función pura.
+     - `async fetch_topografia(lat, lon, *, client=None)`.
+     - `SrtmUnavailable`.
+     - `topografia_a_dict` y `dict_a_topografia`.
+  4. Tests mínimos:
+     - Horn: un plano horizontal da 0 %; un plano inclinado conocido (1 m cada 100 m) da 1,00 % en cualquier orientación.
+     - La grilla tiene 9 puntos, a unos 300 m, en el orden correcto.
+     - La query es una sola llamada con 9 `locations`.
+     - Camino feliz con la caché.
+     - Timeout → fallback con elevación de NASA, pendiente GeoINTA y corte activo.
+     - 429 → corte.
+     - `null` → "sin dato" cacheado, con `reintentar_srtm = False`.
+     - Fuera de 100 km → `SrtmUnavailable`.
+     - Límite diario → fallback.
+     - NASA también falla → elevación de GeoINTA.
+     - La elevación queda capturada en `NasaPowerDailySeries`.
+     - `soilgrids` sigue en verde tras el refactor.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest providers/ -v`: todos en verde.
+  - (Con red) `cd backend && python -m providers.check_srtm_live`: Pergamino con pendiente baja (menos de 1,5 %) y Tandil o Paraná con pendiente mayor.
 
 ---
 

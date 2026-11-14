@@ -44,6 +44,8 @@ class NasaPowerDailySeries:
     start: date
     end: date
     series: dict[str, dict[date, float | None]] = field(default_factory=dict)
+    # Elevación de la celda (geometry.coordinates[2]); respaldo del provider SRTM (BACK-5).
+    elevacion_m: float | None = None
 
     def last_valid(self, param: str) -> tuple[date, float] | None:
         """Último valor válido (no ``-999``) del parámetro, recorriendo desde la fecha más reciente."""
@@ -62,6 +64,7 @@ def serie_a_dict(serie: NasaPowerDailySeries) -> dict[str, Any]:
         "lon": serie.lon,
         "start": serie.start.isoformat(),
         "end": serie.end.isoformat(),
+        "elevacion_m": serie.elevacion_m,
         "series": {
             p: {d.strftime("%Y%m%d"): v for d, v in valores.items()} for p, valores in serie.series.items()
         },
@@ -78,7 +81,17 @@ def dict_a_serie(datos: dict[str, Any]) -> NasaPowerDailySeries:
             p: {datetime.strptime(k, "%Y%m%d").date(): v for k, v in valores.items()}
             for p, valores in datos["series"].items()
         },
+        elevacion_m=datos.get("elevacion_m"),
     )
+
+
+def _elevacion(payload: Any) -> float | None:
+    """``geometry.coordinates[2]`` de la respuesta de NASA POWER (``None`` si falta o es -999)."""
+    try:
+        valor = payload["geometry"]["coordinates"][2]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return _limpiar(valor)
 
 
 def _validar_coordenadas(lat: float, lon: float) -> None:
@@ -205,4 +218,6 @@ async def fetch_daily_range(
     else:
         payload = await _get_con_reintento(client, params)
 
-    return NasaPowerDailySeries(lat=lat, lon=lon, start=start, end=end, series=_parsear(payload))
+    return NasaPowerDailySeries(
+        lat=lat, lon=lon, start=start, end=end, series=_parsear(payload), elevacion_m=_elevacion(payload)
+    )
