@@ -125,21 +125,27 @@ Para evitar el error agronómico de comparar cultivos de invierno contra cultivo
      - **Funciones de respuesta ecofisiológica de FAO GAEZ v4 y FAO-56:** Los umbrales térmicos (óptimos, corte por calor y helada), coeficientes de cultivo ($K_c$), sensibilidad al déficit hídrico ($K_y$) y penalizaciones por pendiente/drenaje de la FAO se utilizan para etiquetar el target ($S_{\text{hidroclimatico}}$) sobre los escenarios históricos reales. Esto garantiza un modelo físicamente consistente, sin sobreajuste y listo en las 48 hs.
   2. **Fase 2 (Producto Comercial — Pipeline de Datos Reales):** Entrenamiento supervisado cruzando la serie histórica de **rindes departamentales reales (SIIA / MAGyP en Argentina o USDA NASS QuickStats en EE.UU.)** con las anomalías de **NASA POWER**, **ERA5**, **SMAP**, **SRTM** y **MODIS/Sentinel-2 NDVI** de cada campaña.
 
-### 4.3. Features de Entrada ($X$) del Modelo ML
-Todas las features se calculan de forma determinística a partir de las respuestas de **NASA POWER**, **NASA SRTM (OpenTopoData)** e **ISRIC SoilGrids**:
+### 4.3. Features de Entrada ($X$) del Modelo ML y Esquema de Doble Ventana Temporal (`[-89d, t]` vs. `[t+1, +90d]`)
+Todas las features se calculan de forma determinística a partir de las respuestas de **NASA POWER**, **NASA SRTM (OpenTopoData)** e **ISRIC SoilGrids**, separando rigurosamente el **estado hídrico heredado en el suelo** (ventana pasada `[t - 89, t]`) de los **riesgos meteorológicos a los que se expondrá el cultivo tras la siembra** (ventana futura `[t + 1, t + 90]`):
 
-1. `gwetroot_saturacion_pct`: Índice de humedad en zona radicular actual (`GWETROOT * 100`, de NASA POWER / SMAP-GLDAS, o valor simulado en modo *What-If*).
-2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm, `GWETTOP * 100`) para viabilidad de emergencia en siembra y detección de desacople con la raíz.
-3. `tendencia_humedad_15d_pct`: Variación neta de humedad superficial/radicular en los últimos 15 días válidos (mide la velocidad de secado o recarga reciente del perfil).
-4. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días respecto a la climatología histórica de 20 años de NASA POWER en esa coordenada.
-5. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia intensa (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en la ventana estacional — indicador de lluvia torrencial no aprovechable por escorrentía.
-6. `frecuencia_estres_termico`: Días esperados con `T2M_MAX > 34°C` durante la ventana crítica del cultivo (golpes de calor).
-7. `frecuencia_riesgo_helada`: Días esperados con `T2M_MIN < 2°C` (riesgo de helada / congelamiento superficial).
-8. `indice_aridez_evaporativa`: Relación entre precipitación reciente y demanda evaporativa (`PRECTOTCORR / EVPTRNS`).
-9. `pendiente_terreno_pct`: Pendiente topográfica local (%) obtenida de **NASA SRTM (30m)** (modifica la infiltración efectiva del agua de lluvia y el riesgo de erosión).
-10. `elevacion_m`: Altitud sobre el nivel del mar (msnm) vía **NASA SRTM / NASA POWER**.
-11. `textura_arcilla_pct`: Porcentaje de arcilla del lote vía **ISRIC SoilGrids** (regula la capacidad de retención hídrica y el drenaje).
-12. `cultivo_candidato`: Identificador/codificación del cultivo a evaluar dentro de la campaña seleccionada.
+- **A. Ventana Pasada `[t - 89, t]` (Estado Hídrico y Memoria del Suelo al día de evaluación $t$):**
+  1. `gwetroot_saturacion_pct`: Índice de humedad en zona radicular en el día $t$ (`GWETROOT * 100`, de NASA POWER / SMAP-GLDAS, o valor simulado en modo *What-If*).
+  2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm, `GWETTOP * 100`) en el día $t$ para viabilidad de emergencia en siembra y detección de desacople con la raíz.
+  3. `tendencia_humedad_15d_pct`: Variación neta de humedad superficial/radicular en los últimos 15 días válidos (`[t - 14, t]`, mide la velocidad de secado o recarga reciente del perfil).
+  4. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días (`[t - 89, t]`) respecto a la climatología histórica de 20 años de NASA POWER en esa coordenada.
+  8. `indice_aridez_evaporativa`: Relación entre precipitación acumulada y demanda evaporativa (`PRECTOTCORR / EVPTRNS`) en los 90 días previos (`[t - 89, t]`) que explica cómo llegó el perfil hídrico al día $t$.
+
+- **B. Ventana Futura `[t + 1, t + 90]` (Riesgos Meteorológicos durante el Ciclo del Cultivo):**
+  *(En el dataset histórico `generate_dataset.py` se extraen de los 90 días posteriores a la fecha de decisión `[t + 1, t + 90]`; en inferencia online en vivo se estiman mediante la climatología histórica de esos próximos 90 días del calendario `[doy + 1 .. doy + 90]` en la coordenada).*
+  5. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia torrencial (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en la ventana futura de 90 días (`[t + 1, t + 90]`) — indicador de riesgo de escorrentía y erosión durante el ciclo.
+  6. `frecuencia_estres_termico`: Días con `T2M_MAX > 34°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, golpes de calor en el ciclo del cultivo).
+  7. `frecuencia_riesgo_helada`: Días con `T2M_MIN < 2°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, riesgo de helada en el ciclo del cultivo).
+
+- **C. Variables Topográficas, Edáficas y de Cultivo:**
+  9. `pendiente_terreno_pct`: Pendiente topográfica local (%) obtenida de **NASA SRTM (30m)** (modifica la infiltración efectiva del agua de lluvia y el riesgo de erosión).
+  10. `elevacion_m`: Altitud sobre el nivel del mar (msnm) vía **NASA SRTM / NASA POWER**.
+  11. `textura_arcilla_pct`: Porcentaje de arcilla del lote vía **ISRIC SoilGrids** (regula la capacidad de retención hídrica y el drenaje).
+  12. `cultivo_candidato`: Identificador/codificación del cultivo a evaluar dentro de la campaña seleccionada.
 
 ### 4.4. Detección Basada en Evidencia de Fenómenos Meteorológicos Inusuales (Sin Predicciones Forzadas)
 > **Principio de Rigor Técnico:** Los datasets satelitales de observación de la Tierra (**SMAP, GPM, MODIS, SRTM, NASA POWER**) miden el **estado físico actual y la climatología histórica**, no son modelos meteorológicos de pronóstico a 6 meses ni modelos oceánicos del Pacífico. Por lo tanto, **el sistema NO fuerza predicciones meteorológicas futuras que los datos no pueden sostener**.
