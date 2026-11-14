@@ -226,7 +226,7 @@ AGRO_LOCATIONS: list[dict[str, Any]] = [
     },
 ]
 
-# Parámetros ecofisiológicos FAO GAEZ v4 / FAO-56 por cultivo
+# Parámetros ecofisiológicos FAO GAEZ v4 / FAO-56 por cultivo calibrados para ventanas de 90 días en Argentina
 CROP_CATALOG: dict[str, dict[str, Any]] = {
     # ================= CAMPAÑA FINA (INVIERNO) =================
     "trigo": {
@@ -236,31 +236,31 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_opt_max": 78.0,
         "gwetroot_crit_min": 26.0,
         "gwetroot_waterlog_max": 86.0,
-        "ky_drought": 1.05,
-        "ky_waterlog": 1.15,
-        "heat_tol": 3.0,
-        "heat_sens": 2.8,
-        "frost_tol": 14.0,
-        "frost_sens": 1.1,
-        "aridity_opt": 0.85,
-        "runoff_sens": 1.0,
-        "base_potential": 96.0,
+        "ky_drought": 1.08,
+        "ky_waterlog": 1.10,
+        "heat_tol": 4.0,
+        "heat_sens": 1.8,
+        "frost_tol": 22.0,
+        "frost_sens": 0.75,
+        "aridity_opt": 0.82,
+        "runoff_sens": 0.95,
+        "base_potential": 96.5,
     },
     "cebada": {
         "id": 1,
         "campana": "invierno",
-        "gwetroot_opt_min": 45.0,
+        "gwetroot_opt_min": 46.0,
         "gwetroot_opt_max": 74.0,
         "gwetroot_crit_min": 25.0,
         "gwetroot_waterlog_max": 80.0,
-        "ky_drought": 1.00,
+        "ky_drought": 1.02,
         "ky_waterlog": 1.55,
-        "heat_tol": 2.5,
-        "heat_sens": 3.0,
-        "frost_tol": 12.0,
-        "frost_sens": 1.3,
-        "aridity_opt": 0.80,
-        "runoff_sens": 1.05,
+        "heat_tol": 3.5,
+        "heat_sens": 2.0,
+        "frost_tol": 20.0,
+        "frost_sens": 0.85,
+        "aridity_opt": 0.78,
+        "runoff_sens": 1.00,
         "base_potential": 95.0,
     },
     "vicia_cobertura": {
@@ -270,15 +270,15 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_opt_max": 76.0,
         "gwetroot_crit_min": 20.0,
         "gwetroot_waterlog_max": 83.0,
-        "ky_drought": 0.78,
-        "ky_waterlog": 1.25,
-        "heat_tol": 4.0,
-        "heat_sens": 2.1,
-        "frost_tol": 15.0,
-        "frost_sens": 0.9,
-        "aridity_opt": 0.72,
+        "ky_drought": 0.76,
+        "ky_waterlog": 1.20,
+        "heat_tol": 5.0,
+        "heat_sens": 1.5,
+        "frost_tol": 22.0,
+        "frost_sens": 0.65,
+        "aridity_opt": 0.70,
         "runoff_sens": 0.70,
-        "base_potential": 94.0,
+        "base_potential": 91.0,
     },
     "avena_cobertura": {
         "id": 3,
@@ -287,15 +287,15 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_opt_max": 82.0,
         "gwetroot_crit_min": 19.0,
         "gwetroot_waterlog_max": 88.0,
-        "ky_drought": 0.75,
-        "ky_waterlog": 0.90,
-        "heat_tol": 4.0,
-        "heat_sens": 2.2,
-        "frost_tol": 14.0,
-        "frost_sens": 1.0,
-        "aridity_opt": 0.75,
+        "ky_drought": 0.74,
+        "ky_waterlog": 0.88,
+        "heat_tol": 5.0,
+        "heat_sens": 1.6,
+        "frost_tol": 22.0,
+        "frost_sens": 0.70,
+        "aridity_opt": 0.72,
         "runoff_sens": 0.65,
-        "base_potential": 94.5,
+        "base_potential": 91.5,
     },
     "camelina": {
         "id": 4,
@@ -304,15 +304,15 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_opt_max": 70.0,
         "gwetroot_crit_min": 16.0,
         "gwetroot_waterlog_max": 81.0,
-        "ky_drought": 0.65,
-        "ky_waterlog": 1.40,
-        "heat_tol": 4.5,
-        "heat_sens": 2.0,
-        "frost_tol": 18.0,
-        "frost_sens": 0.7,
-        "aridity_opt": 0.62,
-        "runoff_sens": 0.85,
-        "base_potential": 92.0,
+        "ky_drought": 0.62,
+        "ky_waterlog": 1.35,
+        "heat_tol": 6.0,
+        "heat_sens": 1.4,
+        "frost_tol": 26.0,
+        "frost_sens": 0.55,
+        "aridity_opt": 0.60,
+        "runoff_sens": 0.80,
+        "base_potential": 88.0,
     },
     # ================= CAMPAÑA GRUESA (VERANO) =================
     "maiz_temprano": {
@@ -325,12 +325,12 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "ky_drought": 1.38,
         "ky_waterlog": 1.10,
         "heat_tol": 4.0,
-        "heat_sens": 3.4,
-        "frost_tol": 2.0,
-        "frost_sens": 3.5,
-        "aridity_opt": 1.05,
+        "heat_sens": 3.1,
+        "frost_tol": 2.5,
+        "frost_sens": 2.5,
+        "aridity_opt": 1.00,
         "runoff_sens": 1.15,
-        "base_potential": 97.0,
+        "base_potential": 97.5,
     },
     "maiz_tardio": {
         "id": 6,
@@ -339,15 +339,15 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_opt_max": 78.0,
         "gwetroot_crit_min": 24.0,
         "gwetroot_waterlog_max": 88.0,
-        "ky_drought": 0.85,
+        "ky_drought": 0.84,
         "ky_waterlog": 1.05,
-        "heat_tol": 7.0,
-        "heat_sens": 1.9,
-        "frost_tol": 2.5,
-        "frost_sens": 3.2,
-        "aridity_opt": 0.78,
+        "heat_tol": 8.0,
+        "heat_sens": 1.6,
+        "frost_tol": 3.0,
+        "frost_sens": 2.2,
+        "aridity_opt": 0.76,
         "runoff_sens": 0.90,
-        "base_potential": 94.0,
+        "base_potential": 92.5,
     },
     "soja_primera": {
         "id": 7,
@@ -359,12 +359,12 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "ky_drought": 1.25,
         "ky_waterlog": 1.15,
         "heat_tol": 5.0,
-        "heat_sens": 2.7,
-        "frost_tol": 1.5,
-        "frost_sens": 3.6,
-        "aridity_opt": 0.96,
+        "heat_sens": 2.5,
+        "frost_tol": 2.0,
+        "frost_sens": 2.6,
+        "aridity_opt": 0.94,
         "runoff_sens": 1.45,
-        "base_potential": 95.5,
+        "base_potential": 96.0,
     },
     "soja_segunda": {
         "id": 8,
@@ -375,13 +375,13 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_waterlog_max": 86.0,
         "ky_drought": 1.28,
         "ky_waterlog": 1.20,
-        "heat_tol": 5.5,
-        "heat_sens": 2.6,
-        "frost_tol": 1.5,
-        "frost_sens": 3.8,
-        "aridity_opt": 0.94,
+        "heat_tol": 6.0,
+        "heat_sens": 2.3,
+        "frost_tol": 2.0,
+        "frost_sens": 2.8,
+        "aridity_opt": 0.92,
         "runoff_sens": 1.30,
-        "base_potential": 92.0,
+        "base_potential": 90.5,
     },
     "girasol": {
         "id": 9,
@@ -390,15 +390,15 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_opt_max": 70.0,
         "gwetroot_crit_min": 19.0,
         "gwetroot_waterlog_max": 78.0,
-        "ky_drought": 0.72,
+        "ky_drought": 0.70,
         "ky_waterlog": 1.65,
-        "heat_tol": 8.5,
-        "heat_sens": 1.5,
-        "frost_tol": 2.5,
-        "frost_sens": 2.8,
-        "aridity_opt": 0.68,
+        "heat_tol": 10.0,
+        "heat_sens": 1.2,
+        "frost_tol": 3.0,
+        "frost_sens": 2.0,
+        "aridity_opt": 0.66,
         "runoff_sens": 1.05,
-        "base_potential": 92.5,
+        "base_potential": 90.2,
     },
     "sorgo": {
         "id": 10,
@@ -407,15 +407,15 @@ CROP_CATALOG: dict[str, dict[str, Any]] = {
         "gwetroot_opt_max": 76.0,
         "gwetroot_crit_min": 16.0,
         "gwetroot_waterlog_max": 90.0,
-        "ky_drought": 0.58,
+        "ky_drought": 0.56,
         "ky_waterlog": 0.85,
-        "heat_tol": 10.5,
-        "heat_sens": 1.2,
-        "frost_tol": 2.0,
-        "frost_sens": 3.0,
-        "aridity_opt": 0.62,
+        "heat_tol": 12.0,
+        "heat_sens": 1.0,
+        "frost_tol": 2.5,
+        "frost_sens": 2.2,
+        "aridity_opt": 0.60,
         "runoff_sens": 0.72,
-        "base_potential": 93.5,
+        "base_potential": 91.0,
     },
 }
 
@@ -545,6 +545,14 @@ def extract_real_90d_windows(telemetry_list: list[dict[str, Any]]) -> pd.DataFra
     Convierte las series diarias crudas de 20 años de NASA POWER en ventanas históricas reales
     de 90 días (con paso de 10 días para evitar solapamiento inmediato excesivo),
     filtrando valores '-999.0' y calculando exactamente las 8 features hidroclimáticas.
+    Convierte las series diarias crudas de 20 años de NASA POWER en pares de ventanas
+    históricas reales de 90 días centradas en cada fecha de decisión t (con paso de 10 días):
+    - Ventana Pasada `win_past = [t - 89, t]` (90 días previos hasta hoy): estado hídrico
+      heredado en el suelo (`gwetroot_saturacion_pct`, `gwettop_saturacion_pct`,
+      `tendencia_humedad_15d_pct`, `anomalia_lluvia_90d_pct`, `indice_aridez_evaporativa`).
+    - Ventana Futura `win_future = [t + 1, t + 90]` (90 días posteriores a la decisión):
+      riesgos meteorológicos durante el ciclo del cultivo (`frecuencia_tormentas_extremas`,
+      `frecuencia_estres_termico`, `frecuencia_riesgo_helada`).
     """
     window_records: list[dict[str, Any]] = []
 
@@ -588,18 +596,28 @@ def extract_real_90d_windows(telemetry_list: list[dict[str, Any]]) -> pd.DataFra
             win = df_loc.iloc[idx - 89 : idx + 1]
             last_row = win.iloc[-1]
             row_15d_ago = win.iloc[-15]
+        # Extraer pares de ventanas reales cada 10 días asegurando 90 días hacia atrás y 90 hacia adelante
+        for idx in range(90, len(df_loc) - 90, 10):
+            win_past = df_loc.iloc[idx - 89 : idx + 1]
+            win_future = df_loc.iloc[idx + 1 : idx + 91]
 
+            last_row = win_past.iloc[-1]
+            row_15d_ago = win_past.iloc[-15]
+
+            # --- A. Ventana Pasada [t - 89, t]: Estado Hídrico y Memoria del Suelo ---
             gwetroot_pct = float(last_row["gwetroot"]) * 100.0
             gwettop_pct = float(last_row["gwettop"]) * 100.0
             gwetroot_15d_ago_pct = float(row_15d_ago["gwetroot"]) * 100.0
             gwettop_15d_ago_pct = float(row_15d_ago["gwettop"]) * 100.0
 
             # Variación neta combinada (raíz + superficie) en los últimos 15 días válidos
+            # Variación neta combinada (raíz + superficie) en los últimos 15 días válidos [t - 14, t]
             tendencia_15d_pct = 0.65 * (gwetroot_pct - gwetroot_15d_ago_pct) + 0.35 * (
                 gwettop_pct - gwettop_15d_ago_pct
             )
 
             rain_90d = float(win["prectotcorr"].sum())
+            rain_90d = float(win_past["prectotcorr"].sum())
             doy = int(last_row["doy"])
             hist_rain_90d = max(25.0, float(clim_rain_by_doy.get(doy, 180.0)))
             anomalia_lluvia_90d_pct = ((rain_90d - hist_rain_90d) / hist_rain_90d) * 100.0
@@ -610,23 +628,39 @@ def extract_real_90d_windows(telemetry_list: list[dict[str, Any]]) -> pd.DataFra
 
             # Demanda evaporativa acumulada en 90 días (EVPTRNS o aproximación Hargreaves si EVPTRNS<=0)
             evap_90d = float(win["evptrns"].clip(lower=0.1).sum())
+            # Demanda evaporativa acumulada en los 90 días previos [t - 89, t]
+            evap_90d = float(win_past["evptrns"].clip(lower=0.1).sum())
             if evap_90d < 45.0:
                 t_mean = 0.5 * (win["t2m_max"] + win["t2m_min"])
                 evap_90d = float(np.clip(t_mean * 0.16, 1.2, 6.5).sum())
+                t_mean_past = 0.5 * (win_past["t2m_max"] + win_past["t2m_min"])
+                evap_90d = float(np.clip(t_mean_past * 0.16, 1.2, 6.5).sum())
 
             indice_aridez = rain_90d / max(30.0, evap_90d)
+
+            # --- B. Ventana Futura [t + 1, t + 90]: Riesgos Meteorológicos del Ciclo del Cultivo ---
+            tormentas_extremas = int((win_future["prectotcorr"] > 50.0).sum())
+            estres_termico = int((win_future["t2m_max"] > 34.0).sum())
+            riesgo_helada = int((win_future["t2m_min"] < 2.0).sum())
 
             month = int(last_row["month"])
             # Asignar estación agronómica de la ventana real:
             # Meses 4..9 (Abril a Septiembre) -> ventana de campaña fina (invierno)
             # Meses 10..12 y 1..3 (Octubre a Marzo) -> ventana de campaña gruesa (verano)
             season_campana = "invierno" if 4 <= month <= 9 else "verano"
+            # Asignar estación agronómica según el centro de la ventana futura del ciclo [t + 1, t + 90]:
+            # Mes central 4..9 (Abril a Septiembre) -> ciclo de campaña fina (invierno)
+            # Mes central 10..12 y 1..3 (Octubre a Marzo) -> ciclo de campaña gruesa (verano)
+            future_mid_month = int(win_future.iloc[44]["month"])
+            season_campana = "invierno" if 4 <= future_mid_month <= 9 else "verano"
 
             window_records.append(
                 {
                     "location_id": loc["id"],
                     "date": last_row["date_str"],
                     "year": int(last_row["year"]),
+                    "past_start_year": int(win_past.iloc[0]["year"]),
+                    "future_end_year": int(win_future.iloc[-1]["year"]),
                     "month": month,
                     "season_campana": season_campana,
                     "gwetroot_saturacion_pct": round(float(np.clip(gwetroot_pct, 5.0, 99.0)), 2),
@@ -705,7 +739,7 @@ def compute_fao_hydroclimatic_score(
     elif effective_gwetroot <= opt_max:
         mid_opt = 0.5 * (opt_min + opt_max)
         half_span = max(8.0, 0.5 * (opt_max - opt_min))
-        center_bonus = 2.5 * (1.0 - abs(effective_gwetroot - mid_opt) / half_span)
+        center_bonus = (1.8 + 1.8 * ky) * (1.0 - abs(effective_gwetroot - mid_opt) / half_span)
         score += max(0.0, center_bonus)
 
     # 3. Respuesta al exceso hídrico / anegamiento (GWETROOT > umbral + arcilla alta + pendiente plana)
@@ -733,19 +767,30 @@ def compute_fao_hydroclimatic_score(
         aridity_gap = (p["aridity_opt"] - aridez) / max(0.35, p["aridity_opt"])
         score -= 8.0 * ky * (aridity_gap**1.2)
 
-    # 5. Interacción crítica NO LINEAL: Golpes de Calor (T2M_MAX > 34°C) x Sequía Radicular
-    if estres_termico > p["heat_tol"]:
-        excess_heat_days = estres_termico - p["heat_tol"]
-        moisture_stress_multiplier = 1.0
-        if effective_gwetroot < 40.0:
-            moisture_stress_multiplier += 1.15 * ((40.0 - effective_gwetroot) / 20.0)
-        score -= excess_heat_days * p["heat_sens"] * moisture_stress_multiplier
+    # 5. Interacción crítica NO LINEAL: Golpes de Calor (T2M_MAX > 34°C) x Sequía Radicular (FAO-56)
+    # Con buena humedad radicular (>= 50%), la transpiración refrigera el canopeo y amplía la
+    # tolerancia térmica; con sequía (< 42%), el cierre estomático multiplica el daño por calor.
+    transpiration_heat_buffer = max(0.0, (effective_gwetroot - 46.0) * 0.28)
+    effective_heat_tol = p["heat_tol"] + transpiration_heat_buffer
+    if estres_termico > effective_heat_tol:
+        excess_heat_days = estres_termico - effective_heat_tol
+        if effective_gwetroot < 42.0:
+            moisture_stress_multiplier = 1.0 + 1.15 * ((42.0 - effective_gwetroot) / 20.0)
+            heat_penalty = excess_heat_days * p["heat_sens"] * moisture_stress_multiplier
+        else:
+            # Suelo húmedo: enfriamiento transpirativo amortigua la pendiente (sublineal y acotado)
+            cooling_factor = np.clip(0.68 - 0.011 * (effective_gwetroot - 42.0), 0.26, 0.68)
+            heat_penalty = min(
+                22.0,
+                (excess_heat_days**0.82) * p["heat_sens"] * cooling_factor,
+            )
+        score -= float(heat_penalty)
 
     # 6. Riesgo de Helada (T2M_MIN < 2°C) e interacción con altitud (SRTM elevacion_m)
     effective_frost_days = float(riesgo_helada) + max(0.0, (elevacion - 220.0) / 140.0)
     if effective_frost_days > p["frost_tol"]:
         excess_frost = effective_frost_days - p["frost_tol"]
-        score -= excess_frost * p["frost_sens"]
+        score -= (excess_frost**0.90) * p["frost_sens"]
 
     # 7. Anomalías físicas en curso (CONTEXT.md Sección 4.4):
     # 7a. Pulso de Secado Rápido (Flash Drought Onset: tendencia_15d < -10%)
@@ -766,10 +811,11 @@ def compute_fao_hydroclimatic_score(
     # 8. Penalización directa por escorrentía y tormentas torrenciales (> 50 mm/día) en pendiente
     score -= 0.75 * runoff_loss_pct
 
-    # 9. Bonus de rusticidad defensiva en escenarios restrictivos
-    if 22.0 <= gwetroot <= 42.0 and anomalia_lluvia < -12.0:
-        rusticity_factor = max(0.0, 1.0 - ky)
-        score += 4.0 * rusticity_factor
+    # 9. Bonus de rusticidad defensiva en escenarios restrictivos (sequía radicular / déficit de lluvias)
+    if gwetroot <= 44.0 and anomalia_lluvia < -10.0:
+        rusticity_factor = max(0.0, 1.05 - ky)
+        drought_intensity = np.clip((44.0 - gwetroot) / 14.0, 0.3, 1.4)
+        score += 11.5 * rusticity_factor * drought_intensity
 
     # 10. Ruido gaussiano leve (±1.5 pts) para evitar sobreajuste determinístico
     if rng is not None and noise_std > 0.0:
@@ -979,6 +1025,15 @@ def build_and_save_all_splits(
     win_train = windows_df[windows_df["year"] <= 2019].copy()
     win_val = windows_df[(windows_df["year"] >= 2020) & (windows_df["year"] <= 2022)].copy()
     win_test = windows_df[windows_df["year"] >= 2023].copy()
+    # Bloques temporales estrictamente disjuntos (ni win_past ni win_future cruzan las fronteras):
+    # - Train: 2006 a 2019 (14 años de historia real, con future_end_year <= 2019)
+    # - Val:   2020 a 2022 (3 años de validación real, past_start_year >= 2020 y future_end_year <= 2022)
+    # - Test:  2023 a 2025 (3 años de testeo futuro real, past_start_year >= 2023)
+    win_train = windows_df[windows_df["future_end_year"] <= 2019].copy()
+    win_val = windows_df[
+        (windows_df["past_start_year"] >= 2020) & (windows_df["future_end_year"] <= 2022)
+    ].copy()
+    win_test = windows_df[windows_df["past_start_year"] >= 2023].copy()
 
     df_train = _build_split_from_real_windows(win_train, SAMPLES_PER_CROP_TRAIN, "train", rng)
     df_val = _build_split_from_real_windows(win_val, SAMPLES_PER_CROP_VAL, "val", rng)
@@ -1021,8 +1076,10 @@ def build_and_save_all_splits(
         "data_source": "NASA POWER API (2006-2025 daily SMAP/GLDAS/GPM IMERG) + NASA SRTM 30m + ISRIC SoilGrids / GeoINTA",
         "anti_overfitting_strategy": {
             "domain_shift_mitigation": "85% real 90-day NASA POWER windows (2006-2025) + 15% What-If slider perturbations over real windows",
+            "domain_shift_mitigation": "85% real NASA POWER dual-windows (past [-89d, t] for soil water + future [t+1, +90d] for crop-cycle risks) + 15% What-If slider perturbations",
             "spatial_overfitting_mitigation": "Continuous intra-zone & cross-zone spatial jittering on elevacion_m, pendiente_terreno_pct, and textura_arcilla_pct",
             "temporal_leakage_mitigation": "Strict Out-of-Time Temporal Block Split: Train (2006-2019), Val (2020-2022), Test (2023-2025)",
+            "temporal_leakage_mitigation": "Strict Out-of-Time Temporal Block Split with zero window overlap across boundaries: Train (2006-2019), Val (2020-2022), Test (2023-2025)",
         },
         "real_nasa_windows_extracted": {
             "total_90d_windows": len(windows_df),
