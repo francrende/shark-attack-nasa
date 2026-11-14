@@ -257,10 +257,25 @@ def test_dias_calor_ignora_999():
 
 @pytest.mark.parametrize(
     "dias,esperado",
-    [(0, "bajo"), (4.99, "bajo"), (5, "medio"), (11.99, "medio"), (12, "alto"), (20, "alto"), (20.01, "critico")],
+    [(0, "bajo"), (14.99, "bajo"), (15, "medio"), (24.99, "medio"), (25, "alto"), (40, "alto"), (40.01, "critico")],
 )
 def test_clasificar_riesgo_termico(dias, esperado):
     assert clasificar_riesgo_termico(dias) == esperado
+
+
+@pytest.mark.parametrize(
+    "punto,dias,esperado",
+    [
+        ("Balcarce", 11.5, "bajo"),
+        ("9 de Julio", 14.1, "bajo"),
+        ("Pergamino", 23.8, "medio"),
+        ("Marcos Juarez", 31.5, "alto"),
+        ("Rafaela", 35.8, "alto"),
+        ("Reconquista", 44.7, "critico"),
+    ],
+)
+def test_riesgo_termico_puntos_de_calibracion(punto, dias, esperado):
+    assert clasificar_riesgo_termico(dias) == esperado, punto
 
 
 # ---------- punta a punta ----------
@@ -284,7 +299,7 @@ def _run_build(reciente: NasaPowerDailySeries, historico: NasaPowerDailySeries):
 
 def test_build_telemetria_punta_a_punta():
     reciente = _reciente(lag_dias=3)
-    historico = _hist_sintetico(lambda d: 36.0 if d.month == 1 and d.day <= 15 else 30.0)
+    historico = _hist_sintetico(lambda d: 36.0 if d.month == 1 else 30.0)
 
     telemetria, llamadas = _run_build(reciente, historico)
 
@@ -294,7 +309,7 @@ def test_build_telemetria_punta_a_punta():
     assert telemetria.indice_humedad_superficial_pct == 35.0
     assert telemetria.tendencia_humedad_15d_pct == 0.0
     assert telemetria.frecuencia_tormentas_extremas_90d == 0
-    assert telemetria.riesgo_termico_verano == "alto"  # 15 días/temporada
+    assert telemetria.riesgo_termico_verano == "alto"  # 31 días/temporada (todo enero)
 
     corte = telemetria.fecha_ultimo_dato_valido
     clim = climatologia_lluvia_90d_por_doy(historico)

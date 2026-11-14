@@ -45,10 +45,13 @@ TORMENTA_UMBRAL_MM = 50.0
 TORMENTAS_MAX = 12
 
 UMBRAL_CALOR_C = 34.0
-# Umbrales de riesgo térmico (promedio de días > 34 °C en dic–feb)
-RIESGO_BAJO_HASTA = 5.0  # < 5 -> bajo
-RIESGO_MEDIO_HASTA = 12.0  # [5, 12) -> medio
-RIESGO_ALTO_HASTA = 20.0  # [12, 20] -> alto ; > 20 -> critico
+# Umbrales de riesgo térmico (promedio de días > 34 °C en dic–feb, 2006–2025).
+# Calibrados sobre 12 puntos de la región (NASA POWER / MERRA-2): Balcarce 11,5 · Tres Arroyos 13,7 ·
+# 9 de Julio 14,1 · Río Cuarto 23,7 · Pergamino 23,8 · Gral. Pico 26,2 · Gualeguaychú 30,3 ·
+# Marcos Juárez 31,5 · Paraná 34,5 · Rafaela 35,8 · Reconquista 44,7 · Charata 55,8.
+RIESGO_BAJO_HASTA = 15.0  # < 15 -> bajo
+RIESGO_MEDIO_HASTA = 25.0  # [15, 25) -> medio
+RIESGO_ALTO_HASTA = 40.0  # [25, 40] -> alto ; > 40 -> critico
 
 
 def _clip(valor: float, minimo: float, maximo: float) -> float:

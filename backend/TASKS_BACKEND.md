@@ -89,7 +89,16 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - (Opcional, con red) `cd backend && python -m providers.check_nasa_power_live`: imprime el último valor válido de cada parámetro para Pergamino (-33.95, -60.57).
 
 ### `[x]` BACK-2: Bloque `telemetria_nasa`
-> **Observación post-verificación (pendiente de decisión):** contra la API real, Pergamino da un promedio de **23,8 días/verano con `T2M_MAX > 34 °C`** (2006–2025, MERRA-2), así que sale `critico`. Los umbrales 5/12/20 dejan casi toda la zona núcleo en `critico`. Hay que recalibrarlos (ver la conversación con el desarrollador) antes de la demo.
+> **Recalibración post-verificación (acordada con el desarrollador):** los umbrales originales 5/12/20 dejaban 11 de 12 puntos de la región en `alto` o `critico`, porque NASA POWER (MERRA-2) da al menos unos 11 días por verano en toda la región. Se midieron 12 puntos (2006–2025) y se pasó a **15/25/40**, manteniendo `T2M_MAX > 34 °C` por coherencia con la feature `frecuencia_estres_termico` del ML. El ML no usa este campo, que es solo informativo.
+>
+> | Nivel | Días/verano | Puntos de calibración (promedio) |
+> | :--- | :--- | :--- |
+> | `bajo` | < 15 | Balcarce 11,5 · Tres Arroyos 13,7 · 9 de Julio 14,1 |
+> | `medio` | 15 – < 25 | Río Cuarto 23,7 · Pergamino 23,8 |
+> | `alto` | 25 – 40 | Gral. Pico 26,2 · Gualeguaychú 30,3 · Marcos Juárez 31,5 · Paraná 34,5 · Rafaela 35,8 |
+> | `critico` | > 40 | Reconquista 44,7 · Charata 55,8 |
+>
+> **Nota operativa:** 4 consultas históricas de 20 años en paralelo contra NASA POWER se colgaron más de 5 minutos. De a una tardan entre 0,3 y 1,7 s. Hay que tenerlo en cuenta en la tarea de caché y si se arman pre-cálculos en lote.
 - **Objetivo:** Construir el bloque `telemetria_nasa` del contrato (CONTEXT §5) a partir de NASA POWER, con el dato satelital real y sus 7 campos. Quedan fuera el What-If, las features exclusivas de ML, `anomalias_detectadas`, la elevación y el endpoint.
 - **Archivos Permitidos:**
   - `backend/schemas.py`: modelo Pydantic `TelemetriaNasa`.
@@ -111,10 +120,11 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Ventana reciente de 100 días:** la regla "30 a 90 días" de CONTEXT §3.1.A se interpreta como un **mínimo**. Se piden 100 días para que, con un lag de hasta 10 días, entren 90 días válidos.
   - **Fecha de corte:** es el último día en que `PRECTOTCORR`, `GWETROOT` y `GWETTOP` son válidos a la vez. Todos los cálculos recientes terminan ahí, igual que la `last_row` del script de ML.
   - **`riesgo_termico_verano`:** promedio histórico de días con `T2M_MAX > 34 °C` entre el 1/12 y el 28-29/2. Se usan solo temporadas completas (dic 2006–feb 2007 … dic 2024–feb 2025, 19 en total). Umbrales:
-    - `bajo`: menos de 5 días.
-    - `medio`: de 5 a menos de 12 días.
-    - `alto`: de 12 a 20 días.
-    - `critico`: más de 20 días.
+    - `bajo`: menos de 15 días.
+    - `medio`: de 15 a menos de 25 días.
+    - `alto`: de 25 a 40 días.
+    - `critico`: más de 40 días.
+    - Recalibrados desde 5/12/20; ver la nota al inicio de la tarea.
   - **What-If:** **no** modifica `telemetria_nasa`, que siempre muestra el dato real. Se aplica sobre las features en la tarea de `/simulate`.
   - **Features de ML:** `frecuencia_estres_termico`, `frecuencia_riesgo_helada` e `indice_aridez_evaporativa` quedan **fuera** de esta tarea, hasta que el track de ML confirme las ventanas.
   - **Fuera de alcance:** `anomalias_detectadas` (tarea aparte) y la elevación de `geometry.coordinates` (va en la tarea de SRTM).
@@ -156,7 +166,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
      - Tormentas (umbral > 50 mm y tope 12).
      - Menos de 75 días válidos lanza `NasaPowerUnavailable`.
      - Conteo de días de calor solo con temporadas completas.
-     - Bordes de umbral 5, 12 y 20.
+     - Bordes de umbral 15, 25 y 40, más los puntos de calibración.
      - `build_telemetria_nasa` de punta a punta con `MockTransport`.
      - Sin `GWETROOT` válido lanza `NasaPowerUnavailable`.
 - **Definition of Done (Comando de Verificación):**
