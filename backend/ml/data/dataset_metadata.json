@@ -1,0 +1,333 @@
+{
+  "seed": 42,
+  "data_source": "NASA POWER API (2006-2025 daily SMAP/GLDAS/GPM IMERG) + NASA SRTM 30m + ISRIC SoilGrids / GeoINTA",
+  "anti_overfitting_strategy": {
+    "domain_shift_mitigation": "85% real 90-day NASA POWER windows (2006-2025) + 15% What-If slider perturbations over real windows",
+    "spatial_overfitting_mitigation": "Continuous intra-zone & cross-zone spatial jittering on elevacion_m, pendiente_terreno_pct, and textura_arcilla_pct",
+    "temporal_leakage_mitigation": "Strict Out-of-Time Temporal Block Split: Train (2006-2019), Val (2020-2022), Test (2023-2025)"
+  },
+  "real_nasa_windows_extracted": {
+    "total_90d_windows": 10830,
+    "train_pool_2006_2019": 7545,
+    "val_pool_2020_2022": 1635,
+    "test_pool_2023_2025": 1650
+  },
+  "locations_count": 15,
+  "locations": [
+    {
+      "id": "pergamino_ba",
+      "nombre": "Pergamino (Pampa Ondulada)",
+      "lat": -33.89,
+      "lon": -60.57,
+      "elevacion_m": 70.0,
+      "pendiente_terreno_pct": 0.57,
+      "textura_arcilla_pct": 25.4
+    },
+    {
+      "id": "venado_tuerto_sf",
+      "nombre": "Venado Tuerto (Sur Santa Fe)",
+      "lat": -33.75,
+      "lon": -61.97,
+      "elevacion_m": 115.0,
+      "pendiente_terreno_pct": 1.28,
+      "textura_arcilla_pct": 23.8
+    },
+    {
+      "id": "marcos_juarez_cba",
+      "nombre": "Marcos Juárez (Sudeste Córdoba)",
+      "lat": -32.7,
+      "lon": -62.1,
+      "elevacion_m": 114.0,
+      "pendiente_terreno_pct": 0.42,
+      "textura_arcilla_pct": 24.5
+    },
+    {
+      "id": "rio_cuarto_cba",
+      "nombre": "Río Cuarto (Suroeste Córdoba)",
+      "lat": -33.12,
+      "lon": -64.35,
+      "elevacion_m": 490.6,
+      "pendiente_terreno_pct": 1.95,
+      "textura_arcilla_pct": 17.2
+    },
+    {
+      "id": "trenque_lauquen_ba",
+      "nombre": "Trenque Lauquen (Pampa Arenosa)",
+      "lat": -35.97,
+      "lon": -62.73,
+      "elevacion_m": 91.4,
+      "pendiente_terreno_pct": 0.6,
+      "textura_arcilla_pct": 15.8
+    },
+    {
+      "id": "tandil_ba",
+      "nombre": "Tandil (Pampa Serrana / Sudeste)",
+      "lat": -37.32,
+      "lon": -59.13,
+      "elevacion_m": 187.0,
+      "pendiente_terreno_pct": 2.33,
+      "textura_arcilla_pct": 27.6
+    },
+    {
+      "id": "balcarce_ba",
+      "nombre": "Balcarce (Sudeste Bonaerense)",
+      "lat": -37.85,
+      "lon": -58.26,
+      "elevacion_m": 115.0,
+      "pendiente_terreno_pct": 1.5,
+      "textura_arcilla_pct": 26.8
+    },
+    {
+      "id": "tres_arroyos_ba",
+      "nombre": "Tres Arroyos (Sur Bonaerense / Fina)",
+      "lat": -38.37,
+      "lon": -60.28,
+      "elevacion_m": 76.1,
+      "pendiente_terreno_pct": 1.25,
+      "textura_arcilla_pct": 24.9
+    },
+    {
+      "id": "chascomus_ba",
+      "nombre": "Chascomús (Cuenca del Salado)",
+      "lat": -35.57,
+      "lon": -58.01,
+      "elevacion_m": 14.7,
+      "pendiente_terreno_pct": 0.3,
+      "textura_arcilla_pct": 33.5
+    },
+    {
+      "id": "parana_er",
+      "nombre": "Paraná (Lomadas Entrerrianas)",
+      "lat": -31.74,
+      "lon": -60.51,
+      "elevacion_m": 62.0,
+      "pendiente_terreno_pct": 2.13,
+      "textura_arcilla_pct": 37.2
+    },
+    {
+      "id": "rafaela_sf",
+      "nombre": "Rafaela (Centro Santa Fe)",
+      "lat": -31.25,
+      "lon": -61.49,
+      "elevacion_m": 104.0,
+      "pendiente_terreno_pct": 0.8,
+      "textura_arcilla_pct": 28.4
+    },
+    {
+      "id": "general_pico_lp",
+      "nombre": "General Pico (Noreste La Pampa)",
+      "lat": -35.66,
+      "lon": -63.75,
+      "elevacion_m": 143.0,
+      "pendiente_terreno_pct": 0.78,
+      "textura_arcilla_pct": 14.9
+    },
+    {
+      "id": "junin_ba",
+      "nombre": "Junín (Noroeste Bonaerense)",
+      "lat": -34.58,
+      "lon": -60.95,
+      "elevacion_m": 85.0,
+      "pendiente_terreno_pct": 0.85,
+      "textura_arcilla_pct": 21.6
+    },
+    {
+      "id": "azul_ba",
+      "nombre": "Azul (Centro Bonaerense)",
+      "lat": -36.78,
+      "lon": -59.86,
+      "elevacion_m": 143.0,
+      "pendiente_terreno_pct": 1.13,
+      "textura_arcilla_pct": 29.8
+    },
+    {
+      "id": "victoria_er",
+      "nombre": "Victoria (Sur Entre Ríos - Vertisoles)",
+      "lat": -32.62,
+      "lon": -60.15,
+      "elevacion_m": 48.5,
+      "pendiente_terreno_pct": 2.2,
+      "textura_arcilla_pct": 38.5
+    }
+  ],
+  "total_rows": 16500,
+  "splits": {
+    "train": {
+      "rows": 11550,
+      "ratio": 0.7,
+      "years": "2006-2019",
+      "file": "train.csv"
+    },
+    "val": {
+      "rows": 2475,
+      "ratio": 0.15,
+      "years": "2020-2022",
+      "file": "val.csv"
+    },
+    "test": {
+      "rows": 2475,
+      "ratio": 0.15,
+      "years": "2023-2025",
+      "file": "test.csv"
+    }
+  },
+  "features_12": [
+    "gwetroot_saturacion_pct",
+    "gwettop_saturacion_pct",
+    "tendencia_humedad_15d_pct",
+    "anomalia_lluvia_90d_pct",
+    "frecuencia_tormentas_extremas",
+    "frecuencia_estres_termico",
+    "frecuencia_riesgo_helada",
+    "indice_aridez_evaporativa",
+    "pendiente_terreno_pct",
+    "elevacion_m",
+    "textura_arcilla_pct",
+    "cultivo_candidato"
+  ],
+  "target": "s_hidroclimatico",
+  "crops_catalog": {
+    "trigo": {
+      "id": 0,
+      "campana": "invierno"
+    },
+    "cebada": {
+      "id": 1,
+      "campana": "invierno"
+    },
+    "vicia_cobertura": {
+      "id": 2,
+      "campana": "invierno"
+    },
+    "avena_cobertura": {
+      "id": 3,
+      "campana": "invierno"
+    },
+    "camelina": {
+      "id": 4,
+      "campana": "invierno"
+    },
+    "maiz_temprano": {
+      "id": 5,
+      "campana": "verano"
+    },
+    "maiz_tardio": {
+      "id": 6,
+      "campana": "verano"
+    },
+    "soja_primera": {
+      "id": 7,
+      "campana": "verano"
+    },
+    "soja_segunda": {
+      "id": 8,
+      "campana": "verano"
+    },
+    "girasol": {
+      "id": 9,
+      "campana": "verano"
+    },
+    "sorgo": {
+      "id": 10,
+      "campana": "verano"
+    }
+  },
+  "target_stats_by_crop": {
+    "avena_cobertura": {
+      "count": 1500,
+      "mean": 79.63,
+      "std": 17.75,
+      "min": 0.0,
+      "median": 85.0,
+      "max": 100.0
+    },
+    "camelina": {
+      "count": 1500,
+      "mean": 78.6,
+      "std": 17.49,
+      "min": 0.0,
+      "median": 84.14,
+      "max": 97.36
+    },
+    "cebada": {
+      "count": 1500,
+      "mean": 68.0,
+      "std": 26.32,
+      "min": 0.0,
+      "median": 75.22,
+      "max": 100.0
+    },
+    "girasol": {
+      "count": 1500,
+      "mean": 66.34,
+      "std": 25.73,
+      "min": 0.0,
+      "median": 73.57,
+      "max": 97.44
+    },
+    "maiz_tardio": {
+      "count": 1500,
+      "mean": 64.17,
+      "std": 28.16,
+      "min": 0.0,
+      "median": 71.76,
+      "max": 100.0
+    },
+    "maiz_temprano": {
+      "count": 1500,
+      "mean": 45.46,
+      "std": 34.58,
+      "min": 0.0,
+      "median": 50.48,
+      "max": 100.0
+    },
+    "soja_primera": {
+      "count": 1500,
+      "mean": 49.83,
+      "std": 32.4,
+      "min": 0.0,
+      "median": 55.82,
+      "max": 100.0
+    },
+    "soja_segunda": {
+      "count": 1500,
+      "mean": 48.21,
+      "std": 31.92,
+      "min": 0.0,
+      "median": 54.28,
+      "max": 97.54
+    },
+    "sorgo": {
+      "count": 1500,
+      "mean": 73.83,
+      "std": 22.26,
+      "min": 0.0,
+      "median": 80.96,
+      "max": 98.72
+    },
+    "trigo": {
+      "count": 1500,
+      "mean": 74.0,
+      "std": 23.12,
+      "min": 0.0,
+      "median": 80.2,
+      "max": 100.0
+    },
+    "vicia_cobertura": {
+      "count": 1500,
+      "mean": 79.18,
+      "std": 18.2,
+      "min": 0.0,
+      "median": 84.47,
+      "max": 100.0
+    }
+  },
+  "context_md_drought_benchmark_summer": {
+    "maiz_temprano": 42.86,
+    "maiz_tardio": 79.06,
+    "soja_primera": 54.38,
+    "soja_segunda": 56.48,
+    "girasol": 84.75,
+    "sorgo": 89.8
+  }
+}
