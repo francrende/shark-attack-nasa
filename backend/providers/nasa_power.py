@@ -55,6 +55,32 @@ class NasaPowerDailySeries:
         return None
 
 
+def serie_a_dict(serie: NasaPowerDailySeries) -> dict[str, Any]:
+    """Serializa a JSON-compatible (para la caché)."""
+    return {
+        "lat": serie.lat,
+        "lon": serie.lon,
+        "start": serie.start.isoformat(),
+        "end": serie.end.isoformat(),
+        "series": {
+            p: {d.strftime("%Y%m%d"): v for d, v in valores.items()} for p, valores in serie.series.items()
+        },
+    }
+
+
+def dict_a_serie(datos: dict[str, Any]) -> NasaPowerDailySeries:
+    return NasaPowerDailySeries(
+        lat=datos["lat"],
+        lon=datos["lon"],
+        start=date.fromisoformat(datos["start"]),
+        end=date.fromisoformat(datos["end"]),
+        series={
+            p: {datetime.strptime(k, "%Y%m%d").date(): v for k, v in valores.items()}
+            for p, valores in datos["series"].items()
+        },
+    )
+
+
 def _validar_coordenadas(lat: float, lon: float) -> None:
     if not -90.0 <= lat <= 90.0:
         raise ValueError(f"Latitud fuera de rango [-90, 90]: {lat}")

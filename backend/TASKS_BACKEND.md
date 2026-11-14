@@ -40,6 +40,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | :--- | :--- | :--- | :---: | :---: |
 | BACK-1 | Provider crudo NASA POWER (ventana 30 días + filtro `-999`) | `backend/providers/nasa_power.py`, `backend/providers/test_nasa_power.py`, `backend/providers/check_nasa_power_live.py` | — | `[x]` |
 | BACK-2 | Bloque `telemetria_nasa` (humedad, tendencia de 15 días, anomalía de lluvia de 90 días, tormentas extremas, riesgo térmico de verano) | `backend/schemas.py`, `backend/providers/nasa_power.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_nasa_power_live.py` | BACK-1 | `[x]` |
+| BACK-3 | Provider ISRIC SoilGrids (0–30 cm ponderado, vecinos ante `null`, fallback GeoINTA, caché) | `backend/providers/soilgrids.py`, `backend/providers/test_soilgrids.py`, `backend/providers/check_soilgrids_live.py` | — | `[x]` |
+| BACK-4 | Resiliencia y latencia: caché en capas, caché de NASA por celda de grilla, climatología pampeana precalculada, corte automático de SoilGrids, lotes de ejemplo | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | BACK-2, BACK-3 | `[x]` |
 
 ---
 
@@ -172,6 +174,169 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Definition of Done (Comando de Verificación):**
   - `cd backend && python -m pytest providers/ -v`: todos en verde, incluidos los tests de BACK-1.
   - (Opcional, con red) `cd backend && python -m providers.check_nasa_power_live`: imprime el bloque `telemetria_nasa` real de Pergamino.
+
+### `[x]` BACK-3: Provider ISRIC SoilGrids
+> **Verificación (14/11/2026):** pasan los 80 tests de `providers/`. En la prueba en vivo, ISRIC no respondió: Pergamino y Tres Arroyos cayeron al fallback por timeout (unos 8,9 s cada uno), y una consulta suelta con timeout de 60 s tampoco respondió. Más temprano respondía en unos 5 s. **El camino con dato real no se pudo verificar en vivo.** Está cubierto por tests con los valores reales de Pergamino capturados antes. La cascada de fallback sí quedó verificada en vivo.
+>
+> **Riesgo abierto:** con ISRIC caído, cada consulta nueva espera los 8 s antes de caer al fallback, porque esos fallbacks no se cachean. Ver la propuesta de circuit breaker o pre-caché en la conversación.
+- **Objetivo:** Cliente async que devuelve el perfil edáfico de un `lat`/`lon`: arcilla, arena, limo, carbono orgánico, pH y clase textural. Si SoilGrids no tiene dato o no responde, sigue una cascada de respaldo y avisa qué no se pudo obtener. Sin endpoint y sin `condicion_rotacion_previa`, que depende del cultivo anterior y es de `/simulate`.
+- **Archivos Permitidos:**
+  - `backend/providers/soilgrids.py`: el cliente, la cascada, la caché y la tabla de fallback.
+  - `backend/providers/test_soilgrids.py`: los tests con mocks.
+  - `backend/providers/check_soilgrids_live.py`: el script opcional contra la API real.
+- **Hallazgos de la API real (14/11/2026):**
+  - La latencia es de unos 5 s por consulta.
+  - Tres Arroyos (-38.38, -60.28) devuelve HTTP 200 con todos los valores en `null`.
+  - Las unidades vienen escaladas por `d_factor = 10`: `clay`, `sand` y `silt` en g/kg (÷10 da %), `soc` en dg/kg (÷10 da g/kg) y `phh2o` en pH×10.
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Profundidad:** todas las propiedades se ponderan en **0–30 cm**, con pesos de 5, 10 y 15 cm para `0-5cm`, `5-15cm` y `15-30cm`.
+    - ⚠️ **Avisar al track de ML:** el modelo entrenó con la arcilla de **0–5 cm** ([generate_dataset.py:479](ml/generate_dataset.py#L479)). En Pergamino da 23,4 % (0–30 cm) contra 22,0 % (0–5 cm).
+  - **Una sola llamada:** `property` = `clay`, `sand`, `silt`, `soc` y `phh2o`; `depth` = `0-5cm`, `5-15cm` y `15-30cm`; `value=mean`.
+  - **Timeout:** 8 s, **sin reintento**. El provider es async para que `/simulate` lo consulte en paralelo con NASA POWER.
+  - **Cascada:**
+    1. **Punto pedido.** Si responde con dato, se usa.
+    2. **Si responde `null`** (píxel urbano o de agua): se consultan **4 vecinos a unos 500 m (N, S, E, O) en paralelo**, con el mismo timeout de 8 s, y se usa el primero con dato real, en ese orden.
+    3. **Si hay timeout, error de red, HTTP 429/5xx, o los vecinos también dan `null`:** se usa la **localidad GeoINTA más cercana, hasta 100 km**, y solo para la arcilla. `fuente = "fallback_regional"`. Ante 429 o timeout se pasa directo a este paso, sin consultar vecinos.
+    4. **Si no hay localidad a menos de 100 km:** se lanza `SoilGridsUnavailable`, que el router convertirá en 503.
+  - **Advertencia visible:** con el fallback regional, el resultado lleva en `advertencias` el texto *"Textura estimada regionalmente, carbono orgánico no disponible: el ajuste de rotación por carbono no se aplicó."*
+  - **Caché:** en memoria, por coordenada redondeada a 3 decimales (unos 100 m), **sin vencimiento**.
+    - **Se cachean** los resultados reales (del punto o de un vecino) y el caso **"punto y 4 vecinos en `null`"**, que es determinístico: esas celdas siempre dan `null`. Las consultas siguientes a esa coordenada van directo al fallback, sin llamar a ISRIC.
+    - **No se cachean** los fallbacks por timeout, 429, 5xx o error de red, porque son fallas transitorias.
+  - **Límite de ISRIC (5 llamadas por minuto, por IP):** el proceso lleva un contador de ventana deslizante de 60 s.
+    - Si no queda cupo para la llamada principal, se va directo al fallback regional.
+    - Si hay que consultar vecinos y queda cupo para menos de 4, se consultan solo los que entran (en orden N, S, E, O). En ese caso el "todo `null`" no se cachea, porque no se probaron los 4.
+    - Peor caso por campo: 1 + 4 = 5 llamadas.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **"Con dato" = arcilla presente:** un punto se considera con dato si la arcilla 0–30 cm no es `null`, porque es la feature que necesita el ML. Si falta la arcilla, se trata como `null` y se consultan los vecinos.
+  - **Advertencia por vecino:** si el perfil sale de un vecino, se agrega *"Perfil de suelo tomado a ~500 m del punto marcado (sin dato en SoilGrids: zona urbana o espejo de agua)."*
+  - **Vecinos:** se desplazan unos 500 m en latitud (0,0045°) y en longitud (0,0045° / cos(lat)).
+  - **Dato parcial:** si alguna propiedad viene `null` y otras no, se usan las que vinieron. Se agrega una advertencia por cada propiedad faltante (por ejemplo, sin `soc`: *"carbono orgánico no disponible: el ajuste de rotación por carbono no se aplicó"*). Si falta alguna profundidad, se pondera con las que haya.
+  - **Clase textural:** se usa el triángulo USDA, con nombres en español `snake_case` (por ejemplo `franco_limoso`, como en el contrato) y arena+limo+arcilla normalizados a 100. Si falta alguna de las tres, `textura_predominante = None`, lo que pasa siempre con el fallback.
+  - **Tabla GeoINTA:** se **copia** a `soilgrids.py` (id, nombre, lat, lon y `fallback_clay_pct` de las 15 localidades de `AGRO_LOCATIONS`), en lugar de importarla desde `ml/`, para no acoplarse a un archivo de otro track. Distancia por haversine.
+  - **No se toca `schemas.py`:** el provider devuelve una `dataclass` de dominio. El modelo Pydantic de `perfil_suelo` y la ubicación de `advertencias` en la respuesta son de la tarea de `/simulate`, porque el contrato §5 no tiene un campo para eso. Opciones: `validacion_local_requerida.brechas_informacion` o un campo nuevo.
+- **Especificación Técnica:**
+  1. Constantes:
+     - `BASE_URL = "https://rest.isric.org/soilgrids/v2.0/properties/query"`
+     - `PROPIEDADES = ["clay", "sand", "silt", "soc", "phh2o"]`
+     - `PROFUNDIDADES = {"0-5cm": 5, "5-15cm": 10, "15-30cm": 15}`
+     - `TIMEOUT_S = 8.0`
+     - `OFFSET_VECINO_GRADOS = 0.0045`
+     - `RADIO_FALLBACK_KM = 100`
+  2. `dataclass` congelada `PerfilSueloSatelital`:
+     - `arcilla_pct`, `arena_pct`, `limo_pct`, `carbono_organico_g_kg`, `ph`: `float | None`
+     - `textura_predominante: str | None`
+     - `fuente: Literal["isric_soilgrids_v2", "isric_soilgrids_v2_vecino", "fallback_regional"]`
+     - `distancia_fuente_km: float`: 0 si es el punto pedido, unos 0,5 si es un vecino, y la distancia a la localidad si es fallback.
+     - `localidad_fallback: str | None`
+     - `advertencias: tuple[str, ...]`
+  3. Funciones puras:
+     - `_parsear(payload) -> dict[str, float | None]`: pondera 0–30 cm y aplica el `d_factor`.
+     - `clasificar_textura_usda(arena, limo, arcilla) -> str`
+     - `_localidad_mas_cercana(lat, lon) -> tuple[dict, float] | None`
+  4. Función pública: `async def fetch_perfil_suelo(lat, lon, *, client=None) -> PerfilSueloSatelital`. Valida las coordenadas (`ValueError`), consulta la caché y aplica la cascada.
+  5. Excepción `SoilGridsUnavailable(Exception)`.
+  6. Tests mínimos:
+     - Parseo y ponderación 0–30 cm con `d_factor`.
+     - Ponderación con una profundidad faltante.
+     - Bordes del triángulo USDA, y que Pergamino da `franco_limoso`.
+     - Respuesta `null` → vecino con dato → `fuente="isric_soilgrids_v2_vecino"`.
+     - Vecinos también en `null` → fallback regional.
+     - Timeout → fallback directo, sin consultar vecinos.
+     - 429 → fallback directo.
+     - Fallback con la advertencia exacta y `textura_predominante=None`.
+     - Fuera de 100 km (por ejemplo Madrid) → `SoilGridsUnavailable`.
+     - Dato parcial (sin `soc`) → advertencia de carbono.
+     - La segunda llamada a la misma coordenada redondeada no hace request (caché).
+     - El fallback por timeout no se cachea, y el "punto y 4 vecinos en `null`" sí.
+     - Sin cupo en el limitador → fallback directo sin request. Con cupo parcial, se consultan solo los vecinos que entran.
+     - Coordenadas inválidas → `ValueError`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest providers/ -v`: todos en verde, incluidos los de BACK-1 y BACK-2.
+  - (Opcional, con red) `cd backend && python -m providers.check_soilgrids_live`: imprime el perfil de Pergamino (dato real) y de Tres Arroyos (vecino o fallback).
+
+### `[x]` BACK-4: Resiliencia y latencia (caché, precálculo y corte automático)
+> **Verificación (14/11/2026):**
+> - **Tests:** pasan los 107 de `providers/`.
+> - **Precálculo:** `generar_precache nasa` generó **299/299 celdas sin fallas** (786 KB). Distribución del riesgo: bajo 41, medio 74, alto 119, crítico 65. Coincide con la calibración: Balcarce 11,5 (bajo), Pergamino 23,8 (medio), Rafaela 35,8 (alto).
+> - **En vivo:** el primer lote de una celda tarda 1,57 s (solo la ventana reciente) y otro lote de la misma celda 0,22 s, contra 1,72 s antes. La anomalía no cambió (−37,38 %).
+>
+> **Pendiente:** `generar_precache suelo` no se pudo correr porque ISRIC sigue sin responder. Correrlo cuando vuelva, y confirmar los 4 lotes de ejemplo con el frontend.
+>
+> **Para coordinar tras el pull de `main` (ML-4):**
+> - `predictor.py` trae su propio `classify_summer_thermal_risk` (días en una ventana de 90 días, cortes 3,5/7, sin `critico`) y `classify_soil_texture` (solo arcilla). Se superponen con `riesgo_termico_verano` (dic–feb, 15/25/40) y con la clasificación USDA de este track. Hay que acordar cuál llena el contrato.
+> - En el ML, las tormentas, el estrés térmico y las heladas pasaron a la **ventana futura** `[t+1, t+90]`. En producción hay que calcularlas como el promedio histórico de esos 90 días. `frecuencia_tormentas_extremas_90d` de la telemetría (90 días pasados) **no** es esa feature.
+- **Objetivo:** Que cualquier jurado, en cualquier punto y en cualquier momento, reciba respuesta rápida, y que una caída de ISRIC no deje datos aproximados guardados para siempre. Sin Supabase (lo implementa otro compañero), pero con la caché lista para enchufarlo.
+- **Contexto:** los jurados prueban la app **solos, sin guía y en puntos arbitrarios**. Por eso una pre-caché de puntos fijos sirve poco, y el foco pasa a la **caché por celda de grilla** y al **precálculo regional**.
+- **Hallazgo verificado (14/11/2026):** NASA POWER devuelve **valores idénticos** (`PRECTOTCORR`, `T2M_MAX`, `GWETROOT`, todo 2020) para puntos distintos dentro de la misma celda de 0,5° × 0,625°, y valores distintos en la celda vecina. Caveat: `ALLSKY_SFC_SW_DWN` usa otra grilla (1° × 1°); hoy no se usa en ningún cálculo.
+- **Archivos Permitidos:**
+  - `backend/providers/cache.py` (nuevo): la interfaz de caché, la capa en memoria y la composición en capas.
+  - `backend/providers/nasa_telemetry.py`: usa la caché por celda y el precálculo.
+  - `backend/providers/soilgrids.py`: corte automático, caché vía la interfaz, lotes de ejemplo y marca de reintento.
+  - `backend/providers/generar_precache.py` (nuevo): script offline.
+  - `backend/providers/data/climatologia_pampa.json` y `backend/providers/data/suelo_lotes_ejemplo.json` (nuevos, generados por el script).
+  - Tests: `backend/providers/test_cache.py` (nuevo), `test_nasa_telemetry.py` y `test_soilgrids.py`.
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Interfaz de caché enchufable:** `get(espacio, clave)` y `set(espacio, clave, valor, ttl_s=None)`, con valores **serializables a JSON**.
+    - Implementación inicial: `CacheMemoria`.
+    - `CacheEnCapas(primaria, secundaria=None)` lee de la memoria. Si no encuentra, lee de la secundaria (Supabase, a futuro) y completa la memoria. `set` escribe en ambas.
+    - **No se implementa Supabase.**
+  - **Caché de NASA, clave = celda de la grilla POWER** (centro: `round(lat/0,5)·0,5`, `round(lon/0,625)·0,625`):
+    - **Histórico (`nasa_hist`):** se guarda lo **calculado**, no la serie cruda de 20 años: `{climatologia_lluvia_90d_por_doy, dias_calor_verano_promedio, riesgo_termico_verano, version_calculo}`. **Sin vencimiento.** Si `version_calculo` no coincide con la actual, se trata como no encontrado.
+    - **Ventana reciente (`nasa_reciente`):** la serie de 100 días serializada, con **TTL de 6 h**, en memoria.
+    - Si NASA falla en la ventana reciente: `NasaPowerUnavailable` con un **mensaje claro** (503). **No hay foto precargada** de la ventana reciente.
+  - **Climatología pampeana precalculada:** `generar_precache.py nasa` calcula el histórico de **todas las celdas de la región pampeana**, **de a una consulta** (las consultas en paralelo se colgaban), y lo guarda en `data/climatologia_pampa.json`.
+    - Se carga en la caché **la primera vez que se usa**, para no depender de `main.py`.
+    - Una celda fuera del JSON se calcula en vivo y se cachea.
+  - **Suelo precargado solo para 3–4 lotes de ejemplo** que el frontend ofrezca en el mapa:
+    - Coincidencia exacta (a menos de 100 m), sin vencimiento, `fuente = "precache"`.
+    - `generar_precache.py suelo` los genera cuando ISRIC esté disponible, y se guardan en `data/suelo_lotes_ejemplo.json`.
+  - **Corte automático de SoilGrids:**
+    - **1 timeout o un 429** corta las llamadas por **5 minutos**. Mientras dura, se va directo al fallback regional, sin llamar a ISRIC.
+    - Pasados los 5 minutos se hace **1 llamada de prueba**: si responde, se reabre, y si falla, se corta otros 5 minutos.
+  - **Datos aproximados no permanentes:** `PerfilSueloSatelital` gana `reintentar_soilgrids: bool`, en `True` cuando el resultado es un fallback por falla transitoria (corte, timeout, 429, 5xx, red o límite de llamadas).
+    - Quien persista campos (Supabase) debe reintentar SoilGrids al reabrirlos si la marca está en `True`.
+    - Esos resultados **nunca se escriben en la caché**, en ninguna de las capas.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Clave de la caché:** es un `str`. Hay helpers para las dos formas: `clave_coordenada(lat, lon)` (3 decimales, para el suelo) y `clave_celda_power(lat, lon)` (para NASA). Así la misma interfaz sirve para los dos casos y para Supabase.
+  - **Región pampeana precalculada:** lat de -39,0 a -28,0 y lon de -65,0 a -57,5 (centros de celda), unas 300 celdas. Se guardan con un decimal (unos 800 KB), y el script tarda unos 10 minutos.
+  - **Qué se usa del histórico cacheado:** se guarda `dias_calor_verano_promedio` y la categoría se **reclasifica al leer**, con los umbrales vigentes. Así una recalibración no invalida la caché. `riesgo_termico_verano` se guarda solo como referencia.
+  - **El "punto y 4 vecinos sin dato" de BACK-3** pasa a la interfaz como `{"sin_dato": true}`. Es determinístico, así que `reintentar_soilgrids = False`.
+  - **Descarto el "perfil de lote de referencia a hasta 30 km"** de la ronda anterior de preguntas: con solo 3–4 lotes precargados casi nunca aplicaría.
+  - **Lotes de ejemplo propuestos:** Pergamino (-33,95, -60,57), Marcos Juárez (-32,70, -62,10), Balcarce (-37,85, -58,26) y Rafaela (-31,25, -61,49). **A confirmar con el frontend.**
+  - **Coordenadas justo en el borde de una celda:** se asignan con `round()` de Python. No se verificó qué celda asigna NASA en esos casos.
+- **Especificación Técnica:**
+  1. `cache.py`:
+     - `class Cache(Protocol)` con `get` y `set`.
+     - `CacheMemoria(reloj=time.monotonic)` con TTL.
+     - `CacheEnCapas`.
+     - Las funciones `clave_coordenada` y `clave_celda_power`.
+     - La instancia por defecto `cache_global` y `configurar_cache(cache)` para enchufar Supabase o tests.
+  2. `nasa_telemetry.py`:
+     - `VERSION_CALCULO = "telemetria-v1"`.
+     - `obtener_referencia_historica(lat, lon, client)`: caché, luego JSON precalculado, luego cálculo en vivo.
+     - `obtener_ventana_reciente(...)`: caché con TTL de 6 h o NASA en vivo.
+     - `build_telemetria_nasa` las usa, y la firma no cambia.
+     - `cargar_climatologia_precalculada()`, de carga única y perezosa.
+  3. `soilgrids.py`:
+     - `CorteAutomatico(duracion_s=300, reloj)`, con los estados cerrado, abierto y en prueba.
+     - La caché pasa por la interfaz (espacio `suelo`).
+     - `cargar_lotes_ejemplo()`, perezosa.
+     - El campo `reintentar_soilgrids` y la `Fuente` gana `"precache"`.
+  4. `generar_precache.py`, con dos subcomandos:
+     - `nasa`: secuencial, reanudable (saltea las celdas ya presentes) e imprime el avance.
+     - `suelo`: secuencial, respeta las 5 llamadas por minuto y no guarda los fallbacks.
+  5. Tests mínimos:
+     - Caché: TTL que vence, capa secundaria que completa la primaria, `set` que escribe en ambas capas.
+     - Claves: la celda agrupa puntos de la misma celda y separa los de la vecina.
+     - NASA: una segunda llamada en la misma celda no hace requests. La ventana reciente vence a las 6 h. Una `version_calculo` distinta se recalcula. Se usa el JSON precalculado sin hacer la request histórica.
+     - Corte automático: un timeout abre el corte, durante el corte no hay requests, a los 5 minutos hay 1 llamada de prueba, con éxito se reabre y con falla se corta otros 5 minutos.
+     - Marca de reintento: es `True` en los fallbacks transitorios y `False` en los de "sin dato". Los transitorios no llegan a ninguna capa de caché.
+     - Lote de ejemplo: a menos de 100 m da `fuente="precache"` sin request.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest providers/ -v`: todos en verde.
+  - `cd backend && python -m providers.generar_precache nasa`: genera `data/climatologia_pampa.json` con unas 300 celdas.
+  - (Cuando ISRIC esté disponible) `cd backend && python -m providers.generar_precache suelo`.
+- **Riesgo anotado (fuera de alcance de BACK-4):** el plan gratuito de Render **duerme el servicio** tras 15 minutos sin tráfico, y el primer jurado espera unos 30–60 s. Hace falta un **ping cada 10 minutos** (por ejemplo, un cron externo o UptimeRobot a un `/health`). Tarea de deploy, coordinar con quien tenga `main.py`.
 
 ---
 

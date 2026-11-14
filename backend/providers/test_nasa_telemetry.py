@@ -6,6 +6,8 @@ from datetime import date, timedelta
 import httpx
 import pytest
 
+from providers import nasa_telemetry
+from providers.cache import CacheEnCapas, CacheMemoria, clave_celda_power, configurar_cache, obtener_cache
 from providers.nasa_power import NasaPowerDailySeries, NasaPowerUnavailable
 from providers.nasa_telemetry import (
     HIST_END,
@@ -24,6 +26,25 @@ from providers.nasa_telemetry import (
 from schemas import TelemetriaNasa
 
 HOY = date(2026, 11, 14)
+
+
+class Reloj:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+@pytest.fixture(autouse=True)
+def _estado_limpio():
+    """Caché vacía y sin climatología precalculada en cada test."""
+    reloj = Reloj()
+    configurar_cache(CacheEnCapas(CacheMemoria(reloj=reloj)))
+    nasa_telemetry.reiniciar_estado({})
+    yield reloj
+    configurar_cache(CacheEnCapas(CacheMemoria()))
+    nasa_telemetry.reiniciar_estado(None)
 
 
 # ---------- helpers ----------
@@ -313,7 +334,7 @@ def test_build_telemetria_punta_a_punta():
 
     corte = telemetria.fecha_ultimo_dato_valido
     clim = climatologia_lluvia_90d_por_doy(historico)
-    hist = max(25.0, clim[corte.timetuple().tm_yday])
+    hist = max(25.0, round(clim[corte.timetuple().tm_yday], 2))  # la caché guarda 2 decimales
     assert telemetria.anomalia_lluvia_90d_pct == pytest.approx(
         round(max(-80, min(140, (180.0 - hist) / hist * 100)), 2)
     )
@@ -355,3 +376,112 @@ def test_build_si_historico_falla_lanza():
 
     with pytest.raises(NasaPowerUnavailable):
         asyncio.run(_go())
+
+
+# ---------- BACK-4: caché por celda y precálculo ----------
+
+
+def _handler_contador(reciente, historico, llamadas):
+    def handler(req):
+        es_hist = req.url.params["start"] == HIST_START.strftime("%Y%m%d")
+        llamadas.append("hist" if es_hist else "reciente")
+        return httpx.Response(200, json=_payload(historico if es_hist else reciente))
+
+    return handler
+
+
+def _build(handler, lat_lon=(-33.95, -60.57), today=HOY):
+    async def _go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await build_telemetria_nasa(*lat_lon, client=client, today=today)
+
+    return asyncio.run(_go())
+
+
+def test_clave_celda_agrupa_y_separa():
+    # Verificado contra NASA POWER real: estos 3 puntos devuelven la misma serie
+    assert clave_celda_power(-33.95, -60.57) == clave_celda_power(-34.20, -60.90) == clave_celda_power(-33.80, -60.35)
+    assert clave_celda_power(-33.95, -60.57) != clave_celda_power(-33.70, -60.57)
+
+
+def test_segunda_consulta_misma_celda_sin_requests():
+    llamadas = []
+    handler = _handler_contador(_reciente(), _hist_sintetico(), llamadas)
+    t1 = _build(handler, (-33.95, -60.57))
+    t2 = _build(handler, (-34.20, -60.90))  # otro lote, misma celda
+    assert sorted(llamadas) == ["hist", "reciente"]
+    assert t1 == t2
+
+
+def test_otra_celda_consulta_de_nuevo():
+    llamadas = []
+    handler = _handler_contador(_reciente(), _hist_sintetico(), llamadas)
+    _build(handler, (-33.95, -60.57))
+    _build(handler, (-33.70, -60.57))
+    assert sorted(llamadas) == ["hist", "hist", "reciente", "reciente"]
+
+
+def test_ventana_reciente_vence_a_las_6h(_estado_limpio):
+    llamadas = []
+    handler = _handler_contador(_reciente(), _hist_sintetico(), llamadas)
+    _build(handler)
+    _estado_limpio.t = 6 * 3600 - 1
+    _build(handler)
+    assert llamadas.count("reciente") == 1
+    _estado_limpio.t = 6 * 3600
+    _build(handler)
+    assert llamadas.count("reciente") == 2
+    assert llamadas.count("hist") == 1  # el histórico no vence
+
+
+def test_ventana_reciente_de_otro_dia_no_se_reusa():
+    llamadas = []
+    handler = _handler_contador(_reciente(), _hist_sintetico(), llamadas)
+    _build(handler, today=HOY)
+    _build(handler, today=HOY + timedelta(days=1))
+    assert llamadas.count("reciente") == 2
+
+
+def test_version_calculo_distinta_se_recalcula():
+    llamadas = []
+    handler = _handler_contador(_reciente(), _hist_sintetico(), llamadas)
+    clave = clave_celda_power(-33.95, -60.57)
+    obtener_cache().set(
+        nasa_telemetry.ESPACIO_HIST,
+        clave,
+        {"version_calculo": "vieja", "climatologia_lluvia_90d_por_doy": [100.0] * 366, "dias_calor_verano_promedio": 1.0},
+    )
+    _build(handler)
+    assert "hist" in llamadas
+    assert obtener_cache().get(nasa_telemetry.ESPACIO_HIST, clave)["version_calculo"] == nasa_telemetry.VERSION_CALCULO
+
+
+def test_usa_precalculo_sin_request_historica():
+    entrada = nasa_telemetry.referencia_a_dict(
+        nasa_telemetry.ReferenciaHistorica(clim_por_doy={d: 200.0 for d in range(1, 367)}, dias_calor_verano_promedio=30.0)
+    )
+    nasa_telemetry.reiniciar_estado({clave_celda_power(-33.95, -60.57): entrada})
+    llamadas = []
+    telemetria = _build(_handler_contador(_reciente(), _hist_sintetico(), llamadas))
+    assert llamadas == ["reciente"]
+    assert telemetria.riesgo_termico_verano == "alto"  # 30 días
+    assert telemetria.anomalia_lluvia_90d_pct == -10.0  # 180 mm vs 200 mm
+
+
+def test_riesgo_se_reclasifica_al_leer():
+    # La categoría guardada es vieja; manda el número de días con los umbrales vigentes.
+    entrada = nasa_telemetry.referencia_a_dict(
+        nasa_telemetry.ReferenciaHistorica(clim_por_doy={d: 200.0 for d in range(1, 367)}, dias_calor_verano_promedio=23.8)
+    )
+    entrada["riesgo_termico_verano"] = "critico"
+    nasa_telemetry.reiniciar_estado({clave_celda_power(-33.95, -60.57): entrada})
+    telemetria = _build(_handler_contador(_reciente(), _hist_sintetico(), []))
+    assert telemetria.riesgo_termico_verano == "medio"
+
+
+def test_nasa_caida_mensaje_claro():
+    def handler(req):
+        return httpx.Response(503)
+
+    with pytest.raises(NasaPowerUnavailable, match="NASA POWER no está respondiendo"):
+        _build(handler)
