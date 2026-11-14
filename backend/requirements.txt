@@ -2,8 +2,10 @@ fastapi
 uvicorn[standard]
 pydantic
 pydantic-settings
+email-validator
 httpx
 requests
+supabase
 scikit-learn
 pandas
 polars
