@@ -13,16 +13,15 @@ You are a senior Frontend Engineer and UX/UI Designer specialized in AgTech prod
 
 ## 1. Product North Star
 
-**One screen, one question, one answer.** Every view must help the producer answer a single question:
+**One screen, one clear purpose, one answer.** Every view must help the producer or advisor quickly read the state and recommendation without using questions in section titles:
 
-| Tab | Question the user is asking | What they must see in < 5 seconds |
+| Tab | Main Section Title (`h2.section-title`) | What they must see in < 5 seconds |
 | :--- | :--- | :--- |
-| **Info general** | "¿Cómo está mi lote hoy?" | Water in the soil, recent rain, heat risk, soil health. |
-| **Planificación de campaña** | "¿Qué siembro y por qué?" | The recommended crop, its score and a one-sentence reason. |
-| **Información histórica** | "¿Cómo evolucionaron el clima, el suelo y los cultivos en los últimos 10 años?" | An interactive year timeline (e.g., 10 years) that updates the map in real time alongside simple evolution charts for climate, soil, and rotated crops. |
-| **Chat** | *(Fuera de alcance por el momento — solo pestaña placeholder)* | A clean placeholder view (without map); not implemented in this phase. |
+| **Planificación de campaña** | `Planificación de campaña` | The recommended crop, its score and a one-sentence reason. |
+| **Info general** | `Info general` | Water in the soil, recent rain, heat risk, soil health. |
+| **Información histórica** | `Información histórica` | An interactive year timeline (10 years) that updates the map in real time alongside simple evolution charts for climate, soil, and rotated crops. |
 
-If a piece of information does not help answer the tab's question, it does not belong in the first view. Move it behind a "Ver detalle" toggle or remove it.
+If a piece of information does not help answer the tab's core purpose, it does not belong in the first view. Move it behind a "Ver fundamentos" / "Ver detalle" toggle or remove it.
 
 ---
 
@@ -35,12 +34,13 @@ Never hardcode hex values in components or CSS rules. Always use the CSS variabl
 
 | Token | Hex | Meaning — use ONLY for |
 | :--- | :--- | :--- |
-| `--color-primary` | `#4B5B2D` | Titles, primary buttons, active tabs, selected lot, the recommended crop. |
-| `--color-bg` | `#FFF5E0` | App background. Cards use `--color-bg-elevated` / `--color-bg-card`. |
+| `--color-primary` | `#4B5B2D` | Section titles (`Newsreader`), selected lot on map, the recommended crop hero. |
+| `--color-terracotta` / `--color-earth-brown` | `#9E472A` / `#8C5A3C` | Top header, file-folder tabs, map mode/field pills, historical controls, equilibrium priority. |
+| `--color-bg` | `#FFF5E0` | App background and active file-folder tab fill. Cards use `--color-bg-elevated` / `--color-bg-card`. |
 | `--color-text` | `#22181C` | Body text. Secondary text: `--color-text-secondary`, `--color-text-muted`. |
-| `--color-heat-soil` | `#F05D23` | Heat, thermal stress, soil/rotation data, rain deficit. |
-| `--color-water-rain` | `#4A7B9D` | Soil moisture, rain, water-related data. |
-| `--color-gold-yellow` / `--color-earth-brown` | `#D99B26` / `#8C5A3C` | Supporting accents: medium alerts, soil textures, legends. |
+| `--color-heat-soil` | `#F05D23` | Heat, thermal stress, soil/rotation data, rain deficit, active folder tab top accent. |
+| `--color-water-rain` | `#4A7B9D` | Soil moisture, rain, water-related data, winter campaign & drought-safety controls. |
+| `--color-gold-yellow` | `#D99B26` | Supporting accents: medium alerts, legends. |
 | `--color-risk-*` | — | Risk badges only (`low`, `medium`, `high`, `critical`). |
 
 **Color rules**
@@ -69,17 +69,18 @@ Never hardcode hex values in components or CSS rules. Always use the CSS variabl
 ## 3. Producer-First UX Principles
 
 ### 3.1. Clarity over completeness (progressive disclosure)
-- **Max 3–4 key metrics per card.** Extra detail goes behind "Ver detalle".
-- **Lead with the conclusion, then the evidence.** Show "Sembrá Sorgo" before the bars that justify it.
-- **One primary action per view** (green filled button). Everything else is secondary (outlined) or a text link.
+- **Max 3–4 key metrics per card.** Extra detail goes behind "Ver detalle" / "Ver fundamentos".
+- **Lead with the conclusion, then the evidence.** Show the recommended crop name before the bars that justify it.
+- **Avoid making all buttons and selections green:** Reserve `--color-primary` (`#4B5B2D`) for section headings (`Newsreader`) and the recommended crop hero; use terracotta, earth brown, and hydrological blue for buttons and selected states according to context.
 - Prefer **visual gauges + a short human sentence** over raw numbers alone:
   - ✅ "Agua en las raíces: 34% — Reserva ajustada"
   - ❌ "GWETROOT: 0.34"
 
-### 3.2. Speak the producer's language (Rioplatense Spanish)
-- Use **voseo** and direct, friendly tone: "Tocá el mapa", "Elegí tu lote", "Mové el control".
-- Short sentences (≤ 20 words). Explain the **why** in one line: "Elegimos Sorgo porque resiste mejor la falta de agua y le devuelve carbono a tu suelo."
-- Never blame the user in errors: "No pudimos leer los datos del satélite. Mostramos el último valor disponible."
+### 3.2. Formal, clear agronomic language (Zero informal language or questions in titles)
+- Use **formal, objective, clear Spanish** (no voseo or colloquialisms like *"¿Cómo venís?"*, *"Tocá"*, *"Sembrá"*, *"banque"*).
+- **Never use questions in section titles or labels:** Use the tab title (`Planificación de campaña`, `Info general`, `Información histórica`) or clear noun phrases (`Recomendación de cultivo`, `Simulación de escenarios`, `Prioridad de manejo`), preserving `Newsreader` (`--font-heading`) and `--color-primary` (`#4B5B2D`).
+- Short sentences (≤ 20 words). Explain the **why** in one line.
+- Never blame the user in errors: "No fue posible obtener los datos del satélite. Se muestra el último valor disponible."
 
 ### 3.3. Technical → Producer glossary (mandatory)
 Technical terms may appear **only** inside a tooltip, a "Ver detalle" section or code. Main labels must use the right column.
@@ -103,11 +104,11 @@ Technical terms may appear **only** inside a tooltip, a "Ver detalle" section or
 | `S_hidroclimatico` | **Aptitud frente al agua y el clima** | Qué tan bien se adapta el cultivo al agua y temperatura esperadas. |
 | `S_suelo` | **Aporte al suelo y la rotación** | Cuánto beneficia al lote según lo que sembraste antes. |
 | `score_final` | **Puntaje general** (0–100) | Combina agua/clima y suelo según tu objetivo. |
-| `objetivo_productor` + weights (MCDA) | **¿Qué querés priorizar?** | Seguridad frente a sequía · Equilibrio · Cuidar el suelo. |
-| `cultivo_anterior` | **Último cultivo** | Lo que estuvo sembrado antes en el lote. |
+| `objetivo_productor` + weights (MCDA) | **Prioridad de manejo** | Seguridad frente a sequía · Equilibrio · Conservación del suelo. |
+| `cultivo_anterior` | **Cultivo antecesor en el lote** | Cultivo implantado previamente en el lote. |
 | `campana`: `invierno` / `verano` | **Campaña fina (invierno)** / **Campaña gruesa (verano)** | — |
-| `simulacion_what_if` | **¿Qué pasa si...?** | Probá escenarios más secos o más lluviosos. |
-| `factores_clave_ml` | **Por qué lo recomendamos** | — |
+| `simulacion_what_if` | **Simulación de escenarios** | Evalúe escenarios más secos o más húmedos. |
+| `factores_clave_ml` | **Factores determinantes del análisis** | — |
 | `secuencia_sugerida` | **Rotación sugerida para el año** | Invierno → Verano. |
 | `riesgo`: `bajo/medio/alto/critico` | **Riesgo bajo / medio / alto / muy alto** | Use "muy alto" instead of "crítico" in UI. |
 | Centroid / lat-lon | **Ubicación del lote** | Coordinates only as small secondary text. |
@@ -124,21 +125,19 @@ Technical terms may appear **only** inside a tooltip, a "Ver detalle" section or
 
 ## 4. Layout & Navigation Architecture
 
-- **Top header:** logo + product name (Newsreader) on the left, the 4 tabs on the right. No secondary status chips cluttering the header.
-- **Tabs:** `Planificación de campaña` · `Info general` · `Información histórica` · `Chat`.
+- **Top header:** Solid `#3A0C00` (`--color-header-bg`) background without gradient, displaying the logo + product name (Newsreader) on the left.
+- **Tabs integrated into the right component & overlapping the header:** The 3 physical file-folder tabs (`Planificación de campaña` · `Info general` · `Información histórica`) are mounted inside `<aside className="right-analysis-pane">` (40% width) and project upwards (`margin-top: -44px`) overlapping directly onto the right 40% of the `#3A0C00` header. The active tab merges seamlessly into `.right-folder-body` (`--color-bg` `#FFF5E0`).
 - **Default tab on load:** **Planificación de campaña** (the core value of the product).
-- **Split view (tabs 1–3):** Map ≈ 60% left as the protagonist, analysis panel ≈ 40% right with vertical scroll.
-- **Chat:** the only tab without the map; full-width conversational layout.
+- **Split view:** Map ≈ 60% left as the protagonist, analysis panel ≈ 40% right with vertical scroll.
 - **Map state persists across tabs:** selected lot, active layer and zoom must not reset when switching tabs.
 - **Planificación de campaña — card order (fixed):**
-  1. **Configuración principal:** Tipo de campaña · Último cultivo · ¿Qué querés priorizar?
-  2. **Recomendación:** crop name, score ring, 2 pillar bars, one-line reason, rotation sequence, compact ranking.
-  3. **¿Qué pasa si...? (What-If):** separate card, visually secondary, with a clear "Volver al dato real" reset.
+  1. **Planificación de campaña (`CampaignConfigPanel`):** Campaña a planificar · Cultivo antecesor en el lote · Prioridad de manejo.
+  2. **Recomendación de cultivo (`RecommendationPanel`):** crop name, score ring, 2 pillar bars, one-line reason, rotation sequence, compact ranking.
+  3. **Simulación de escenarios (`WhatIfPanel`):** separate card, visually secondary, with a clear "Restablecer datos satelitales" reset.
 - **Responsive:** < 860px stacks map (≈ 45vh) above the panel. Touch targets ≥ 40×40px.
 
 ### 4.1. Anti-clutter rules
 - No modals or popups for primary flows; no more than **2 floating panels** over the map at once (top: lot selection; bottom: layer switcher).
-- Hide helper texts once the user has interacted (e.g. "Tocá el mapa…" disappears after the first click).
 - Ranking: show **top 3** by default + "Ver todos los cultivos" toggle.
 - Avoid repeating the same data in two places of the same view.
 
@@ -151,7 +150,7 @@ Technical terms may appear **only** inside a tooltip, a "Ver detalle" section or
 - **Every thematic layer shows a legend** with plain-language extremes ("Suelo seco" → "Suelo con mucha agua"), using the semantic colors (water = blue scale, heat = orange scale, vegetation = brown → green).
 - **Date:** use a consolidated GIBS date (today − 5 days); show it as "Imagen del 8 nov." Never request today's tiles.
 - **Low native resolution warning:** SMAP/IMERG are coarse (6–9 km). When zoomed in beyond their native level, show a subtle note: "Esta capa muestra la tendencia de la zona, no el detalle del lote."
-- **Lot selection modes:** Lotes de ejemplo · Dibujar mi lote · Tocar un punto. Always send the **centroid** to the API; show area in ha while drawing.
+- **Lot selection modes:** `Lotes de ejemplo` · `Delimitar lote` (no "Tocar un punto" button). Always send the **centroid** to the API; show area in ha while drawing.
 - **Lot styling:** selected = green outline (`--color-primary`) with soft fill; drawing in progress = dashed orange; others = thin muted outline.
 - **Información histórica (Interactive 10-Year Time Slider + Real-Time Map):**
   - Allows the producer to inspect the evolution of **climate** (rain & heat), **soil** (moisture & organic matter), and **crops planted** over a multi-year window (e.g., 10 years).

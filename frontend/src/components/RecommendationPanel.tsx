@@ -63,10 +63,10 @@ export function RecommendationPanel({
   const roundedWaterScore = Math.round(recomendacion.sub_scores.hidroclimatico)
   const roundedSoilScore = Math.round(recomendacion.sub_scores.suelo)
 
-  // Primera oración corta del porqué como conclusión rápida (< 5s)
+  // Primera oración corta del fundamento como conclusión rápida (< 5s)
   const headlineReason =
     recomendacion.factores_clave_ml[0] ??
-    'Se adapta mejor al agua disponible en tu lote y cuida la rotación del suelo.'
+    'Presenta la mayor aptitud frente a la disponibilidad hídrica del lote y el balance del suelo.'
 
   // Parámetros del anillo SVG del Puntaje general
   const radius = 38
@@ -86,9 +86,9 @@ export function RecommendationPanel({
         <div>
           <span className="section-eyebrow">
             <Award size={13} />
-            <span>RECOMENDACIÓN PARA TU LOTE</span>
+            <span>ESTRATEGIA DE ROTACIÓN</span>
           </span>
-          <h2 className="section-title">¿Qué te conviene sembrar?</h2>
+          <h2 className="section-title">Recomendación de cultivo</h2>
         </div>
         {isWhatIfActive && (
           <span className="what-if-active-pill">Escenario simulado</span>
@@ -100,14 +100,14 @@ export function RecommendationPanel({
         <div className="winner-top-row">
           <div className="winner-main-info">
             <span className="winner-kicker">Cultivo recomendado</span>
-            <h3 className="winner-crop-name">Sembrá {winnerName}</h3>
+            <h3 className="winner-crop-name">{winnerName}</h3>
             <p className="winner-headline-reason">{headlineReason}</p>
           </div>
 
           {/* ANILLO SVG DE PUNTAJE GENERAL */}
           <div
             className="score-ring-box"
-            title="Puntaje general (combina agua/clima y aporte al suelo según tu prioridad)"
+            title="Puntaje general (combina aptitud hidroclimática y aporte al suelo según la prioridad seleccionada)"
           >
             <svg width="96" height="96" viewBox="0 0 96 96">
               <circle
@@ -199,8 +199,8 @@ export function RecommendationPanel({
         >
           <span>
             {showDetail
-              ? 'Ocultar detalle'
-              : 'Ver detalle de por qué lo recomendamos'}
+              ? 'Ocultar fundamentos'
+              : 'Ver fundamentos de la recomendación'}
           </span>
           {showDetail ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
         </button>
@@ -208,7 +208,7 @@ export function RecommendationPanel({
         {showDetail && (
           <div className="winner-detail-drawer">
             <span className="detail-section-subtitle">
-              Por qué lo recomendamos
+              Factores determinantes del análisis
             </span>
             <div className="ml-factors-list">
               {recomendacion.factores_clave_ml.map((factor, idx) => (

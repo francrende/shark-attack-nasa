@@ -454,20 +454,20 @@ export function generateSimulatedResponse(
 
   const factoresClave: string[] = [
     gwetrootEfectivo < 42
-      ? `Agua en las raíces ajustada (${humedadRedondeada}%): conviene un cultivo que banque la falta de agua.`
-      : `Buena reserva de agua en las raíces (${humedadRedondeada}%) para sostener el cultivo.`,
+      ? `Reserva de agua en raíces ajustada (${humedadRedondeada}%): se prioriza un cultivo tolerante al déficit hídrico.`
+      : `Buena disponibilidad de agua en zona radicular (${humedadRedondeada}%) para sostener el ciclo del cultivo.`,
     condicionRotacion === 'deficit_rastrojo_por_soja'
-      ? `Tu lote viene de ${nombreAnterior} y necesita sumar rastrojo y raíces para recuperar cobertura.`
-      : `Rotar después de ${nombreAnterior} ayuda a cortar malezas y cuidar la fertilidad del suelo.`,
+      ? `El lote proviene de ${nombreAnterior} y requiere incorporar rastrojo y sistema radicular para recuperar cobertura.`
+      : `La rotación posterior a ${nombreAnterior} favorece el control de malezas y el balance de nutrientes del suelo.`,
     anomaliaEfectiva < 0
-      ? `Llovió un ${Math.abs(lluviaRedondeada)}% menos de lo normal en los últimos 3 meses.`
-      : `Las lluvias de los últimos 3 meses estuvieron un +${lluviaRedondeada}% por encima de lo normal.`,
+      ? `Las precipitaciones de los últimos 3 meses registraron un desvío de −${Math.abs(lluviaRedondeada)}% respecto al promedio.`
+      : `Las precipitaciones de los últimos 3 meses se ubicaron un +${lluviaRedondeada}% por encima del promedio histórico.`,
   ]
 
   const explicacion =
     gwetrootEfectivo < 42
-      ? `Elegimos ${nombreGanador} porque resiste mejor la falta de agua (${humedadRedondeada}% en las raíces) y cuida tu suelo después de ${nombreAnterior}. A diferencia de opciones más exigentes en agua o de repetir el mismo cultivo, logra ${Math.round(ganador.sub_scores.hidroclimatico)} puntos en agua/clima y ${Math.round(ganador.sub_scores.suelo)} puntos en aporte al lote.`
-      : `Elegimos ${nombreGanador} porque aprovecha muy bien la humedad actual de tu lote (${humedadRedondeada}% en las raíces) y mantiene una rotación sana después de ${nombreAnterior}. Combina ${Math.round(ganador.sub_scores.hidroclimatico)} puntos de adaptación al clima con ${Math.round(ganador.sub_scores.suelo)} puntos de beneficio para el suelo.`
+      ? `Se recomienda ${nombreGanador} por su mayor tolerancia al déficit hídrico (${humedadRedondeada}% en zona radicular) y su aporte estructural al suelo luego de ${nombreAnterior}. Frente a alternativas de mayor requerimiento hídrico o a la repetición del cultivo previo, alcanza ${Math.round(ganador.sub_scores.hidroclimatico)} puntos de aptitud hidroclimática y ${Math.round(ganador.sub_scores.suelo)} puntos de beneficio edáfico.`
+      : `Se recomienda ${nombreGanador} dado que aprovecha eficientemente la humedad disponible en el perfil (${humedadRedondeada}% en zona radicular) y sostiene una secuencia de rotación equilibrada tras ${nombreAnterior}. Combina ${Math.round(ganador.sub_scores.hidroclimatico)} puntos de adaptación hidroclimática con ${Math.round(ganador.sub_scores.suelo)} puntos de aporte al suelo.`
 
   return {
     ubicacion: {

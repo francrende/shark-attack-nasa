@@ -3,7 +3,6 @@ import {
   Compass,
   History,
   Info,
-  MessageSquare,
   Sprout,
 } from 'lucide-react'
 import './App.css'
@@ -33,7 +32,7 @@ import type {
 } from './types/api'
 import { calculatePolygonAreaHa } from './utils/geo'
 
-export type NavTabId = 'planificacion' | 'info_general' | 'historico' | 'chat'
+export type NavTabId = 'planificacion' | 'info_general' | 'historico'
 
 export function App() {
   const defaultField = DEMO_FIELDS[0]
@@ -114,8 +113,8 @@ export function App() {
     }
     if (selectionMode === 'polygon') {
       return customPolygon.length >= 3
-        ? 'Mi lote dibujado'
-        : 'Dibujando lote en el mapa...'
+        ? 'Lote delimitado en el mapa'
+        : 'Delimitación de lote en curso'
     }
     return 'Ubicación seleccionada en el mapa'
   }, [selectionMode, selectedDemoField, customPolygon.length])
@@ -149,11 +148,6 @@ export function App() {
     }
   }
 
-  const handleSelectPoint = (coords: Coordenadas) => {
-    setSelectedDemoFieldId(null)
-    setSelectedCoords(coords)
-  }
-
   const handleUpdateCustomPolygon = (
     points: [number, number][],
     isClosed: boolean,
@@ -179,7 +173,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* HEADER SUPERIOR LIMPIO Y MINIMALISTA (SKILLS_FRONTEND.md §4) */}
+      {/* HEADER SUPERIOR SÓLIDO (#3A0C00) */}
       <header className="top-navbar">
         <div className="brand-block">
           <div className="brand-logo" aria-hidden="true">
@@ -190,53 +184,13 @@ export function App() {
               <h1>Shark Attack</h1>
             </div>
             <p className="brand-subtitle">
-              Cuaderno de campo satelital · Rotación y agua para tu lote
+              Monitoreo satelital y planificación agronómica de rotaciones
             </p>
           </div>
         </div>
-
-        <nav className="top-nav-tabs" aria-label="Navegación principal">
-          <button
-            type="button"
-            className={`nav-tab-btn ${activeTab === 'planificacion' ? 'active' : ''}`}
-            onClick={() => setActiveTab('planificacion')}
-          >
-            <Compass size={15} />
-            <span>Planificación de campaña</span>
-          </button>
-
-          <button
-            type="button"
-            className={`nav-tab-btn ${activeTab === 'info_general' ? 'active' : ''}`}
-            onClick={() => setActiveTab('info_general')}
-          >
-            <Info size={15} />
-            <span>Info general</span>
-          </button>
-
-          <button
-            type="button"
-            className={`nav-tab-btn ${activeTab === 'historico' ? 'active' : ''}`}
-            onClick={() => setActiveTab('historico')}
-          >
-            <History size={15} />
-            <span>Información histórica</span>
-          </button>
-
-          <button
-            type="button"
-            className="nav-tab-btn disabled"
-            disabled
-            title="El asistente de chat estará disponible próximamente"
-          >
-            <MessageSquare size={15} />
-            <span>Chat</span>
-            <span className="nav-tab-soon-badge">Próximamente</span>
-          </button>
-        </nav>
       </header>
 
-      {/* CONTENIDO SEGÚN LA PESTAÑA ACTIVA (MAPA ~60% IZQ + PANEL ~40% DER) */}
+      {/* CONTENIDO PRINCIPAL (MAPA ~60% IZQ + CARPETA DERECHA ~40% CON PESTAÑAS SUPERPUESTAS AL HEADER) */}
       <main className="split-dashboard">
         <section className="left-map-pane">
           <MapView
@@ -254,62 +208,92 @@ export function App() {
             }}
             onSelectDemoField={handleSelectDemoField}
             onChangeSelectionMode={handleChangeSelectionMode}
-            onSelectPoint={handleSelectPoint}
             onUpdateCustomPolygon={handleUpdateCustomPolygon}
             onChangeGibsLayer={setActiveGibsLayer}
           />
         </section>
 
         <aside className="right-analysis-pane">
-          {activeTab === 'planificacion' && (
-            <>
-              <CampaignConfigPanel
-                campana={campana}
-                cultivoAnterior={cultivoAnterior}
-                objetivoProductor={objetivoProductor}
-                onChangeCampana={setCampana}
-                onChangeCultivoAnterior={setCultivoAnterior}
-                onChangeObjetivo={setObjetivoProductor}
-              />
+          <nav className="top-nav-tabs" aria-label="Navegación del panel derecho">
+            <button
+              type="button"
+              className={`nav-tab-btn ${activeTab === 'planificacion' ? 'active' : ''}`}
+              onClick={() => setActiveTab('planificacion')}
+            >
+              <Compass size={14} />
+              <span>Planificación de campaña</span>
+            </button>
 
-              <RecommendationPanel
-                recomendacion={simulationResult.recomendacion_principal}
-                ranking={simulationResult.ranking_cultivos}
+            <button
+              type="button"
+              className={`nav-tab-btn ${activeTab === 'info_general' ? 'active' : ''}`}
+              onClick={() => setActiveTab('info_general')}
+            >
+              <Info size={14} />
+              <span>Info general</span>
+            </button>
+
+            <button
+              type="button"
+              className={`nav-tab-btn ${activeTab === 'historico' ? 'active' : ''}`}
+              onClick={() => setActiveTab('historico')}
+            >
+              <History size={14} />
+              <span>Información histórica</span>
+            </button>
+          </nav>
+
+          <div className="right-folder-body">
+            {activeTab === 'planificacion' && (
+              <>
+                <CampaignConfigPanel
+                  campana={campana}
+                  cultivoAnterior={cultivoAnterior}
+                  objetivoProductor={objetivoProductor}
+                  onChangeCampana={setCampana}
+                  onChangeCultivoAnterior={setCultivoAnterior}
+                  onChangeObjetivo={setObjetivoProductor}
+                />
+
+                <RecommendationPanel
+                  recomendacion={simulationResult.recomendacion_principal}
+                  ranking={simulationResult.ranking_cultivos}
+                  isWhatIfActive={isWhatIfActive}
+                />
+
+                <WhatIfPanel
+                  whatIf={whatIf}
+                  nasaDetectedHumidityPct={
+                    baselineResult.telemetria_nasa.indice_humedad_radicular_pct
+                  }
+                  onChangeWhatIf={setWhatIf}
+                  onResetWhatIf={handleResetWhatIf}
+                />
+              </>
+            )}
+
+            {activeTab === 'info_general' && (
+              <TelemetryCards
+                ubicacion={simulationResult.ubicacion}
+                loteLabel={currentLoteLabel}
+                superficieHa={currentSuperficieHa}
+                telemetria={simulationResult.telemetria_nasa}
+                perfilSuelo={simulationResult.perfil_suelo}
                 isWhatIfActive={isWhatIfActive}
               />
+            )}
 
-              <WhatIfPanel
-                whatIf={whatIf}
-                nasaDetectedHumidityPct={
-                  baselineResult.telemetria_nasa.indice_humedad_radicular_pct
-                }
-                onChangeWhatIf={setWhatIf}
-                onResetWhatIf={handleResetWhatIf}
+            {activeTab === 'historico' && (
+              <HistoricalPanel
+                ubicacion={selectedCoords}
+                loteLabel={currentLoteLabel}
+                selectedYear={historicalYear}
+                selectedMetric={historicalMetric}
+                onChangeYear={setHistoricalYear}
+                onChangeMetric={setHistoricalMetric}
               />
-            </>
-          )}
-
-          {activeTab === 'info_general' && (
-            <TelemetryCards
-              ubicacion={simulationResult.ubicacion}
-              loteLabel={currentLoteLabel}
-              superficieHa={currentSuperficieHa}
-              telemetria={simulationResult.telemetria_nasa}
-              perfilSuelo={simulationResult.perfil_suelo}
-              isWhatIfActive={isWhatIfActive}
-            />
-          )}
-
-          {activeTab === 'historico' && (
-            <HistoricalPanel
-              ubicacion={selectedCoords}
-              loteLabel={currentLoteLabel}
-              selectedYear={historicalYear}
-              selectedMetric={historicalMetric}
-              onChangeYear={setHistoricalYear}
-              onChangeMetric={setHistoricalMetric}
-            />
-          )}
+            )}
+          </div>
         </aside>
       </main>
     </div>

@@ -12,7 +12,6 @@ import {
 import 'leaflet/dist/leaflet.css'
 import {
   CheckCircle2,
-  Crosshair,
   Info,
   Layers,
   MapPin,
@@ -60,7 +59,6 @@ interface MapViewProps {
   historicalMode?: HistoricalMapConfig
   onSelectDemoField: (field: DemoField) => void
   onChangeSelectionMode: (mode: SelectionMode) => void
-  onSelectPoint: (coords: Coordenadas) => void
   onUpdateCustomPolygon: (
     points: [number, number][],
     isClosed: boolean,
@@ -100,9 +98,7 @@ function MapInteractionHandler({
 }) {
   const map = useMapEvents({
     click(e) {
-      if (selectionMode === 'point') {
-        onMapClick(e.latlng.lat, e.latlng.lng)
-      } else if (selectionMode === 'polygon' && !isPolygonClosed) {
+      if (selectionMode === 'polygon' && !isPolygonClosed) {
         onMapClick(e.latlng.lat, e.latlng.lng)
       }
     },
@@ -123,14 +119,11 @@ export function MapView({
   historicalMode,
   onSelectDemoField,
   onChangeSelectionMode,
-  onSelectPoint,
   onUpdateCustomPolygon,
   onChangeGibsLayer,
 }: MapViewProps) {
   const [gibsOpacity, setGibsOpacity] = useState<number>(0.62)
   const [currentZoom, setCurrentZoom] = useState<number>(13)
-  const [hasClickedPointOnce, setHasClickedPointOnce] =
-    useState<boolean>(false)
   const [cameraTarget, setCameraTarget] = useState<{
     coords: Coordenadas
     zoom: number
@@ -178,10 +171,7 @@ export function MapView({
     const roundedLat = Math.round(lat * 10000) / 10000
     const roundedLon = Math.round(lon * 10000) / 10000
 
-    if (selectionMode === 'point') {
-      setHasClickedPointOnce(true)
-      onSelectPoint({ lat: roundedLat, lon: roundedLon })
-    } else if (selectionMode === 'polygon' && !isPolygonClosed) {
+    if (selectionMode === 'polygon' && !isPolygonClosed) {
       const nextPoints: [number, number][] = [
         ...customPolygon,
         [roundedLat, roundedLon],
@@ -232,18 +222,7 @@ export function MapView({
             onClick={() => onChangeSelectionMode('polygon')}
           >
             <Pentagon size={15} />
-            <span>Dibujar mi lote</span>
-          </button>
-          <button
-            type="button"
-            className={`mode-btn ${selectionMode === 'point' ? 'active' : ''}`}
-            onClick={() => {
-              setHasClickedPointOnce(false)
-              onChangeSelectionMode('point')
-            }}
-          >
-            <Crosshair size={15} />
-            <span>Tocar un punto</span>
+            <span>Delimitar lote</span>
           </button>
         </div>
 
@@ -275,8 +254,8 @@ export function MapView({
                 {isPolygonClosed
                   ? 'Lote cerrado'
                   : customPolygon.length === 0
-                    ? 'Tocá las esquinas de tu lote en el mapa'
-                    : `${customPolygon.length} esquinas marcadas`}
+                    ? 'Marque los vértices del lote en el mapa'
+                    : `${customPolygon.length} vértices marcados`}
               </span>
               {customPolygon.length >= 3 && (
                 <span className="polygon-metrics">
@@ -293,7 +272,7 @@ export function MapView({
                 className="poly-action-btn"
                 onClick={handleUndoVertex}
                 disabled={customPolygon.length === 0}
-                title="Deshacer último punto"
+                title="Deshacer último vértice"
               >
                 <RotateCcw size={14} />
                 <span>Deshacer</span>
@@ -303,7 +282,7 @@ export function MapView({
                 className="poly-action-btn primary"
                 onClick={handleClosePolygon}
                 disabled={customPolygon.length < 3 || isPolygonClosed}
-                title="Cerrar lote y calcular recomendación"
+                title="Cerrar polígono y calcular recomendación"
               >
                 <CheckCircle2 size={14} />
                 <span>Cerrar lote</span>
@@ -313,22 +292,12 @@ export function MapView({
                 className="poly-action-btn danger"
                 onClick={handleClearPolygon}
                 disabled={customPolygon.length === 0}
-                title="Borrar dibujo"
+                title="Limpiar polígono"
               >
                 <Trash2 size={14} />
-                <span>Borrar</span>
+                <span>Limpiar</span>
               </button>
             </div>
-          </div>
-        )}
-
-        {/* Regla §4.1: ocultar el texto de ayuda una vez que el usuario ya hizo clic */}
-        {selectionMode === 'point' && !hasClickedPointOnce && (
-          <div className="map-point-hint">
-            <Crosshair size={14} />
-            <span>
-              Tocá cualquier lugar del mapa para analizar ese lote.
-            </span>
           </div>
         )}
       </div>

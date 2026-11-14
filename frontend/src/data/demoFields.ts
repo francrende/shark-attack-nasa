@@ -267,19 +267,19 @@ export const OBJETIVOS_PRODUCTOR_META: Record<
 > = {
   resiliencia_hidroclimatica: {
     titulo: 'Seguridad frente a sequía',
-    subtitulo: 'Prioriza cultivos que rindan bien con poca agua o calor fuerte.',
+    subtitulo: 'Prioriza la estabilidad de rendimiento ante déficit hídrico o estrés térmico.',
     pesoClima: 0.75,
     pesoSuelo: 0.25,
   },
   equilibrio: {
     titulo: 'Equilibrio',
-    subtitulo: 'Balance parejo entre cuidar el agua disponible y mejorar el suelo.',
+    subtitulo: 'Pondera en partes iguales la seguridad hidroclimática y la conservación del suelo.',
     pesoClima: 0.5,
     pesoSuelo: 0.5,
   },
   conservacion_suelo: {
-    titulo: 'Cuidar el suelo',
-    subtitulo: 'Prioriza dejar rastrojo, sumar materia orgánica y rotar cultivos.',
+    titulo: 'Conservación del suelo',
+    subtitulo: 'Prioriza el aporte de rastrojo, carbono orgánico y cobertura superficial.',
     pesoClima: 0.3,
     pesoSuelo: 0.7,
   },
@@ -357,7 +357,7 @@ export const NASA_GIBS_LAYERS: GibsLayerConfig[] = [
     shortLabel: 'Lluvias recientes',
     nasaLayerIdentifier: 'IMERG_Precipitation_Rate',
     description:
-      'Dónde y cuánto llovió en los últimos días en tu zona.',
+      'Distribución espacial de las precipitaciones registradas recientemente en la región.',
     format: 'png',
     tileMatrixSet: 'GoogleMapsCompatible_Level6',
     maxNativeZoom: 6,

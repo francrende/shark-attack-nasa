@@ -148,9 +148,9 @@ export function HistoricalPanel({
           <div>
             <span className="section-eyebrow">
               <History size={13} />
-              <span>HISTORIAL DE LOS ÚLTIMOS 10 AÑOS (2017–2026)</span>
+              <span>SERIE HISTÓRICA DE 10 AÑOS (2017–2026)</span>
             </span>
-            <h2 className="section-title">¿Cómo evolucionó tu campo?</h2>
+            <h2 className="section-title">Información histórica</h2>
             <p className="telemetry-lote-subtitle">{loteLabel}</p>
           </div>
           <span className="historical-year-hero-badge">{selectedYear}</span>
@@ -162,7 +162,7 @@ export function HistoricalPanel({
             <div className="year-timeline-label">
               <Calendar size={14} />
               <span>
-                Mové el año para ver cómo cambia el lote en el mapa:{' '}
+                Seleccione el año para visualizar en el mapa:{' '}
                 <strong>Campaña {selectedYear}</strong>
               </span>
             </div>
@@ -172,7 +172,7 @@ export function HistoricalPanel({
               onClick={() => setIsPlaying((prev) => !prev)}
             >
               {isPlaying ? <Pause size={14} /> : <Play size={14} />}
-              <span>{isPlaying ? 'Pausar' : 'Recorrer años'}</span>
+              <span>{isPlaying ? 'Pausar' : 'Reproducir serie'}</span>
             </button>
           </div>
 
@@ -210,7 +210,7 @@ export function HistoricalPanel({
         {/* MENÚ DESPLEGABLE PARA ELEGIR EL DATO HISTÓRICO */}
         <div className="control-group">
           <label className="control-label" htmlFor="historical-metric-select">
-            <span>¿Qué dato histórico querés ver?</span>
+            <span>Variable histórica a visualizar</span>
           </label>
           <select
             id="historical-metric-select"

@@ -93,18 +93,18 @@ export function TelemetryCards({
   const heatInfo = getHeatRiskMeaning(telemetria.riesgo_termico_verano)
   const humanDate = formatHumanDate(telemetria.fecha_ultimo_dato_valido)
 
-  // Resumen en 1 oración para responder "¿Cómo está mi lote hoy?" en < 5 segundos
+  // Resumen ejecutivo en 1 oración (< 5 segundos)
   const quickSummarySentence =
     radicularPct < 38
-      ? `Hoy tu lote tiene una reserva de agua ajustada (${radicularPct}%) y lluvias ${lluviaAnom < 0 ? `por debajo de lo normal (${formatSignedAnomalyPct(lluviaAnom)})` : 'normales'}.`
-      : `Hoy tu lote cuenta con buena humedad en las raíces (${radicularPct}%) y suelo ${formatSoilTexture(perfilSuelo.textura_predominante).toLowerCase()}.`
+      ? `El lote presenta una reserva hídrica ajustada (${radicularPct}%) y precipitaciones ${lluviaAnom < 0 ? `por debajo del promedio (${formatSignedAnomalyPct(lluviaAnom)})` : 'dentro del rango normal'}.`
+      : `El lote registra buena disponibilidad hídrica en zona radicular (${radicularPct}%) sobre suelo ${formatSoilTexture(perfilSuelo.textura_predominante).toLowerCase()}.`
 
   return (
     <section className="panel-section telemetry-section">
       <div className="section-header-row">
         <div>
           <span className="section-eyebrow">ESTADO ACTUAL DEL LOTE</span>
-          <h2 className="section-title">¿Cómo está mi lote hoy?</h2>
+          <h2 className="section-title">Info general</h2>
           <p className="telemetry-lote-subtitle">{loteLabel}</p>
         </div>
         <div
@@ -186,7 +186,7 @@ export function TelemetryCards({
 
           <div
             className="rain-anomaly-box"
-            title="Comparado con lo normal en tu zona (últimos 20 años)."
+            title="Comparado con el promedio histórico de la zona (últimos 20 años)."
           >
             <div className="rain-anomaly-left">
               <CloudRain size={16} />
@@ -245,7 +245,7 @@ export function TelemetryCards({
 
           <div
             className="soil-chip"
-            title="Define cuánta agua retiene tu suelo."
+            title="Determina la capacidad de retención hídrica del suelo."
           >
             <Layers size={14} />
             <span>

@@ -25,7 +25,7 @@ export const HISTORICAL_METRICS: HistoricalMetricMeta[] = [
     unit: '',
     category: 'decision',
     helperText:
-      'Qué se sembró cada año en el lote y cómo alternaron gramíneas, leguminosas y oleaginosas.',
+      'Secuencia anual de cultivos implantados en el lote y alternancia entre gramíneas, leguminosas y oleaginosas.',
     suggestedGibsLayer: 'modis_ndvi',
   },
   {
@@ -34,7 +34,7 @@ export const HISTORICAL_METRICS: HistoricalMetricMeta[] = [
     unit: 'mm',
     category: 'water',
     helperText:
-      'Lluvia acumulada en el año y reserva de agua disponible para las raíces.',
+      'Precipitación acumulada anual y disponibilidad hídrica en zona radicular.',
     suggestedGibsLayer: 'smap_root_zone',
   },
   {
@@ -43,7 +43,7 @@ export const HISTORICAL_METRICS: HistoricalMetricMeta[] = [
     unit: 'mm/día',
     category: 'water',
     helperText:
-      'Cuánta agua pidió la atmósfera por día debido al sol, el viento y la sequedad del aire.',
+      'Demanda evaporativa diaria del ambiente asociada a radiación solar, temperatura y viento.',
     suggestedGibsLayer: 'smap_root_zone',
   },
   {
@@ -52,7 +52,7 @@ export const HISTORICAL_METRICS: HistoricalMetricMeta[] = [
     unit: 'días > 34 °C',
     category: 'heat',
     helperText:
-      'Cantidad de días muy calurosos durante el verano que estresan al cultivo en floración.',
+      'Frecuencia de jornadas con temperaturas superiores a 34 °C durante el período estival.',
     suggestedGibsLayer: 'modis_lst_day',
   },
   {
@@ -61,7 +61,7 @@ export const HISTORICAL_METRICS: HistoricalMetricMeta[] = [
     unit: 'g/kg',
     category: 'heat',
     helperText:
-      'Evolución de la fertilidad del suelo según los cultivos que aportaron o extrajeron carbono.',
+      'Evolución del carbono orgánico del suelo según el balance de aporte y extracción de la rotación.',
     suggestedGibsLayer: 'modis_ndvi',
   },
 ]

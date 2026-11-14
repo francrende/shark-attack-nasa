@@ -97,7 +97,7 @@ export interface SimulateResponse {
 // TIPOS DE SOPORTE GIS, LOTES DEMO Y CAPAS NASA GIBS
 // ============================================================================
 
-export type SelectionMode = 'demo' | 'polygon' | 'point'
+export type SelectionMode = 'demo' | 'polygon'
 
 export type GibsLayerId =
   | 'none'

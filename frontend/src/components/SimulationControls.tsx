@@ -43,7 +43,7 @@ const OBJETIVOS_KEYS: ObjetivoProductor[] = [
 
 /**
  * TARJETA 1 PRINCIPAL EN PLANIFICACIÓN DE CAMPAÑA:
- * Selección de Tipo de campaña, Último cultivo y ¿Qué querés priorizar?
+ * Selección de Tipo de campaña, Cultivo antecesor y Prioridad de manejo
  */
 export function CampaignConfigPanel({
   campana,
@@ -61,7 +61,7 @@ export function CampaignConfigPanel({
             <Compass size={13} />
             <span>CONFIGURACIÓN DE LA CAMPAÑA</span>
           </span>
-          <h2 className="section-title">¿Cómo venís y qué vas a sembrar?</h2>
+          <h2 className="section-title">Planificación de campaña</h2>
         </div>
       </div>
 
@@ -70,16 +70,16 @@ export function CampaignConfigPanel({
         <div className="control-group">
           <label className="control-label">
             <Calendar size={14} />
-            <span>Campaña a sembrar</span>
+            <span>Campaña a planificar</span>
           </label>
           <div
             className="campaign-toggle"
             role="group"
-            aria-label="Seleccionar campaña a sembrar"
+            aria-label="Seleccionar campaña a planificar"
           >
             <button
               type="button"
-              className={`campaign-btn ${campana === 'verano' ? 'active' : ''}`}
+              className={`campaign-btn summer-btn ${campana === 'verano' ? 'active' : ''}`}
               onClick={() => onChangeCampana('verano')}
             >
               <Sun size={15} />
@@ -87,7 +87,7 @@ export function CampaignConfigPanel({
             </button>
             <button
               type="button"
-              className={`campaign-btn ${campana === 'invierno' ? 'active' : ''}`}
+              className={`campaign-btn winter-btn ${campana === 'invierno' ? 'active' : ''}`}
               onClick={() => onChangeCampana('invierno')}
             >
               <Snowflake size={15} />
@@ -96,10 +96,10 @@ export function CampaignConfigPanel({
           </div>
         </div>
 
-        {/* 2. Último Cultivo */}
+        {/* 2. Cultivo Antecesor */}
         <div className="control-group">
           <label className="control-label" htmlFor="cultivo-anterior-select">
-            <span>Último cultivo en el lote</span>
+            <span>Cultivo antecesor en el lote</span>
           </label>
           <select
             id="cultivo-anterior-select"
@@ -131,11 +131,11 @@ export function CampaignConfigPanel({
         </div>
       </div>
 
-      {/* 3. ¿Qué querés priorizar? */}
+      {/* 3. Prioridad de manejo */}
       <div className="control-group">
         <label className="control-label">
           <Sparkles size={14} />
-          <span>¿Qué querés priorizar?</span>
+          <span>Prioridad de manejo</span>
         </label>
         <div
           className="objective-cards-grid"
@@ -151,7 +151,7 @@ export function CampaignConfigPanel({
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
-                className={`objective-card ${isSelected ? 'selected' : ''}`}
+                className={`objective-card obj-${key} ${isSelected ? 'selected' : ''}`}
                 onClick={() => onChangeObjetivo(key)}
               >
                 <span className="objective-title">{meta.titulo}</span>
@@ -180,7 +180,7 @@ export function CampaignConfigPanel({
 
 /**
  * TARJETA 3 INDEPENDIENTE Y SECUNDARIA EN PLANIFICACIÓN DE CAMPAÑA:
- * Simulador Interactivo "¿Qué pasa si...?"
+ * Simulador Interactivo de Escenarios Climáticos
  */
 export function WhatIfPanel({
   whatIf,
@@ -203,10 +203,10 @@ export function WhatIfPanel({
         <div>
           <span className="section-eyebrow">
             <Sliders size={13} />
-            <span>SIMULADOR DE ESCENARIOS</span>
+            <span>ANÁLISIS DE SENSIBILIDAD</span>
           </span>
           <div className="what-if-title-line">
-            <h2 className="section-title">¿Qué pasa si...?</h2>
+            <h2 className="section-title">Simulación de escenarios</h2>
             {isWhatIfModified && (
               <span className="what-if-active-pill">Escenario simulado</span>
             )}
@@ -219,13 +219,13 @@ export function WhatIfPanel({
             onClick={onResetWhatIf}
           >
             <RotateCcw size={13} />
-            <span>Volver al dato real</span>
+            <span>Restablecer datos satelitales</span>
           </button>
         )}
       </div>
 
       <p className="what-if-helper-text">
-        Probá escenarios más secos o más lluviosos para ver cómo cambia el cultivo recomendado.
+        Evalúe escenarios más secos o más húmedos para analizar la respuesta del cultivo recomendado.
       </p>
 
       <div className="what-if-box">

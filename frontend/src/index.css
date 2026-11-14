@@ -19,13 +19,19 @@
   --color-bg-muted: #F5E6C8;
   --color-bg-subtle: #EFE0BE;
 
-  /* 3. Texto General y Tonos Tierra (#22181C + marrones complementarios) */
+  /* 3. Texto General, Header (#3A0C00) y Tonos Tierra / Terracota */
+  --color-header-bg: #3A0C00;
   --color-text: #22181C;
   --color-text-secondary: #5A463F;
   --color-text-muted: #7D675E;
   --color-earth-brown: #8C5A3C;
   --color-earth-brown-dark: #633D26;
   --color-earth-brown-soft: #F3E6DC;
+  --color-terracotta: #9E472A;
+  --color-terracotta-dark: #7A331C;
+  --color-terracotta-darker: #592311;
+  --color-folder-tab-inactive: #DFC8AA;
+  --color-folder-tab-hover: #EAD7BD;
   --color-border: #DECBB1;
   --color-border-strong: #C7B090;
 

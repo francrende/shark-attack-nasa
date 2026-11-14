@@ -40,6 +40,12 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-7** | Refinamiento UX/UI de `"Planificación de campaña"`, Header y Tokens según `SKILLS_FRONTEND.md` | `frontend/src/theme/mapColors.ts`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-6` | `[x]` |
 | **FRONT-8** | Refinamiento UX/UI de `"Info general"` y Mapa GIS (Fechas humanas, Glosario, Cero Hex Hardcodeados y Anti-clutter) | `frontend/src/utils/formatters.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/data/demoFields.ts`, `frontend/src/App.css` | `FRONT-7` | `[x]` |
 | **FRONT-9** | Pestaña `"Información histórica"` (Línea de Tiempo de 10 Años Sincronizada en Vivo con el Mapa + Desplegable de Variables) | `frontend/src/data/historicalData.ts`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-8` | `[x]` |
+| **FRONT-10** | Rediseño del Header en Marrón/Terracota y Pestañas estilo Carpeta de Archivo Físico con Pestaña Activa Resaltada | `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-9` | `[x]` |
+| **FRONT-11** | Simplificación del Mapa GIS: Eliminación del modo `"Tocar un punto"` | `frontend/src/types/api.ts`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-10` | `[x]` |
+| **FRONT-12** | Reemplazo de Preguntas en Títulos por Títulos de Pestaña y Lenguaje Formal Agronómico | `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/data/demoFields.ts`, `frontend/src/data/historicalData.ts`, `frontend/SKILLS_FRONTEND.md` | `FRONT-10` | `[x]` |
+| **FRONT-13** | Diversificación Cromática de Botones y Controles Seleccionados (No Todo Verde) | `frontend/src/index.css`, `frontend/src/App.css`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/HistoricalPanel.tsx` | `FRONT-11`, `FRONT-12` | `[x]` |
+| **FRONT-14** | Header Sólido `#3A0C00`, Eliminación de Pestaña Chat y Alineación de Pestañas al 40% del Panel Derecho | `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-10` | `[x]` |
+| **FRONT-15** | Integración de las Pestañas de Carpeta al Componente Derecho Superpuestas sobre el Header | `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-14` | `[x]` |
 
 ---
 
@@ -230,5 +236,108 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   1. Crear `frontend/src/data/historicalData.ts` con series históricas de 10 años (`2017–2026`) por lote/coordenada y metadatos de las 5 variables históricas (incluyendo color de lote en el mapa y capa NASA GIBS sugerida).
   2. Crear `frontend/src/components/HistoricalPanel.tsx` con el control deslizante de año (`2017–2026`) + botón Reproducir/Pausar, el desplegable de variable histórica, el resumen del año seleccionado y la visualización limpia de los 10 años (línea de cultivos por defecto o barras interactivas de la variable elegida).
   3. Actualizar `frontend/src/components/MapView.tsx` y `frontend/src/App.tsx` para que, cuando la pestaña `"Información histórica"` esté activa, el mapa reciba el año histórico seleccionado (`historicalYear`), la fecha satelital histórica y el estilo/etiqueta dinámica de cada lote en ese año.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-10: Rediseño del Header en Marrón/Terracota y Pestañas estilo Carpeta de Archivo Físico con Pestaña Activa Resaltada
+- **Objetivo:** Reemplazar el fondo verde del Header por una paleta cálida marrón/terracota y transformar la barra de navegación en pestañas de carpeta de archivo físico ancladas al borde inferior del Header (no botones flotantes), resaltando claramente la pestaña activa conectada con el lienzo crema inferior.
+- **Archivos Permitidos:** `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Header marrón/terracota:** Usar tonos tierra/terracota (`--color-header-bg: #7A442A` / `--color-earth-brown: #8C5A3C` y `--color-earth-brown-dark: #633D26`) en lugar del verde.
+  - **Pestañas de carpeta física (File Folder Tabs):** Las pestañas se apoyan directamente sobre la línea inferior del Header (`border-radius` superior redondeado y base recta `10px 10px 0 0`, sin flotar en el aire). La pestaña activa se funde con el fondo crema (`--color-bg: #FFF5E0`), sobresale ligeramente en altura, lleva un borde superior de acento terracota (`--color-heat-soil`) y tipografía destacada.
+- **Especificación Técnica:**
+  1. Definir en `frontend/src/index.css` los tokens de terracota/marrón para el Header y pestañas de carpeta (`--color-terracotta`, `--color-terracotta-dark`, `--color-folder-tab-inactive`).
+  2. Ajustar la estructura y estilos de `.top-navbar` y `.top-nav-tabs` en `frontend/src/App.tsx` y `frontend/src/App.css` para que las pestañas queden alineadas al borde inferior (`align-self: flex-end`) emulando solapas de carpeta de archivo físico.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b`
+
+---
+
+### `[x]` FRONT-11: Simplificación del Mapa GIS: Eliminación del modo `"Tocar un punto"`
+- **Objetivo:** Remover por completo la opción `"Tocar un punto"` (`point`) del mapa interactivo, dejando únicamente `"Lotes de ejemplo"` (`demo`) y `"Dibujar lote"` (`polygon`).
+- **Archivos Permitidos:** `frontend/src/types/api.ts`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - En el mapa no es necesario el botón ni el modo `"Tocar un punto"`.
+  - Mantener la selección sobre los lotes de ejemplo y la herramienta para dibujar el polígono del lote.
+- **Especificación Técnica:**
+  1. Actualizar `SelectionMode` en `frontend/src/types/api.ts` a `'demo' | 'polygon'`.
+  2. Eliminar el botón `"Tocar un punto"`, el estado `hasClickedPointOnce`, el mensaje `.map-point-hint` y el handler `onSelectPoint` de `frontend/src/components/MapView.tsx` y `frontend/src/App.tsx`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b`
+
+---
+
+### `[x]` FRONT-12: Reemplazo de Preguntas en Títulos por Títulos de Pestaña y Lenguaje Formal Agronómico
+- **Objetivo:** Eliminar todas las preguntas de los títulos y subtítulos (como `¿Cómo venís y qué vas a sembrar?`, `¿Cómo está mi lote hoy?`, `¿Cómo evolucionó tu campo?`, `¿Qué te conviene sembrar?`, `¿Qué pasa si...?`), colocando en su lugar el título correspondiente de cada pestaña/sección conservando la tipografía `Newsreader` (`--font-heading`) y el color `--color-primary`, y reemplazando el lenguaje informal/voseo por un español técnico-profesional claro y formal en toda la aplicación.
+- **Archivos Permitidos:**
+  - `frontend/src/components/SimulationControls.tsx`
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/components/TelemetryCards.tsx`
+  - `frontend/src/components/HistoricalPanel.tsx`
+  - `frontend/src/services/apiClient.ts`
+  - `frontend/src/data/demoFields.ts`
+  - `frontend/src/data/historicalData.ts`
+  - `frontend/SKILLS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Cero preguntas en títulos:**
+    - En la pestaña `Planificación de campaña`: el título principal es **`Planificación de campaña`**; las sub-secciones usan títulos formales afirmativos (**`Recomendación de cultivo`** y **`Simulación de escenarios climáticos`**), y el selector de objetivo se titula **`Prioridad de manejo`** (en lugar de `¿Qué querés priorizar?`).
+    - En la pestaña `Info general`: el título principal es **`Info general`**.
+    - En la pestaña `Información histórica`: el título principal es **`Información histórica`** y el selector de métrica se titula **`Variable histórica a visualizar`** (en lugar de `¿Qué dato histórico querés ver?`).
+  - **Tipografía y color:** Conservar `var(--font-heading)` (`Newsreader`) y `var(--color-primary)` (`#4B5B2D`) en todos los `.section-title`.
+  - **Lenguaje formal:** Reemplazar todas las expresiones informales o en voseo (`venís`, `querés`, `sembrá`, `probá`, `mové`, `tocá`, `banque`, `tu lote`) por redacción profesional, objetiva y clara (` Cultivo recomendado: ...`, `Seleccione...`, `Deslice el selector...`, `soporte el déficit hídrico`, `el lote`).
+- **Especificación Técnica:**
+  1. Actualizar los encabezados `h2.section-title` y etiquetas en `SimulationControls.tsx`, `RecommendationPanel.tsx`, `TelemetryCards.tsx` y `HistoricalPanel.tsx`.
+  2. Revisar y formalizar los textos generados en `apiClient.ts`, `demoFields.ts`, `historicalData.ts` y `MapView.tsx`.
+  3. Actualizar `SKILLS_FRONTEND.md` para reflejar la regla de títulos sin preguntas y tono formal.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b`
+
+---
+
+### `[x]` FRONT-13: Diversificación Cromática de Botones y Controles Seleccionados (No Todo Verde)
+- **Objetivo:** Evitar que todos los botones y estados de selección sean verdes, distribuyendo la paleta terrosa, terracota, ocre y azul agua en los controles interactivos y reservando el verde (`--color-primary`) para los títulos y el indicador del cultivo recomendado.
+- **Archivos Permitidos:** `frontend/src/index.css`, `frontend/src/App.css`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/HistoricalPanel.tsx`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Los botones y selecciones no deben ser todos verdes.
+  - Utilizar tonos marrón tierra (`--color-earth-brown` / `--color-earth-brown-dark`), terracota (`--color-heat-soil-dark` / `--color-terracotta`), ocre dorado (`--color-gold-yellow-dark`) y azul hidrológico (`--color-water-rain-dark`) según el contexto del botón:
+    - Selector de modo y lotes en el mapa: marrón tierra / terracota.
+    - Botones de campaña: `Campaña gruesa (verano)` en tono terracota/ocre cálido y `Campaña fina (invierno)` en azul pizarra (`--color-water-rain-dark`).
+    - Tarjetas de prioridad de manejo (`objetivo_productor`): borde y acento según su naturaleza (`Seguridad hídrica` en azul `--color-water-rain`, `Equilibrio` en marrón tierra `--color-earth-brown`, `Conservación del suelo` en terracota `--color-heat-soil-dark`).
+    - Botones de línea de tiempo histórica (`Recorrer años`, píldoras de año `2017–2026`, `Volver al dato real`): tonos marrón tierra y terracota.
+- **Especificación Técnica:**
+  1. Ajustar las clases de botones activos y tarjetas seleccionadas en `frontend/src/App.css` y `frontend/src/components/SimulationControls.tsx`.
+  2. Verificar contraste WCAG AA en todos los estados activos y seleccionados.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-14: Header Sólido `#3A0C00`, Eliminación de Pestaña Chat y Alineación de Pestañas al 40% del Panel Derecho
+- **Objetivo:** Aplicar el color sólido `#3A0C00` (sin gradiente) al Header, remover por completo la pestaña `Chat` y restringir el contenedor de las 3 pestañas de carpeta física para que no supere el 40% de ancho correspondiente al panel derecho.
+- **Archivos Permitidos:** `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Header sólido `#3A0C00`:** Sin gradiente, usando el token `--color-header-bg: #3A0C00`.
+  - **Sin pestaña Chat:** Eliminar el botón `Chat` y su tipo asociado, dejando únicamente las 3 pestañas operativas (`Planificación de campaña`, `Info general`, `Información histórica`).
+  - **Ancho máximo del 40%:** Alinear la grilla del Header (`60% 40%`) con el layout inferior para que las pestañas se ubiquen exactamente sobre el 40% del panel derecho y nunca excedan ese ancho.
+- **Especificación Técnica:**
+  1. Definir `--color-header-bg: #3A0C00` en `frontend/src/index.css`.
+  2. Remover la pestaña `Chat` y el ícono `MessageSquare` de `frontend/src/App.tsx`.
+  3. Configurar `.top-navbar` con `grid-template-columns: 60% 40%` y `.top-nav-tabs` con `grid-template-columns: repeat(3, minmax(0, 1fr))` dentro del 40% derecho en `frontend/src/App.css`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-15: Integración de las Pestañas de Carpeta al Componente Derecho Superpuestas sobre el Header
+- **Objetivo:** Mover las 3 pestañas de carpeta física dentro del componente derecho (`aside.right-analysis-pane`) de modo que nazcan desde la tarjeta/panel derecho y se proyecten hacia arriba superponiéndose directamente sobre el Header `#3A0C00`.
+- **Archivos Permitidos:** `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Las pestañas forman parte estructural del componente derecho (40% de ancho) y no del `<header>`.
+  - Se superponen visualmente sobre la franja inferior del Header `#3A0C00` (`margin-top` negativo y `z-index` superior al Header), fundiendo la pestaña activa sin costura con el cuerpo del panel derecho (`.right-folder-body`).
+- **Especificación Técnica:**
+  1. En `frontend/src/App.tsx`, trasladar `<nav className="top-nav-tabs">` desde `<header className="top-navbar">` hacia el interior de `<aside className="right-analysis-pane">`, envolviendo el contenido desplazable en `<div className="right-folder-body">`.
+  2. En `frontend/src/App.css`, configurar `.right-analysis-pane` con `overflow: visible` y `z-index: 25`, aplicar `margin-top: -42px` a `.top-nav-tabs` para superponer las solapas sobre `.top-navbar`, y delegar el `overflow-y: auto` a `.right-folder-body`.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
