@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   AlertTriangle,
-  BarChart3,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -54,6 +53,7 @@ export function RecommendationPanel({
 }: RecommendationPanelProps) {
   const [showDetail, setShowDetail] = useState<boolean>(false)
   const [showAllCrops, setShowAllCrops] = useState<boolean>(false)
+  const [expandedCropId, setExpandedCropId] = useState<string | null>(null)
 
   const winnerName = getCultivoDisplayName(recomendacion.cultivo)
   const winnerMeta = CULTIVOS_CATALOGO[recomendacion.cultivo as CultivoId]
@@ -186,20 +186,17 @@ export function RecommendationPanel({
           </div>
         </div>
 
-        {/* 4. DIVULGACIÓN PROGRESIVA: "VER DETALLE" */}
-        <button
-          type="button"
-          className="detail-toggle-btn"
-          onClick={() => setShowDetail((prev) => !prev)}
-          aria-expanded={showDetail}
-        >
-          <span>
-            {showDetail
-              ? 'Ocultar fundamentos'
-              : 'Ver fundamentos de la recomendación'}
-          </span>
-          {showDetail ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-        </button>
+        {/* 4. DIVULGACIÓN PROGRESIVA: "+ Mas..." SIN CONTENEDOR EN ESQUINA INFERIOR DERECHA */}
+        <div className="winner-more-row">
+          <button
+            type="button"
+            className="detail-link-btn"
+            onClick={() => setShowDetail((prev) => !prev)}
+            aria-expanded={showDetail}
+          >
+            {showDetail ? '− Menos' : '+ Mas...'}
+          </button>
+        </div>
 
         {showDetail && (
           <div className="winner-detail-drawer">
@@ -231,54 +228,96 @@ export function RecommendationPanel({
         )}
       </div>
 
-      {/* RANKING COMPARATIVO COMPACTO (TOP 3 POR DEFECTO + VER TODOS) */}
+      {/* LISTADO INTERACTIVO DE RECOMENDACIONES (CLIC PARA EXPANDIR) */}
       <div className="ranking-box">
-        <div className="ranking-header">
-          <div className="ranking-title">
-            <BarChart3 size={16} />
-            <span>Comparativa de cultivos para esta campaña</span>
-          </div>
-          <span className="ranking-subtitle-hint">Puntaje sobre 100</span>
-        </div>
-
         <div className="ranking-list">
           {visibleRanking.map((item, idx) => {
             const cropName = getCultivoDisplayName(item.cultivo)
+            const cropMeta = CULTIVOS_CATALOGO[item.cultivo as CultivoId]
             const riskInfo = getRiskLabelAndClass(item.riesgo)
             const isTop = idx === 0
             const roundedScore = Math.round(item.score_final)
+            const isExpanded = expandedCropId === item.cultivo
 
             return (
               <div
                 key={item.cultivo}
-                className={`ranking-row ${isTop ? 'top-rank' : ''}`}
+                className={`ranking-row ${isTop ? 'top-rank' : ''} ${isExpanded ? 'expanded' : ''}`}
               >
-                <div className="ranking-row-head">
-                  <div className="ranking-crop-title">
-                    <span className="rank-index">#{idx + 1}</span>
-                    <strong>{cropName}</strong>
-                    <span className={riskInfo.className}>
-                      {item.riesgo === 'critico' ? (
-                        <ShieldAlert size={12} />
-                      ) : item.riesgo === 'alto' ? (
-                        <AlertTriangle size={12} />
-                      ) : null}
-                      <span>{riskInfo.label}</span>
-                    </span>
+                <button
+                  type="button"
+                  className="ranking-row-trigger"
+                  aria-expanded={isExpanded}
+                  onClick={() =>
+                    setExpandedCropId((prev) =>
+                      prev === item.cultivo ? null : item.cultivo
+                    )
+                  }
+                >
+                  <div className="ranking-row-head">
+                    <div className="ranking-crop-title">
+                      <span className="rank-index">#{idx + 1}</span>
+                      <strong>{cropName}</strong>
+                      <span className={riskInfo.className}>
+                        {item.riesgo === 'critico' ? (
+                          <ShieldAlert size={12} />
+                        ) : item.riesgo === 'alto' ? (
+                          <AlertTriangle size={12} />
+                        ) : null}
+                        <span>{riskInfo.label}</span>
+                      </span>
+                    </div>
+                    <div className="ranking-score-right">
+                      <strong className="ranking-total-score">
+                        {roundedScore} / 100
+                      </strong>
+                      {isExpanded ? (
+                        <ChevronUp size={14} aria-hidden="true" />
+                      ) : (
+                        <ChevronDown size={14} aria-hidden="true" />
+                      )}
+                    </div>
                   </div>
-                  <strong className="ranking-total-score">
-                    {roundedScore} / 100
-                  </strong>
-                </div>
 
-                <div className="ranking-bar-track">
-                  <div
-                    className={`ranking-bar-fill ${isTop ? 'winner-bar' : 'standard-bar'}`}
-                    style={{
-                      width: `${Math.min(100, Math.max(6, roundedScore))}%`,
-                    }}
-                  />
-                </div>
+                  <div className="ranking-bar-track">
+                    <div
+                      className={`ranking-bar-fill ${isTop ? 'winner-bar' : 'standard-bar'}`}
+                      style={{
+                        width: `${Math.min(100, Math.max(6, roundedScore))}%`,
+                      }}
+                    />
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="ranking-item-detail">
+                    {item.sub_scores && (
+                      <div className="ranking-detail-pillars">
+                        <span>
+                          <strong>Agua y clima:</strong>{' '}
+                          {Math.round(item.sub_scores.hidroclimatico)} / 100
+                        </span>
+                        <span>
+                          <strong>Suelo y rotación:</strong>{' '}
+                          {Math.round(item.sub_scores.suelo)} / 100
+                        </span>
+                      </div>
+                    )}
+                    {cropMeta && (
+                      <p className="ranking-detail-meta">
+                        <strong>Aporte al lote:</strong>{' '}
+                        {cropMeta.aporteCarbonoLabel} ·{' '}
+                        <strong>Consumo de agua:</strong>{' '}
+                        {cropMeta.demandaHidricaLabel}
+                      </p>
+                    )}
+                    {item.cultivo === recomendacion.cultivo && (
+                      <p className="ranking-detail-note">
+                        {recomendacion.explicacion}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}

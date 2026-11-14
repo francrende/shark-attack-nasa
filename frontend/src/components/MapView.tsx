@@ -10,17 +10,8 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import { Info, Layers } from 'lucide-react'
 import {
-  CheckCircle2,
-  Info,
-  Layers,
-  MapPin,
-  Pentagon,
-  RotateCcw,
-  Trash2,
-} from 'lucide-react'
-import {
-  DEMO_FIELDS,
   getConsolidatedGibsDate,
   NASA_GIBS_LAYERS,
 } from '../data/demoFields'
@@ -31,15 +22,13 @@ import {
 import { THEME_COLORS } from '../theme/mapColors'
 import type {
   Coordenadas,
-  DemoField,
   GibsLayerId,
-  SelectionMode,
+  UserField,
 } from '../types/api'
 import { formatShortHumanDate } from '../utils/formatters'
 import {
   buildNasaGibsTileUrl,
   calculateCentroid,
-  calculatePolygonAreaHa,
 } from '../utils/geo'
 
 export interface HistoricalMapConfig {
@@ -51,17 +40,15 @@ export interface HistoricalMapConfig {
 
 interface MapViewProps {
   selectedCoords: Coordenadas
-  selectionMode: SelectionMode
-  selectedDemoFieldId: string | null
+  userFields: UserField[]
+  selectedFieldId: string | null
+  isDrawingNewField: boolean
   customPolygon: [number, number][]
-  isPolygonClosed: boolean
   activeGibsLayer: GibsLayerId
   historicalMode?: HistoricalMapConfig
-  onSelectDemoField: (field: DemoField) => void
-  onChangeSelectionMode: (mode: SelectionMode) => void
+  onSelectUserField: (field: UserField) => void
   onUpdateCustomPolygon: (
     points: [number, number][],
-    isClosed: boolean,
     centroid?: Coordenadas
   ) => void
   onChangeGibsLayer: (layerId: GibsLayerId) => void
@@ -86,19 +73,17 @@ function MapCameraController({
 }
 
 function MapInteractionHandler({
-  selectionMode,
-  isPolygonClosed,
+  isDrawingNewField,
   onMapClick,
   onZoomChange,
 }: {
-  selectionMode: SelectionMode
-  isPolygonClosed: boolean
+  isDrawingNewField: boolean
   onMapClick: (lat: number, lon: number) => void
   onZoomChange: (zoom: number) => void
 }) {
   const map = useMapEvents({
     click(e) {
-      if (selectionMode === 'polygon' && !isPolygonClosed) {
+      if (isDrawingNewField) {
         onMapClick(e.latlng.lat, e.latlng.lng)
       }
     },
@@ -111,14 +96,13 @@ function MapInteractionHandler({
 
 export function MapView({
   selectedCoords,
-  selectionMode,
-  selectedDemoFieldId,
+  userFields,
+  selectedFieldId,
+  isDrawingNewField,
   customPolygon,
-  isPolygonClosed,
   activeGibsLayer,
   historicalMode,
-  onSelectDemoField,
-  onChangeSelectionMode,
+  onSelectUserField,
   onUpdateCustomPolygon,
   onChangeGibsLayer,
 }: MapViewProps) {
@@ -132,6 +116,12 @@ export function MapView({
     zoom: 13,
   })
 
+  useEffect(() => {
+    if (!isDrawingNewField && selectedFieldId) {
+      setCameraTarget({ coords: selectedCoords, zoom: 14 })
+    }
+  }, [selectedFieldId, selectedCoords.lat, selectedCoords.lon, isDrawingNewField])
+
   const currentGibsConfig =
     NASA_GIBS_LAYERS.find((l) => l.id === activeGibsLayer) ??
     NASA_GIBS_LAYERS[0]
@@ -142,10 +132,6 @@ export function MapView({
       ? historicalMode.gibsDateIso
       : getConsolidatedGibsDate()
   const gibsHumanShortDate = formatShortHumanDate(gibsDateIso)
-
-  const drawnAreaHa = Math.round(calculatePolygonAreaHa(customPolygon))
-  const drawnCentroid =
-    customPolygon.length > 0 ? calculateCentroid(customPolygon) : selectedCoords
 
   const selectedCoordHistoricalVisual =
     isHistoricalActive && historicalMode
@@ -162,146 +148,20 @@ export function MapView({
     currentGibsConfig.maxNativeZoom <= 6 &&
     currentZoom > 8
 
-  const handleDemoFieldSelect = (field: DemoField) => {
-    setCameraTarget({ coords: field.centroide, zoom: 14 })
-    onSelectDemoField(field)
-  }
-
   const handleInteractiveMapClick = (lat: number, lon: number) => {
+    if (!isDrawingNewField) return
     const roundedLat = Math.round(lat * 10000) / 10000
     const roundedLon = Math.round(lon * 10000) / 10000
-
-    if (selectionMode === 'polygon' && !isPolygonClosed) {
-      const nextPoints: [number, number][] = [
-        ...customPolygon,
-        [roundedLat, roundedLon],
-      ]
-      const centroid = calculateCentroid(nextPoints)
-      onUpdateCustomPolygon(nextPoints, false, centroid)
-    }
-  }
-
-  const handleUndoVertex = () => {
-    if (customPolygon.length === 0) return
-    const nextPoints = customPolygon.slice(0, -1)
-    const centroid =
-      nextPoints.length > 0 ? calculateCentroid(nextPoints) : selectedCoords
-    onUpdateCustomPolygon(nextPoints, false, centroid)
-  }
-
-  const handleClosePolygon = () => {
-    if (customPolygon.length < 3) return
-    const centroid = calculateCentroid(customPolygon)
-    onUpdateCustomPolygon(customPolygon, true, centroid)
-  }
-
-  const handleClearPolygon = () => {
-    onUpdateCustomPolygon([], false)
+    const nextPoints: [number, number][] = [
+      ...customPolygon,
+      [roundedLat, roundedLon],
+    ]
+    const centroid = calculateCentroid(nextPoints)
+    onUpdateCustomPolygon(nextPoints, centroid)
   }
 
   return (
     <div className="map-wrapper">
-      {/* PANEL FLOTANTE 1 (SUPERIOR): SELECCIÓN DE LOTE */}
-      <div className="map-overlay-top">
-        <div
-          className="map-mode-switcher"
-          role="group"
-          aria-label="Modo de selección de lote"
-        >
-          <button
-            type="button"
-            className={`mode-btn ${selectionMode === 'demo' ? 'active' : ''}`}
-            onClick={() => onChangeSelectionMode('demo')}
-          >
-            <MapPin size={15} />
-            <span>Lotes de ejemplo</span>
-          </button>
-          <button
-            type="button"
-            className={`mode-btn ${selectionMode === 'polygon' ? 'active' : ''}`}
-            onClick={() => onChangeSelectionMode('polygon')}
-          >
-            <Pentagon size={15} />
-            <span>Delimitar lote</span>
-          </button>
-        </div>
-
-        {/* SUB-BARRA CONTEXTUAL SEGÚN EL MODO ELEGIDO */}
-        {selectionMode === 'demo' && (
-          <div className="map-demo-pills">
-            {DEMO_FIELDS.map((field) => {
-              const isSelected = field.id === selectedDemoFieldId
-              return (
-                <button
-                  key={field.id}
-                  type="button"
-                  className={`demo-pill ${isSelected ? 'selected' : ''}`}
-                  onClick={() => handleDemoFieldSelect(field)}
-                >
-                  <span className="demo-pill-dot" />
-                  <span>{field.localidad}</span>
-                  <span className="demo-pill-ha">{field.superficieHa} ha</span>
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {selectionMode === 'polygon' && (
-          <div className="map-polygon-toolbar">
-            <div className="polygon-status">
-              <span className="polygon-badge">
-                {isPolygonClosed
-                  ? 'Lote cerrado'
-                  : customPolygon.length === 0
-                    ? 'Marque los vértices del lote en el mapa'
-                    : `${customPolygon.length} vértices marcados`}
-              </span>
-              {customPolygon.length >= 3 && (
-                <span className="polygon-metrics">
-                  <strong>{drawnAreaHa} ha</strong> · Ubicación:{' '}
-                  <code>
-                    {drawnCentroid.lat.toFixed(3)}, {drawnCentroid.lon.toFixed(3)}
-                  </code>
-                </span>
-              )}
-            </div>
-            <div className="polygon-actions">
-              <button
-                type="button"
-                className="poly-action-btn"
-                onClick={handleUndoVertex}
-                disabled={customPolygon.length === 0}
-                title="Deshacer último vértice"
-              >
-                <RotateCcw size={14} />
-                <span>Deshacer</span>
-              </button>
-              <button
-                type="button"
-                className="poly-action-btn primary"
-                onClick={handleClosePolygon}
-                disabled={customPolygon.length < 3 || isPolygonClosed}
-                title="Cerrar polígono y calcular recomendación"
-              >
-                <CheckCircle2 size={14} />
-                <span>Cerrar lote</span>
-              </button>
-              <button
-                type="button"
-                className="poly-action-btn danger"
-                onClick={handleClearPolygon}
-                disabled={customPolygon.length === 0}
-                title="Limpiar polígono"
-              >
-                <Trash2 size={14} />
-                <span>Limpiar</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* VISOR SATELITAL LEAFLET */}
       <MapContainer
         center={[selectedCoords.lat, selectedCoords.lon]}
@@ -314,8 +174,7 @@ export function MapView({
           zoom={cameraTarget.zoom}
         />
         <MapInteractionHandler
-          selectionMode={selectionMode}
-          isPolygonClosed={isPolygonClosed}
+          isDrawingNewField={isDrawingNewField}
           onMapClick={handleInteractiveMapClick}
           onZoomChange={setCurrentZoom}
         />
@@ -352,15 +211,15 @@ export function MapView({
           maxZoom={18}
         />
 
-        {/* 4. Polígonos de Lotes de ejemplo (cambian de color/dato en vivo en Información histórica) */}
-        {DEMO_FIELDS.map((field) => {
-          const isSelected =
-            selectionMode === 'demo' && field.id === selectedDemoFieldId
+        {/* 4. Campos del Usuario desde la Base de Datos */}
+        {userFields.map((field) => {
+          const isSelected = !isDrawingNewField && field.id === selectedFieldId
+          const fieldCoords = { lat: field.lat, lon: field.lon }
 
           const histVisual =
             isHistoricalActive && historicalMode
               ? getLotHistoricalVisualForYear(
-                  field.centroide,
+                  fieldCoords,
                   historicalMode.year,
                   historicalMode.metric
                 )
@@ -388,55 +247,71 @@ export function MapView({
               ? 0.35
               : 0.16
 
+          const tooltipContent = (
+            <Tooltip sticky direction="top">
+              <div className="map-tooltip-title">{field.nombre}</div>
+              <div className="map-tooltip-sub">
+                {histVisual
+                  ? histVisual.detailText
+                  : field.hectareas !== null
+                    ? `${Math.round(field.hectareas)} ha`
+                    : `${field.lat.toFixed(3)}, ${field.lon.toFixed(3)}`}
+              </div>
+            </Tooltip>
+          )
+
+          if (field.polygon && field.polygon.length >= 3) {
+            return (
+              <Polygon
+                key={`${field.id}-${historicalMode?.year ?? 'now'}-${historicalMode?.metric ?? 'base'}`}
+                positions={field.polygon}
+                pathOptions={{
+                  color: strokeColor,
+                  weight: isSelected ? 3 : 2,
+                  fillColor,
+                  fillOpacity,
+                }}
+                eventHandlers={{
+                  click: () => onSelectUserField(field),
+                }}
+              >
+                {tooltipContent}
+              </Polygon>
+            )
+          }
+
           return (
-            <Polygon
+            <CircleMarker
               key={`${field.id}-${historicalMode?.year ?? 'now'}-${historicalMode?.metric ?? 'base'}`}
-              positions={field.poligono}
+              center={[field.lat, field.lon]}
+              radius={isSelected ? 10 : 7}
               pathOptions={{
                 color: strokeColor,
                 weight: isSelected ? 3 : 2,
                 fillColor,
-                fillOpacity,
+                fillOpacity: 0.75,
               }}
               eventHandlers={{
-                click: () => {
-                  onChangeSelectionMode('demo')
-                  handleDemoFieldSelect(field)
-                },
+                click: () => onSelectUserField(field),
               }}
             >
-              <Tooltip sticky direction="top">
-                <div className="map-tooltip-title">{field.nombre}</div>
-                <div className="map-tooltip-sub">
-                  {histVisual
-                    ? histVisual.detailText
-                    : `${field.superficieHa} ha · Agua en las raíces: ${Math.round(field.telemetriaBase.indice_humedad_radicular_pct)}%`}
-                </div>
-              </Tooltip>
-            </Polygon>
+              {tooltipContent}
+            </CircleMarker>
           )
         })}
 
-        {/* 5. Polígono Dibujado por el Productor */}
-        {selectionMode === 'polygon' && customPolygon.length > 0 && (
+        {/* 5. Polígono en Delimitación para Nuevo Campo */}
+        {isDrawingNewField && customPolygon.length > 0 && (
           <>
-            {isPolygonClosed || customPolygon.length >= 3 ? (
+            {customPolygon.length >= 3 ? (
               <Polygon
                 positions={customPolygon}
                 pathOptions={{
-                  color: selectedCoordHistoricalVisual
-                    ? THEME_COLORS.bg
-                    : isPolygonClosed
-                      ? THEME_COLORS.primary
-                      : THEME_COLORS.heatSoil,
+                  color: THEME_COLORS.heatSoil,
                   weight: 3,
-                  dashArray: isPolygonClosed ? undefined : '6 6',
-                  fillColor: selectedCoordHistoricalVisual
-                    ? selectedCoordHistoricalVisual.fillColor
-                    : isPolygonClosed
-                      ? THEME_COLORS.primary
-                      : THEME_COLORS.heatSoil,
-                  fillOpacity: selectedCoordHistoricalVisual ? 0.48 : 0.3,
+                  dashArray: '6 6',
+                  fillColor: THEME_COLORS.heatSoil,
+                  fillOpacity: 0.28,
                 }}
               />
             ) : (

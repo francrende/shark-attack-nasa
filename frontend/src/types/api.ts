@@ -171,3 +171,25 @@ export interface AuthResponse {
   user?: UserProfile
   profile?: UserProfile
 }
+
+// ============================================================================
+// CONTRATOS DE GESTIÓN DE CAMPOS / LOTES (BACK-4: /api/v1/fields)
+// ============================================================================
+
+export interface UserField {
+  id: string
+  user_id?: string
+  nombre: string
+  lat: number
+  lon: number
+  hectareas: number | null
+  created_at?: string
+  polygon?: [number, number][]
+}
+
+export interface FieldCreateRequest {
+  nombre: string
+  lat: number
+  lon: number
+  hectareas?: number | null
+}

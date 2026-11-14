@@ -84,17 +84,19 @@ export function CampaignConfigPanel({
               type="button"
               className={`campaign-btn summer-btn ${campana === 'verano' ? 'active' : ''}`}
               onClick={() => onChangeCampana('verano')}
+              title="Campaña gruesa"
             >
               <Sun size={15} />
-              <span>Campaña gruesa (verano)</span>
+              <span>Verano</span>
             </button>
             <button
               type="button"
               className={`campaign-btn winter-btn ${campana === 'invierno' ? 'active' : ''}`}
               onClick={() => onChangeCampana('invierno')}
+              title="Campaña fina"
             >
               <Snowflake size={15} />
-              <span>Campaña fina (invierno)</span>
+              <span>Invierno</span>
             </button>
           </div>
         </div>
@@ -115,7 +117,7 @@ export function CampaignConfigPanel({
             }}
           >
             <option value="" disabled>
-              Seleccione el cultivo antecesor...
+              Cultivo
             </option>
             <optgroup label="Campaña gruesa (verano)">
               {TODOS_LOS_CULTIVOS.filter((c) => c.campana === 'verano').map(
@@ -139,16 +141,16 @@ export function CampaignConfigPanel({
         </div>
       </div>
 
-      {/* 3. Prioridad de manejo */}
+      {/* 3. Objetivo */}
       <div className="control-group">
         <label className="control-label">
           <Sparkles size={14} />
-          <span>Prioridad de manejo</span>
+          <span>Objetivo</span>
         </label>
         <div
           className="objective-cards-grid"
           role="radiogroup"
-          aria-label="Prioridad de la campaña"
+          aria-label="Objetivo de la campaña"
         >
           {OBJETIVOS_KEYS.map((key) => {
             const meta = OBJETIVOS_PRODUCTOR_META[key]
@@ -159,24 +161,11 @@ export function CampaignConfigPanel({
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
-                className={`objective-card obj-${key} ${isSelected ? 'selected' : ''}`}
+                className={`objective-card ${isSelected ? 'selected' : ''}`}
                 onClick={() => onChangeObjetivo(key)}
               >
                 <span className="objective-title">{meta.titulo}</span>
-                <p className="objective-desc">{meta.subtitulo}</p>
-                <div
-                  className="objective-mini-split"
-                  title="Proporción entre Agua/Clima (azul) y Suelo (naranja)"
-                >
-                  <span
-                    className="mini-split-water"
-                    style={{ width: `${meta.pesoClima * 100}%` }}
-                  />
-                  <span
-                    className="mini-split-soil"
-                    style={{ width: `${meta.pesoSuelo * 100}%` }}
-                  />
-                </div>
+                <span className="objective-hover-info">{meta.subtitulo}</span>
               </button>
             )
           })}

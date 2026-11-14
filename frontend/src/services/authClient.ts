@@ -60,7 +60,7 @@ function parseErrorMessage(payload: unknown, fallback: string): string {
   return fallback
 }
 
-async function requestAuthJson<T>(
+export async function requestBackendJson<T>(
   path: string,
   options: RequestInit,
   fallbackError: string
@@ -77,7 +77,7 @@ async function requestAuthJson<T>(
     })
   } catch {
     throw new Error(
-      'No fue posible conectar con el servidor de autenticación. Verifique que el backend esté en ejecución o ingrese en modo demo.'
+      'No fue posible conectar con el servidor. Verifique que el backend esté en ejecución.'
     )
   }
 
@@ -112,7 +112,7 @@ export function extractUserFromAuthResponse(
 export async function loginUser(
   payload: AuthLoginRequest
 ): Promise<AuthResponse> {
-  return requestAuthJson<AuthResponse>(
+  return requestBackendJson<AuthResponse>(
     '/api/v1/auth/login',
     {
       method: 'POST',
@@ -125,7 +125,7 @@ export async function loginUser(
 export async function registerUser(
   payload: AuthRegisterRequest
 ): Promise<AuthResponse> {
-  return requestAuthJson<AuthResponse>(
+  return requestBackendJson<AuthResponse>(
     '/api/v1/auth/register',
     {
       method: 'POST',
@@ -136,7 +136,7 @@ export async function registerUser(
 }
 
 export async function fetchCurrentUser(token: string): Promise<UserProfile> {
-  return requestAuthJson<UserProfile>(
+  return requestBackendJson<UserProfile>(
     '/api/v1/auth/me',
     {
       method: 'GET',

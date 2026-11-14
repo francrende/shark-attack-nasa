@@ -50,6 +50,9 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-17** | Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"` | `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-16` | `[x]` |
 | **FRONT-18** | Pantalla de Inicio de Sesión y Registro Conectada a `BACK-3` (Con Modo Demo) | `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-15` | `[x]` |
 | **FRONT-19** | Rebranding a **Ereia** (Fraunces 600, Ícono PNG sin recuadro), Header `#FFF5E0` y Fondo Salvia `#A8BC82` | `frontend/public/ereia-icon.png`, `frontend/index.html`, `frontend/src/index.css`, `frontend/src/components/BrandBlock.tsx`, `frontend/src/components/AuthScreen.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-18` | `[x]` |
+| **FRONT-20** | Refinamiento de Panel Derecho, Pestañas tipo Carpeta y Header (Tonos Arena, Márgenes y Sombras sin Bordes) | `frontend/src/index.css`, `frontend/src/App.css` | `FRONT-19` | `[x]` |
+| **FRONT-21** | Segundo Header Colapsable de Gestión de Lotes del Usuario y Delimitación de Nuevos Campos (`BACK-4`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-20` | `[x]` |
+| **FRONT-22** | Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación | `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.css` | `FRONT-21` | `[x]` |
 
 ---
 
@@ -510,5 +513,55 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Marca:** Wordmark **Ereia** en `Fraunces` peso `600` (`40px`), con `"Ere"` en `#9E472A` (`--color-terracotta`) e `"ia"` en `#4B5B2D` (`--color-primary`), sin fondo ni caja alrededor del texto ni del ícono PNG.
   - **Subtítulo en línea:** *"Soporte para el cultivo"* ubicado al costado de **Ereia** para permitir mayor tamaño del título principal.
   - **Paleta actualizada:** Header superior y tarjeta `.auth-card` en `#FFF5E0` (`--color-header-bg`), y fondo general de la aplicación en `#A8BC82` (`--color-bg`, tono más claro que `#8AA15B`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-20: Refinamiento de Panel Derecho, Pestañas tipo Carpeta y Header (Tonos Arena, Márgenes y Sombras sin Bordes)
+- **Objetivo:** Unificar cromáticamente la pestaña activa y el panel derecho en tono arena claro (`#EAD9C0`), oscurecer las pestañas inactivas (`#C5A882`), alinear los márgenes laterales de las pestañas con el contenido interno y reemplazar los bordes de separación por sombras sutiles.
+- **Archivos Permitidos:**
+  - `frontend/src/index.css`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Jerarquía de tonos en carpeta derecha:** `--color-folder-pane: #EAD9C0` para `.right-analysis-pane`, `.right-folder-body` y `.nav-tab-btn.active`; `--color-folder-tab-inactive: #C5A882` (y `--color-folder-tab-hover: #D6BE9E`) para pestañas desactivadas.
+  - **Alineación de márgenes:** `.top-nav-tabs` con `padding: 0 24px` para coincidir con el `padding` horizontal de `24px` en `.right-folder-body`.
+  - **Sin bordes, con sombras:** Eliminación de bordes en `.left-map-pane`, `.nav-tab-btn`, `.nav-tab-btn.active`, `.right-folder-body` y `.top-navbar`, usando sombras sutiles en el panel derecho y pestaña activa, y `var(--shadow-md)` en `.top-navbar`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-21: Segundo Header Colapsable de Gestión de Lotes del Usuario y Delimitación de Nuevos Campos (`BACK-4`)
+- **Objetivo:** Reemplazar el selector flotante de `"Lotes de ejemplo"` por una barra superior colapsable ubicada debajo del header principal en el sector del mapa, que liste los campos reales del usuario desde la base de datos (`GET /api/v1/fields`) y permita delimitar y guardar nuevos campos con nombre (`POST /api/v1/fields`).
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/fieldsClient.ts`
+  - `frontend/src/components/FieldsSubheader.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Sin lotes estáticos de ejemplo:** En usuario autenticado se consultan sus campos en `GET /api/v1/fields`; en **Modo demo** se autentica contra el backend con un usuario demo fijo (`VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD`) para cargar los lotes demo desde la base de datos.
+  - **Barra flotante colapsable en el sector del mapa:** En estado colapsado muestra **`Mis campos (N)`** y **`Nuevo campo`**; al desplegar, **`Mis campos`** pasa a **`X`**, aparecen las pills de los campos del usuario hacia la derecha sin barra de fondo (alternando 5 colores de la paleta) y **`Nuevo campo`** se compacta a un botón con solo ícono de lápiz.
+  - **Persistencia de polígono y centroide:** Al guardar un nuevo campo se envía `nombre`, `lat`, `lon` y `hectareas` a `POST /api/v1/fields`, y los vértices del polígono se cachean en `localStorage` por `field_id` para dibujarlo en el mapa.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-22: Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación
+- **Objetivo:** Simplificar las etiquetas y controles de planificación (`Verano`/`Invierno`, `Cultivo`, `Objetivo` con expansión animada al pasar el mouse) y convertir el listado de estrategia de rotación en filas expandibles al hacer clic, con enlace discreto `+ Mas...` sin contenedor.
+- **Archivos Permitidos:**
+  - `frontend/src/components/SimulationControls.tsx`
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Campañas y cultivo antecesor:** Botones **`Verano`** (tooltip `"Campaña gruesa"`, amarillo) e **`Invierno`** (tooltip `"Campaña fina"`, azul) sin borde, con cambio de tono en `:hover` y color más oscuro al seleccionar; selector con placeholder `"Cultivo"` y exactamente la misma altura (`40px`).
+  - **Objetivo:** Renombrado de `"Prioridad de manejo"` a `"Objetivo"`, con las 3 pills del mismo tono tierra sin borde, altura uniforme (`min-height: 56px`) y animación de expansión al hacer `:hover` para mostrar la descripción.
+  - **Estrategia de rotación:** Eliminado el encabezado `"Comparativa de cultivos para esta campaña"`, filas del listado expandibles al tocarlas para ver el detalle de cada cultivo, y botón de fundamentos **`+ Mas...`** sin contenedor en la esquina inferior derecha.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
