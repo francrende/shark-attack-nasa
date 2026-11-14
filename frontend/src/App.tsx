@@ -3,9 +3,12 @@ import {
   Compass,
   History,
   Info,
-  Sprout,
+  LogOut,
+  User,
 } from 'lucide-react'
 import './App.css'
+import { AuthScreen } from './components/AuthScreen'
+import { BrandBlock } from './components/BrandBlock'
 import { HistoricalPanel } from './components/HistoricalPanel'
 import { MapView } from './components/MapView'
 import { RecommendationPanel } from './components/RecommendationPanel'
@@ -23,6 +26,11 @@ import {
   generateSimulatedResponse,
   simulateCropRotation,
 } from './services/apiClient'
+import {
+  clearStoredAuthToken,
+  fetchCurrentUser,
+  getStoredAuthToken,
+} from './services/authClient'
 import type {
   Campana,
   Coordenadas,
@@ -33,13 +41,44 @@ import type {
   SelectionMode,
   SimulacionWhatIf,
   SimulateResponse,
+  UserProfile,
 } from './types/api'
 import { calculatePolygonAreaHa } from './utils/geo'
 
 export type NavTabId = 'planificacion' | 'info_general' | 'historico'
+type AuthStatus = 'checking' | 'authenticated' | 'demo' | 'unauthenticated'
 
 export function App() {
   const defaultField = DEMO_FIELDS[0]
+
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking')
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const token = getStoredAuthToken()
+    if (!token) {
+      setAuthStatus('unauthenticated')
+      return
+    }
+
+    fetchCurrentUser(token)
+      .then((user) => {
+        if (cancelled) return
+        setCurrentUser(user)
+        setAuthStatus('authenticated')
+      })
+      .catch(() => {
+        if (cancelled) return
+        clearStoredAuthToken()
+        setCurrentUser(null)
+        setAuthStatus('unauthenticated')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Por regla de SKILLS_FRONTEND.md §3 y §4, la app inicia directamente en 'Planificación de campaña'
   const [activeTab, setActiveTab] = useState<NavTabId>('planificacion')
@@ -252,21 +291,83 @@ export function App() {
     whatIf.override_humedad_radicular_pct !== null ||
     whatIf.variacion_lluvia_esperada_pct !== 0
 
+  const handleAuthenticated = (user: UserProfile) => {
+    setCurrentUser(user)
+    setAuthStatus('authenticated')
+  }
+
+  const handleEnterDemo = () => {
+    setCurrentUser(null)
+    setAuthStatus('demo')
+  }
+
+  const handleLogout = () => {
+    clearStoredAuthToken()
+    setCurrentUser(null)
+    setAuthStatus('unauthenticated')
+  }
+
+  if (authStatus === 'checking') {
+    return (
+      <div className="auth-checking-shell">
+        <div className="auth-checking-card">
+          <img
+            src="/ereia-icon.png"
+            alt=""
+            className="auth-checking-icon"
+            aria-hidden="true"
+          />
+          <span>Verificando sesión...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (authStatus === 'unauthenticated') {
+    return (
+      <AuthScreen
+        onAuthenticated={handleAuthenticated}
+        onEnterDemo={handleEnterDemo}
+      />
+    )
+  }
+
   return (
     <div className="app-shell">
       {/* HEADER SUPERIOR SÓLIDO (#3A0C00) */}
       <header className="top-navbar">
-        <div className="brand-block">
-          <div className="brand-logo" aria-hidden="true">
-            <Sprout size={20} />
-          </div>
-          <div>
-            <div className="brand-title-row">
-              <h1>Shark Attack</h1>
-            </div>
-            <p className="brand-subtitle">
-              Monitoreo satelital y planificación agronómica de rotaciones
-            </p>
+        <div className="top-navbar-left">
+          <BrandBlock />
+
+          <div className="header-session-bar">
+            {authStatus === 'authenticated' && currentUser ? (
+              <>
+                <span className="header-user-pill">
+                  <User size={14} aria-hidden="true" />
+                  <span>{currentUser.nombre || currentUser.email}</span>
+                </span>
+                <button
+                  type="button"
+                  className="header-session-btn"
+                  onClick={handleLogout}
+                >
+                  <LogOut size={14} aria-hidden="true" />
+                  <span>Cerrar sesión</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="header-demo-pill">Modo demo</span>
+                <button
+                  type="button"
+                  className="header-session-btn"
+                  onClick={handleLogout}
+                >
+                  <User size={14} aria-hidden="true" />
+                  <span>Iniciar sesión</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>

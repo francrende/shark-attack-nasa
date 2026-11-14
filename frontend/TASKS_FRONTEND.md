@@ -48,6 +48,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-15** | Integración de las Pestañas de Carpeta al Componente Derecho Superpuestas sobre el Header | `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-14` | `[x]` |
 | **FRONT-16** | Diferir Estrategia de Rotación hasta Seleccionar Campaña y Cultivo Antecesor (Con Estado Vacío y Carga Asíncrona) | `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-12` | `[x]` |
 | **FRONT-17** | Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"` | `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-16` | `[x]` |
+| **FRONT-18** | Pantalla de Inicio de Sesión y Registro Conectada a `BACK-3` (Con Modo Demo) | `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-15` | `[x]` |
+| **FRONT-19** | Rebranding a **Ereia** (Fraunces 600, Ícono PNG sin recuadro), Header `#FFF5E0` y Fondo Salvia `#A8BC82` | `frontend/public/ereia-icon.png`, `frontend/index.html`, `frontend/src/index.css`, `frontend/src/components/BrandBlock.tsx`, `frontend/src/components/AuthScreen.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-18` | `[x]` |
 
 ---
 
@@ -462,5 +464,51 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
   - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
   - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-18: Pantalla de Inicio de Sesión y Registro Conectada a `BACK-3` (Con Modo Demo)
+- **Objetivo:** Implementar la vista inicial de autenticación (Iniciar sesión / Crear cuenta) alineada con el sistema de diseño *Analogue-Modern Field Journal* (`SKILLS_FRONTEND.md`) y conectada a los endpoints de Supabase Auth en FastAPI (`BACK-3`), permitiendo también ingresar en modo demostración.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/components/AuthScreen.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Flujo de entrada:** Pantalla de acceso al abrir la aplicación con opción de alternar entre **Iniciar sesión** y **Crear cuenta**, más un botón secundario **"Explorar en modo demo"** para acceder al mapa y planificación sin autenticarse.
+  - **Campos del formulario:**
+    - *Iniciar sesión:* Email y Contraseña (con botón para mostrar/ocultar contraseña).
+    - *Crear cuenta:* Nombre completo, Email y Contraseña (con botón para mostrar/ocultar contraseña).
+  - **Persistencia de sesión:** Guardar el `access_token` (JWT) en `localStorage` y validarlo al iniciar la app mediante `GET /api/v1/auth/me`. Mostrar en el header el usuario conectado con acción **"Cerrar sesión"** (o **"Iniciar sesión"** si ingresó en modo demo).
+  - **Conexión y manejo de errores:** Conectar directo a FastAPI (`POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `GET /api/v1/auth/me` usando `VITE_API_URL` o `http://localhost:8000` por defecto). Si el backend no responde, mostrar un aviso claro y respetuoso sugiriendo verificar el servidor o usar el modo demo.
+- **Especificación Técnica:**
+  1. Agregar en `frontend/src/types/api.ts` los contratos `AuthRegisterRequest`, `AuthLoginRequest`, `UserProfile` y `AuthResponse`.
+  2. Crear `frontend/src/services/authClient.ts` con `loginUser`, `registerUser`, `fetchCurrentUser`, y manejo de almacenamiento seguro del token en `localStorage`.
+  3. Crear `frontend/src/components/AuthScreen.tsx` respetando los tokens CSS (`--color-header-bg`, `--color-bg`, `--color-bg-card`, `--color-primary`, `--color-terracotta`, `--color-text`), tipografía `Newsreader` + `Plus Jakarta Sans`, lenguaje formal sin voseo y contraste WCAG AA.
+  4. Integrar el estado de sesión en `frontend/src/App.tsx` y los estilos en `frontend/src/App.css` (incluyendo el indicador de usuario y botón de sesión en `.top-navbar`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-19: Rebranding a **Ereia** (Fraunces 600, Ícono PNG sin recuadro), Header `#FFF5E0` y Fondo Salvia `#A8BC82`
+- **Objetivo:** Reemplazar la marca *Shark Attack* por **Ereia** en tipografía **Fraunces SemiBold (600)** bicolor (`Ere` en `#9E472A` e `ia` en `#4B5B2D`), incorporar el nuevo ícono PNG de brote sin recuadro junto al título, mover *"Soporte para el cultivo"* al costado de **Ereia**, y actualizar el header a `#FFF5E0`, el fondo principal a `#A8BC82` (variante más clara de `#8AA15B`) y la tarjeta de inicio de sesión al mismo color del header (`#FFF5E0`).
+- **Archivos Permitidos:**
+  - `frontend/public/ereia-icon.png`
+  - `frontend/index.html`
+  - `frontend/src/index.css`
+  - `frontend/src/components/BrandBlock.tsx`
+  - `frontend/src/components/AuthScreen.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Marca:** Wordmark **Ereia** en `Fraunces` peso `600` (`40px`), con `"Ere"` en `#9E472A` (`--color-terracotta`) e `"ia"` en `#4B5B2D` (`--color-primary`), sin fondo ni caja alrededor del texto ni del ícono PNG.
+  - **Subtítulo en línea:** *"Soporte para el cultivo"* ubicado al costado de **Ereia** para permitir mayor tamaño del título principal.
+  - **Paleta actualizada:** Header superior y tarjeta `.auth-card` en `#FFF5E0` (`--color-header-bg`), y fondo general de la aplicación en `#A8BC82` (`--color-bg`, tono más claro que `#8AA15B`).
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

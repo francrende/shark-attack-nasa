@@ -142,3 +142,32 @@ export interface DemoField {
   }
   sueloBase: PerfilSuelo
 }
+
+// ============================================================================
+// CONTRATOS DE AUTENTICACIÓN (BACK-3: /api/v1/auth/*)
+// ============================================================================
+
+export interface AuthRegisterRequest {
+  email: string
+  password: string
+  nombre: string
+}
+
+export interface AuthLoginRequest {
+  email: string
+  password: string
+}
+
+export interface UserProfile {
+  id: string
+  email: string
+  nombre: string
+}
+
+export interface AuthResponse {
+  access_token: string
+  refresh_token?: string
+  token_type?: string
+  user?: UserProfile
+  profile?: UserProfile
+}
