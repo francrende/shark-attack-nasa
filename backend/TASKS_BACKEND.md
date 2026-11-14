@@ -1,6 +1,6 @@
 # TASKS_BACKEND.md — Tablero y Protocolo de Tareas Atómicas (Track Backend & APIs NASA)
 
-> **Fuente de la Verdad:** Antes de proponer o programar cualquier tarea, el agente DEBE leer [`../CONTEXT.md`](../CONTEXT.md) (especialmente las **Secciones 3, 5 y 8.2.A**).
+> **Fuente de la Verdad:** Antes de proponer o programar cualquier tarea, el agente DEBE leer [`../CONTEXT.md`](../CONTEXT.md) (especialmente las **Secciones 3, 5 y 8**).
 
 ---
 
@@ -8,7 +8,7 @@
 
 Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de Backend, seguí **estrictamente estos 4 pasos en orden**:
 
-1. **Consultar el Boceto General:** Revisá los módulos orientativos de Backend en la **Sección 8.2.A** de [`../CONTEXT.md`](../CONTEXT.md) y el contrato JSON inmutable de la **Sección 5**.
+1. **Consultar el Contexto General:** Revisá las fuentes de datos de la NASA y SoilGrids en la **Sección 3** y el contrato JSON inmutable de la **Sección 5** de [`../CONTEXT.md`](../CONTEXT.md).
 2. **Hacer Preguntas de Definición (Obligatorio ANTES de cerrar la especificación o programar):**
    - No asumas decisiones que quedaron en el aire (ej. tiempos de timeout, cómo calcular anomalías históricas en NASA POWER, qué zonas cubrir en el fallback de SoilGrids, si los overrides *What-If* modifican el bloque `telemetria_nasa`, validaciones extras en Pydantic, etc.).
    - **Hacele preguntas claras y concretas al desarrollador** para terminar de definir el alcance exacto de la tarea.
