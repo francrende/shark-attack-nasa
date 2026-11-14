@@ -18,15 +18,18 @@ import type {
   SimulacionWhatIf,
 } from '../types/api'
 
-interface SimulationControlsProps {
+interface CampaignConfigProps {
   campana: Campana
   cultivoAnterior: CultivoId
   objetivoProductor: ObjetivoProductor
-  whatIf: SimulacionWhatIf
-  nasaDetectedHumidityPct: number
   onChangeCampana: (campana: Campana) => void
   onChangeCultivoAnterior: (cultivo: CultivoId) => void
   onChangeObjetivo: (objetivo: ObjetivoProductor) => void
+}
+
+interface WhatIfPanelProps {
+  whatIf: SimulacionWhatIf
+  nasaDetectedHumidityPct: number
   onChangeWhatIf: (whatIf: SimulacionWhatIf) => void
   onResetWhatIf: () => void
 }
@@ -38,44 +41,36 @@ const OBJETIVOS_KEYS: ObjetivoProductor[] = [
   'conservacion_suelo',
 ]
 
-export function SimulationControls({
+/**
+ * TARJETA 1 PRINCIPAL EN PLANIFICACIÓN DE CAMPAÑA:
+ * Selección de Tipo de Campaña, Último Cultivo y Objetivo del Productor.
+ */
+export function CampaignConfigPanel({
   campana,
   cultivoAnterior,
   objetivoProductor,
-  whatIf,
-  nasaDetectedHumidityPct,
   onChangeCampana,
   onChangeCultivoAnterior,
   onChangeObjetivo,
-  onChangeWhatIf,
-  onResetWhatIf,
-}: SimulationControlsProps) {
-  const isWhatIfModified =
-    whatIf.override_humedad_radicular_pct !== null ||
-    whatIf.variacion_lluvia_esperada_pct !== 0
-
-  const effectiveHumidity =
-    whatIf.override_humedad_radicular_pct ?? nasaDetectedHumidityPct
-
+}: CampaignConfigProps) {
   return (
     <section className="panel-section controls-section">
-      {/* PASO 2: CONFIGURACIÓN DE CAMPAÑA, ANTECESOR Y PRIORIDAD */}
       <div className="section-header-row">
         <div>
           <span className="section-eyebrow">
             <Compass size={13} />
-            <span>PASO 2 · ESTRATEGIA Y CONTEXTO DEL LOTE</span>
+            <span>CONFIGURACIÓN PRINCIPAL DE CAMPAÑA</span>
           </span>
-          <h2 className="section-title">Planificación de Campaña</h2>
+          <h2 className="section-title">Definición de Siembra y Objetivo</h2>
         </div>
       </div>
 
       <div className="controls-row-2col">
-        {/* Selector de Campaña (Invierno vs Verano) */}
+        {/* 1. Tipo de Campaña (Invierno vs Verano) */}
         <div className="control-group">
           <label className="control-label">
             <Calendar size={14} />
-            <span>Campaña a Sembrar</span>
+            <span>Tipo de Campaña</span>
           </label>
           <div className="campaign-toggle">
             <button
@@ -97,10 +92,10 @@ export function SimulationControls({
           </div>
         </div>
 
-        {/* Selector de Cultivo Anterior */}
+        {/* 2. Último Cultivo */}
         <div className="control-group">
           <label className="control-label" htmlFor="cultivo-anterior-select">
-            <span>Cultivo Antecesor (De qué viene el lote)</span>
+            <span>Último Cultivo (De qué viene el lote)</span>
           </label>
           <select
             id="cultivo-anterior-select"
@@ -132,11 +127,11 @@ export function SimulationControls({
         </div>
       </div>
 
-      {/* Selector de Objetivo del Productor (Pesos MCDA) */}
+      {/* 3. Objetivo del Productor */}
       <div className="control-group">
         <label className="control-label">
           <Sparkles size={14} />
-          <span>Prioridad Agronómica del Productor (Ponderación MCDA)</span>
+          <span>Objetivo Principal para esta Campaña</span>
         </label>
         <div className="objective-cards-grid">
           {OBJETIVOS_KEYS.map((key) => {
@@ -156,7 +151,7 @@ export function SimulationControls({
                   <span
                     className="weight-segment water"
                     style={{ width: `${meta.pesoClima * 100}%` }}
-                    title={`Peso Hidroclimático: ${Math.round(meta.pesoClima * 100)}%`}
+                    title={`Peso Agua y Clima: ${Math.round(meta.pesoClima * 100)}%`}
                   >
                     {Math.round(meta.pesoClima * 100)}% Agua/Clima
                   </span>
@@ -173,37 +168,63 @@ export function SimulationControls({
           })}
         </div>
       </div>
+    </section>
+  )
+}
 
-      {/* PASO 4: SIMULADOR INTERACTIVO "WHAT-IF" */}
-      <div className="what-if-box">
-        <div className="what-if-header">
-          <div className="what-if-title">
-            <Sliders size={15} />
-            <span>Simulación Interactiva "What-If" (En Tiempo Real)</span>
-          </div>
-          {isWhatIfModified && (
-            <button
-              type="button"
-              className="reset-whatif-btn"
-              onClick={onResetWhatIf}
-            >
-              <RotateCcw size={13} />
-              <span>Restaurar datos NASA</span>
-            </button>
-          )}
+/**
+ * TARJETA 3 INDEPENDIENTE EN PLANIFICACIÓN DE CAMPAÑA:
+ * Simulador Interactivo "What-If" separado de la configuración principal.
+ */
+export function WhatIfPanel({
+  whatIf,
+  nasaDetectedHumidityPct,
+  onChangeWhatIf,
+  onResetWhatIf,
+}: WhatIfPanelProps) {
+  const isWhatIfModified =
+    whatIf.override_humedad_radicular_pct !== null ||
+    whatIf.variacion_lluvia_esperada_pct !== 0
+
+  const effectiveHumidity =
+    whatIf.override_humedad_radicular_pct ?? nasaDetectedHumidityPct
+
+  return (
+    <section className="panel-section what-if-standalone-section">
+      <div className="section-header-row">
+        <div>
+          <span className="section-eyebrow">
+            <Sliders size={13} />
+            <span>SIMULACIÓN DE ESCENARIOS ("WHAT-IF")</span>
+          </span>
+          <h2 className="section-title">¿Qué pasa si cambia el clima?</h2>
         </div>
+        {isWhatIfModified && (
+          <button
+            type="button"
+            className="reset-whatif-btn"
+            onClick={onResetWhatIf}
+          >
+            <RotateCcw size={13} />
+            <span>Volver al dato real</span>
+          </button>
+        )}
+      </div>
 
+      <p className="what-if-helper-text">
+        Mové los controles para probar cómo cambiaría el ranking si llueve más o menos antes de sembrar:
+      </p>
+
+      <div className="what-if-box">
         <div className="what-if-sliders">
           {/* Slider 1: Override Humedad Radicular */}
           <div className="slider-control">
             <div className="slider-label-row">
-              <span>
-                Humedad Radicular Simulada (<code>GWETROOT</code>)
-              </span>
+              <span>Agua acumulada en las raíces al sembrar</span>
               <strong className="slider-val water">
                 {effectiveHumidity}%{' '}
                 {whatIf.override_humedad_radicular_pct === null
-                  ? '(Satélite NASA)'
+                  ? '(Dato Real)'
                   : '(Simulado)'}
               </strong>
             </div>
@@ -222,16 +243,16 @@ export function SimulationControls({
               }
             />
             <div className="slider-ticks">
-              <span>10% (Sequía severa)</span>
+              <span>10% (Sequía)</span>
               <span>50% (Media)</span>
-              <span>95% (Capacidad de campo)</span>
+              <span>95% (Suelo lleno)</span>
             </div>
           </div>
 
           {/* Slider 2: Variación de Lluvia Esperada */}
           <div className="slider-control">
             <div className="slider-label-row">
-              <span>Variación de Lluvias en Campaña</span>
+              <span>Variación de lluvias en la campaña</span>
               <strong
                 className={`slider-val ${whatIf.variacion_lluvia_esperada_pct < 0 ? 'heat' : 'water'}`}
               >
@@ -255,9 +276,9 @@ export function SimulationControls({
               }
             />
             <div className="slider-ticks">
-              <span>-50% (Año Niña Seco)</span>
+              <span>-50% (Más seco)</span>
               <span>0% (Normal)</span>
-              <span>+50% (Año Niño Húmedo)</span>
+              <span>+50% (Más lluvioso)</span>
             </div>
           </div>
         </div>

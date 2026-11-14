@@ -1,9 +1,18 @@
 import { useMemo, useState } from 'react'
-import { Satellite, Sprout } from 'lucide-react'
+import {
+  Compass,
+  History,
+  Info,
+  MessageSquare,
+  Sprout,
+} from 'lucide-react'
 import './App.css'
 import { MapView } from './components/MapView'
 import { RecommendationPanel } from './components/RecommendationPanel'
-import { SimulationControls } from './components/SimulationControls'
+import {
+  CampaignConfigPanel,
+  WhatIfPanel,
+} from './components/SimulationControls'
 import { TelemetryCards } from './components/TelemetryCards'
 import { DEMO_FIELDS } from './data/demoFields'
 import { generateSimulatedResponse } from './services/apiClient'
@@ -19,8 +28,13 @@ import type {
 } from './types/api'
 import { calculatePolygonAreaHa } from './utils/geo'
 
+export type NavTabId = 'info_general' | 'planificacion' | 'historico' | 'chat'
+
 export function App() {
   const defaultField = DEMO_FIELDS[0]
+
+  // Pestaña activa del menú superior
+  const [activeTab, setActiveTab] = useState<NavTabId>('info_general')
 
   // Estado GIS y selección de lote
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('demo')
@@ -33,7 +47,7 @@ export function App() {
   const [customPolygon, setCustomPolygon] = useState<[number, number][]>([])
   const [isPolygonClosed, setIsPolygonClosed] = useState<boolean>(false)
   const [activeGibsLayer, setActiveGibsLayer] =
-    useState<GibsLayerId>('modis_true_color')
+    useState<GibsLayerId>('none')
 
   // Estado agronómico y simulación What-If
   const [campana, setCampana] = useState<Campana>(defaultField.campanaDefault)
@@ -148,7 +162,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* HEADER SUPERIOR */}
+      {/* HEADER SUPERIOR CON MENÚ DE 4 PESTAÑAS */}
       <header className="top-navbar">
         <div className="brand-block">
           <div className="brand-logo">
@@ -162,69 +176,120 @@ export function App() {
               </span>
             </div>
             <p className="brand-subtitle">
-              Planificación de Rotaciones y Eficiencia Hídrica con Telemetría
-              Satelital NASA + SoilGrids
+              Planificación de Rotaciones y Eficiencia Hídrica para tu Campo
             </p>
           </div>
         </div>
 
-        <div className="navbar-status-group">
-          <div className="status-indicator">
-            <Satellite size={14} />
-            <span>Sensores: NASA POWER · SMAP L4 · MODIS · SoilGrids</span>
-          </div>
-        </div>
+        <nav className="top-nav-tabs" aria-label="Navegación principal">
+          <button
+            type="button"
+            className={`nav-tab-btn ${activeTab === 'info_general' ? 'active' : ''}`}
+            onClick={() => setActiveTab('info_general')}
+          >
+            <Info size={15} />
+            <span>Info general</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-tab-btn ${activeTab === 'planificacion' ? 'active' : ''}`}
+            onClick={() => setActiveTab('planificacion')}
+          >
+            <Compass size={15} />
+            <span>Planificación de campaña</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-tab-btn ${activeTab === 'historico' ? 'active' : ''}`}
+            onClick={() => setActiveTab('historico')}
+          >
+            <History size={15} />
+            <span>Información histórica</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
+            onClick={() => setActiveTab('chat')}
+          >
+            <MessageSquare size={15} />
+            <span>Chat</span>
+          </button>
+        </nav>
       </header>
 
-      {/* LAYOUT SPLIT-SCREEN (~58% MAPA IZQ / ~42% PANEL LATERAL DER) */}
-      <main className="split-dashboard">
-        <section className="left-map-pane">
-          <MapView
-            selectedCoords={selectedCoords}
-            selectionMode={selectionMode}
-            selectedDemoFieldId={selectedDemoFieldId}
-            customPolygon={customPolygon}
-            isPolygonClosed={isPolygonClosed}
-            activeGibsLayer={activeGibsLayer}
-            onSelectDemoField={handleSelectDemoField}
-            onChangeSelectionMode={handleChangeSelectionMode}
-            onSelectPoint={handleSelectPoint}
-            onUpdateCustomPolygon={handleUpdateCustomPolygon}
-            onChangeGibsLayer={setActiveGibsLayer}
-          />
-        </section>
+      {/* CONTENIDO SEGÚN LA PESTAÑA ACTIVA */}
+      {activeTab === 'chat' ? (
+        /* En 'Chat' NO se muestra el mapa satelital */
+        <main className="full-page-pane">
+          <section className="panel-section empty-tab-section" />
+        </main>
+      ) : (
+        /* En 'Info general', 'Planificación de campaña' e 'Información histórica' se muestra el Mapa a la izquierda */
+        <main className="split-dashboard">
+          <section className="left-map-pane">
+            <MapView
+              selectedCoords={selectedCoords}
+              selectionMode={selectionMode}
+              selectedDemoFieldId={selectedDemoFieldId}
+              customPolygon={customPolygon}
+              isPolygonClosed={isPolygonClosed}
+              activeGibsLayer={activeGibsLayer}
+              onSelectDemoField={handleSelectDemoField}
+              onChangeSelectionMode={handleChangeSelectionMode}
+              onSelectPoint={handleSelectPoint}
+              onUpdateCustomPolygon={handleUpdateCustomPolygon}
+              onChangeGibsLayer={setActiveGibsLayer}
+            />
+          </section>
 
-        <aside className="right-analysis-pane">
-          <TelemetryCards
-            ubicacion={simulationResult.ubicacion}
-            loteLabel={currentLoteLabel}
-            superficieHa={currentSuperficieHa}
-            telemetria={simulationResult.telemetria_nasa}
-            perfilSuelo={simulationResult.perfil_suelo}
-            isWhatIfActive={isWhatIfActive}
-          />
+          <aside className="right-analysis-pane">
+            {activeTab === 'info_general' && (
+              <TelemetryCards
+                ubicacion={simulationResult.ubicacion}
+                loteLabel={currentLoteLabel}
+                superficieHa={currentSuperficieHa}
+                telemetria={simulationResult.telemetria_nasa}
+                perfilSuelo={simulationResult.perfil_suelo}
+                isWhatIfActive={isWhatIfActive}
+              />
+            )}
 
-          <SimulationControls
-            campana={campana}
-            cultivoAnterior={cultivoAnterior}
-            objetivoProductor={objetivoProductor}
-            whatIf={whatIf}
-            nasaDetectedHumidityPct={
-              baselineResult.telemetria_nasa.indice_humedad_radicular_pct
-            }
-            onChangeCampana={setCampana}
-            onChangeCultivoAnterior={setCultivoAnterior}
-            onChangeObjetivo={setObjetivoProductor}
-            onChangeWhatIf={setWhatIf}
-            onResetWhatIf={handleResetWhatIf}
-          />
+            {activeTab === 'planificacion' && (
+              <>
+                <CampaignConfigPanel
+                  campana={campana}
+                  cultivoAnterior={cultivoAnterior}
+                  objetivoProductor={objetivoProductor}
+                  onChangeCampana={setCampana}
+                  onChangeCultivoAnterior={setCultivoAnterior}
+                  onChangeObjetivo={setObjetivoProductor}
+                />
 
-          <RecommendationPanel
-            recomendacion={simulationResult.recomendacion_principal}
-            ranking={simulationResult.ranking_cultivos}
-          />
-        </aside>
-      </main>
+                <RecommendationPanel
+                  recomendacion={simulationResult.recomendacion_principal}
+                  ranking={simulationResult.ranking_cultivos}
+                />
+
+                <WhatIfPanel
+                  whatIf={whatIf}
+                  nasaDetectedHumidityPct={
+                    baselineResult.telemetria_nasa.indice_humedad_radicular_pct
+                  }
+                  onChangeWhatIf={setWhatIf}
+                  onResetWhatIf={handleResetWhatIf}
+                />
+              </>
+            )}
+
+            {activeTab === 'historico' && (
+              <section className="panel-section empty-tab-section" />
+            )}
+          </aside>
+        </main>
+      )}
     </div>
   )
 }

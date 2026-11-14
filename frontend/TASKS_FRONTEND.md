@@ -35,6 +35,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-2** | Visor GIS Satelital con Leaflet, Capas WMTS de NASA GIBS y 3 Modos de Selección/Dibujo de Lote | `frontend/src/components/MapView.tsx`, `frontend/src/utils/geo.ts`, `frontend/src/data/demoFields.ts` | `FRONT-1` | `[x]` |
 | **FRONT-3** | Panel de Telemetría NASA/Suelo, Selectores de Campaña/Objetivo y Controles Interactivos *What-If* | `frontend/src/components/TelemetryCards.tsx`, `frontend/src/components/SimulationControls.tsx` | `FRONT-1` | `[x]` |
 | **FRONT-4** | Tarjeta de Recomendación Explicada, Gráficos de Ranking de Cultivos y Dashboard Split-Screen Integrado | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-2`, `FRONT-3` | `[x]` |
+| **FRONT-5** | Ajuste de Capas del Mapa ("Mapa satelital") y Separación de Configuración Principal vs. Simulador *What-If* | `frontend/src/data/demoFields.ts`, `frontend/src/components/SimulationControls.tsx` | `FRONT-2`, `FRONT-3` | `[x]` |
+| **FRONT-6** | Menú Superior de 4 Pestañas (`Info general`, `Planificación de campaña`, `Información histórica`, `Chat`) | `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-4`, `FRONT-5` | `[x]` |
 
 ---
 
@@ -111,5 +113,39 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   1. Crear `frontend/src/components/RecommendationPanel.tsx` con el medidor SVG circular del Score Final, barras comparativas de los dos pilares, flujo visual de la secuencia de rotación y barras horizontales del ranking.
   2. Crear `frontend/src/App.tsx` integrando `MapView`, `TelemetryCards`, `SimulationControls` y `RecommendationPanel` con estado reactivo sincronizado.
   3. Crear `frontend/src/App.css` implementando todos los estilos del dashboard split-screen, tarjetas, barras de progreso, controles del mapa y diseño responsivo aplicando la paleta oficial.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-5: Ajuste de Capas del Mapa ("Mapa satelital") y Separación de Configuración Principal vs. Simulador *What-If*
+- **Objetivo:** Eliminar la capa `"Vista Real del cielo"`, renombrar `"Solo lotes y caminos"` a `"Mapa satelital"` como opción por defecto, y desacoplar los controles de planificación en dos componentes independientes: `CampaignConfigPanel` (Tipo de campaña, Último cultivo y Objetivo) y `WhatIfPanel` (Simulador interactivo separado).
+- **Archivos Permitidos:** `frontend/src/data/demoFields.ts`, `frontend/src/components/SimulationControls.tsx`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Sacar `"Vista Real del cielo"` (`modis_true_color`) y dejar la capa limpia renombrada a **`"Mapa satelital"`**.
+  - Separar la configuración principal (Tipo de campaña, Último cultivo y Objetivo) del bloque *What-If* para que en la pestaña `"Planificación de campaña"` se muestre primero la Configuración Principal, luego la Recomendación y Ranking, y debajo en una tarjeta independiente el Simulador *What-If*.
+- **Especificación Técnica:**
+  1. En `frontend/src/data/demoFields.ts`, configurar el ítem `'none'` con `shortLabel: 'Mapa satelital'` y `name: 'Mapa satelital'`.
+  2. En `frontend/src/components/SimulationControls.tsx`, exportar dos componentes separados: `CampaignConfigPanel` (Paso 2 principal) y `WhatIfPanel` (Tarjeta independiente para simular escenarios de agua y lluvia).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b`
+
+---
+
+### `[x]` FRONT-6: Menú Superior de 4 Pestañas (`Info general`, `Planificación de campaña`, `Información histórica`, `Chat`)
+- **Objetivo:** Incorporar en el Header superior un menú de navegación con 4 pestañas que controle qué módulos se visualizan en el panel derecho y cuándo se muestra u oculta el mapa satelital.
+- **Archivos Permitidos:** `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Pestaña 1 — `Info general`:** Muestra el Mapa Satelital a la izquierda y el Paso 1 (`TelemetryCards`: estado hídrico, lluvias, calor y suelo del lote) a la derecha.
+  - **Pestaña 2 — `Planificación de campaña`:** Muestra el Mapa Satelital a la izquierda y en el panel derecho, en este orden exacto:
+    1. Tarjeta 1: Configuración Principal (`CampaignConfigPanel`: Tipo de campaña, Último cultivo, Objetivo).
+    2. Tarjeta 2: Recomendación y Ranking (`RecommendationPanel`: Paso 3).
+    3. Tarjeta 3 (separada): Simulador *What-If* (`WhatIfPanel`).
+  - **Pestaña 3 — `Información histórica`:** Mantiene el **Mapa Satelital visible a la izquierda** (para permitir visualizar la evolución histórica de temperatura de la tierra o tipos de cultivo en el mapa) y deja el panel derecho con un contenedor vacío preparado para los gráficos históricos.
+  - **Pestaña 4 — `Chat`:** Única pestaña donde **no se muestra el mapa**, dejando el área principal vacía lista para integrar el asistente conversacional.
+- **Especificación Técnica:**
+  1. Agregar el estado `activeTab: 'info_general' | 'planificacion' | 'historico' | 'chat'` en `frontend/src/App.tsx` y renderizar la barra de pestañas en el Header superior.
+  2. Mantener montado o visible el panel izquierdo del mapa en `info_general`, `planificacion` e `historico`, y ocultarlo cuando `activeTab === 'chat'`.
+  3. Estilizar las pestañas del menú superior y los contenedores vacíos de `Información histórica` y `Chat` en `frontend/src/App.css` respetando la paleta `#4B5B2D`, `#FFF5E0` y `#22181C` y las fuentes `Newsreader` / `Plus Jakarta Sans`.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

@@ -119,9 +119,7 @@ export function RecommendationPanel({
         <div className="pillars-breakdown">
           <div className="pillar-item">
             <div className="pillar-label-row">
-              <span>
-                Pilar Hidroclimático NASA (<code>S_hidroclimatico</code>)
-              </span>
+              <span>Aptitud frente al Agua y Clima</span>
               <strong className="pillar-score water">
                 {recomendacion.sub_scores.hidroclimatico} / 100
               </strong>
@@ -138,9 +136,7 @@ export function RecommendationPanel({
 
           <div className="pillar-item">
             <div className="pillar-label-row">
-              <span>
-                Pilar Salud del Suelo y Rotación (<code>S_suelo</code>)
-              </span>
+              <span>Aporte al Suelo y Rotación</span>
               <strong className="pillar-score heat">
                 {recomendacion.sub_scores.suelo} / 100
               </strong>

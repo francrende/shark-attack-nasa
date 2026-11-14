@@ -60,10 +60,11 @@
 }
 
 .brand-title-row h1 {
+  font-family: var(--font-heading);
   color: var(--color-bg);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
 }
 
 .nasa-challenge-badge {
@@ -85,6 +86,61 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.top-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.nav-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid rgba(255, 245, 224, 0.25);
+  background-color: rgba(255, 245, 224, 0.08);
+  color: var(--color-bg);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.nav-tab-btn:hover {
+  background-color: rgba(255, 245, 224, 0.2);
+  border-color: rgba(255, 245, 224, 0.5);
+}
+
+.nav-tab-btn.active {
+  background-color: var(--color-bg);
+  color: var(--color-primary);
+  border-color: var(--color-bg);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
+}
+
+.full-page-pane {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 24px;
+  background-color: var(--color-bg);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.empty-tab-section {
+  flex: 1;
+  min-height: 320px;
+}
+
+.what-if-helper-text {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
 }
 
 .status-indicator {
@@ -479,7 +535,8 @@
 }
 
 .section-title {
-  font-size: 17px;
+  font-family: var(--font-heading);
+  font-size: 20px;
   color: var(--color-primary);
   margin-top: 2px;
 }
@@ -983,7 +1040,8 @@
 }
 
 .winner-crop-name {
-  font-size: 24px;
+  font-family: var(--font-heading);
+  font-size: 26px;
   font-weight: 800;
   color: var(--color-primary-darker);
   margin-top: 4px;

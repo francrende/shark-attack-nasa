@@ -82,12 +82,11 @@ export function TelemetryCards({
 
       <div className="telemetry-meta-bar">
         <span>
-          Último pase NASA POWER válido:{' '}
-          <strong>{telemetria.fecha_ultimo_dato_valido}</strong> (filtro lag{' '}
-          <code>!= -999</code>)
+          Última lectura satelital consolidada:{' '}
+          <strong>{telemetria.fecha_ultimo_dato_valido}</strong>
         </span>
         {isWhatIfActive && (
-          <span className="what-if-active-pill">Escenario What-If Activo</span>
+          <span className="what-if-active-pill">Escenario Simulado Activo</span>
         )}
       </div>
 
@@ -98,14 +97,14 @@ export function TelemetryCards({
           <div className="telemetry-card-head">
             <span className="card-badge water">
               <Droplets size={14} />
-              <span>Humedad & Lluvias (NASA)</span>
+              <span>Agua en el Suelo y Lluvias</span>
             </span>
-            <span className="sensor-tag">SMAP + GPM</span>
+            <span className="sensor-tag">Satélite NASA</span>
           </div>
 
           <div className="metric-block">
             <div className="metric-label-row">
-              <span>Humedad Radicular (GWETROOT 0–1m)</span>
+              <span>Agua en Zona de Raíces (hasta 1 m)</span>
               <strong className="metric-value water">{radicularPct}%</strong>
             </div>
             <div className="progress-track water-track">
@@ -116,16 +115,16 @@ export function TelemetryCards({
             </div>
             <span className="metric-subtext">
               {radicularPct < 38
-                ? 'Reserva ajustada: riesgo ante sequía estival'
+                ? 'Reserva ajustada: poca agua guardada en profundidad'
                 : radicularPct < 55
-                  ? 'Reserva intermedia en zona radicular'
-                  : 'Perfil radicular bien recargado'}
+                  ? 'Reserva intermedia disponible para las raíces'
+                  : 'Muy buena reserva de agua acumulada en el perfil'}
             </span>
           </div>
 
           <div className="metric-block">
             <div className="metric-label-row">
-              <span>Humedad Superficial (GWETTOP 0–5cm)</span>
+              <span>Humedad Superficial para Siembra (0–5 cm)</span>
               <strong className="metric-value water">{superficialPct}%</strong>
             </div>
             <div className="progress-track water-track">
@@ -141,7 +140,7 @@ export function TelemetryCards({
           <div className="rain-anomaly-box">
             <div className="rain-anomaly-left">
               <CloudRain size={16} />
-              <span>Anomalía Lluvia (90 días)</span>
+              <span>Lluvias últimos 3 meses vs. promedio</span>
             </div>
             <strong
               className={`rain-anomaly-val ${lluviaAnom < 0 ? 'deficit' : 'surplus'}`}
@@ -156,14 +155,14 @@ export function TelemetryCards({
           <div className="telemetry-card-head">
             <span className="card-badge heat">
               <Flame size={14} />
-              <span>Estrés Térmico & Suelo</span>
+              <span>Calor y Salud del Suelo</span>
             </span>
-            <span className="sensor-tag">MODIS + SoilGrids</span>
+            <span className="sensor-tag">Suelo & Clima</span>
           </div>
 
           <div className="metric-block">
             <div className="metric-label-row">
-              <span>Riesgo Golpe de Calor (T2M_MAX)</span>
+              <span>Riesgo de Golpes de Calor en Verano</span>
               <strong className="metric-value heat">
                 {telemetria.riesgo_termico_verano.toUpperCase()}
               </strong>
@@ -178,7 +177,7 @@ export function TelemetryCards({
 
           <div className="metric-block">
             <div className="metric-label-row">
-              <span>Carbono Orgánico (SOC 0–30cm)</span>
+              <span>Materia Orgánica / Carbono del Suelo</span>
               <strong className="metric-value heat">
                 {perfilSuelo.carbono_organico_g_kg} g/kg
               </strong>

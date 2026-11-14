@@ -273,7 +273,7 @@ export function MapView({
           <div className="map-point-hint">
             <Crosshair size={14} />
             <span>
-              Hacé clic en cualquier punto del mapa para detectar telemetría NASA POWER + SoilGrids (
+              Tocá cualquier punto del mapa para analizar el agua y el suelo de ese lote (
               <code>
                 {selectedCoords.lat.toFixed(4)}, {selectedCoords.lon.toFixed(4)}
               </code>
@@ -428,23 +428,23 @@ export function MapView({
                 color: '#22181C',
               }}
             >
-              NASA Point ({selectedCoords.lat.toFixed(3)},{' '}
+              Lote analizado ({selectedCoords.lat.toFixed(3)},{' '}
               {selectedCoords.lon.toFixed(3)})
             </span>
           </Tooltip>
         </CircleMarker>
       </MapContainer>
 
-      {/* PANEL FLOTANTE INFERIOR: SELECTOR DE CAPAS CIENTÍFICAS NASA GIBS Y LEYENDA */}
+      {/* PANEL FLOTANTE INFERIOR: FILTROS VISUALES DEL MAPA EXPLICADOS EN SIMPLE */}
       <div className="map-overlay-bottom">
         <div className="gibs-panel-header">
           <div className="gibs-title">
             <Layers size={15} />
-            <span>Capas Satelitales NASA GIBS ({gibsDate})</span>
+            <span>Filtros del Mapa: ¿Qué querés observar en la zona?</span>
           </div>
           {currentGibsConfig.id !== 'none' && (
             <label className="gibs-opacity-control">
-              <span>Opacidad {Math.round(gibsOpacity * 100)}%</span>
+              <span>Intensidad del filtro {Math.round(gibsOpacity * 100)}%</span>
               <input
                 type="range"
                 min={0.15}
