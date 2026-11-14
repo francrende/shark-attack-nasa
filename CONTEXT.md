@@ -221,13 +221,15 @@ Pasos para dejar el entorno local listo después de clonar o hacer `git pull` de
 ```text
 shark-attack-nasa/
 ├── backend/
-│   ├── ml/                # Entrenamiento (train_baseline.py) y modelo (.joblib)
+│   ├── ml/                # Entrenamiento (train_baseline.py), predictor y TASKS_ML.md
 │   ├── providers/         # Clientes HTTP (NASA POWER API, ISRIC SoilGrids API)
 │   ├── routers/           # Endpoints FastAPI (/api/v1/simulate)
 │   ├── services/          # Lógica de negocio y matriz de rotación agronómica
-│   └── requirements.txt   # Dependencias de Python
+│   ├── requirements.txt   # Dependencias de Python
+│   └── TASKS_BACKEND.md   # Tablero y protocolo de tareas atómicas de Backend
 ├── frontend/              # Aplicación React + TypeScript + Vite + Leaflet
-└── CONTEXT.md             # Documentación de arquitectura y contratos
+│   └── TASKS_FRONTEND.md  # Tablero y protocolo de tareas atómicas de Frontend
+└── CONTEXT.md             # Documentación de arquitectura, contratos y boceto general
 ```
 
 ### 7.2. Levantar el Frontend (`React + TypeScript + Vite`)
@@ -260,4 +262,50 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 - El backend responderá en `http://localhost:8000` (y la documentación interactiva Swagger UI en `http://localhost:8000/docs`).
+
+---
+
+## 8. Metodología de Desarrollo con Agentes y Boceto por Rol
+
+El proyecto se desarrolla en equipo utilizando **Spec-Driven Development (SDD) con Tareas Atómicas** divididas en **3 tracks independientes** para evitar conflictos en Git (`merge conflicts`):
+- **Track Backend:** [`backend/TASKS_BACKEND.md`](./backend/TASKS_BACKEND.md)
+- **Track ML & Agronomía:** [`backend/ml/TASKS_ML.md`](./backend/ml/TASKS_ML.md)
+- **Track Frontend & GIS UI:** [`frontend/TASKS_FRONTEND.md`](./frontend/TASKS_FRONTEND.md)
+
+### 8.1. Flujo de Trabajo de cada Desarrollador con su Agente
+Cada archivo `TASKS_*.md` comienza sin tareas cerradas pre-impuestas. Al iniciar cada bloque de trabajo:
+1. El desarrollador indica a su agente qué módulo del boceto general quiere abordar.
+2. **Entrevista de Definición (Obligatoria):** Antes de terminar de especificar la tarea o escribir código, el agente **debe hacerle preguntas al desarrollador** para definir decisiones abiertas (casos borde, umbrales, UX, fallbacks).
+3. Con las respuestas del desarrollador, el agente redacta la especificación de la **Tarea Atómica** en su archivo `TASKS_*.md` correspondiente.
+4. Una vez aprobada la especificación, el agente implementa el código respetando su **Scope Exclusivo de Carpetas** y ejecuta el comando de verificación (*Definition of Done*).
+
+### 8.2. Boceto General de Módulos Sugeridos por Rol
+
+#### A. Boceto para Track Backend (`backend/TASKS_BACKEND.md`)
+- **Alcance de archivos permitido:** `backend/schemas.py`, `backend/providers/`, `backend/routers/`, `backend/services/simulation_service.py`, `backend/main.py`.
+- **Módulos orientativos a especificar con el agente:**
+  1. **Contratos y Esquemas Pydantic (`schemas.py`):** Validación estricta del JSON de la Sección 5 (`SimulateRequest` y `SimulateResponse`).
+  2. **Proveedor NASA POWER (`providers/nasa_power.py`):** Consulta asíncrona (`community=AG`), filtrado del lag `-999.0` en los últimos 30 días, cálculo de anomalía de lluvias (90d), riesgo térmico, caché en memoria y fallback si la API de la NASA demora.
+  3. **Proveedor ISRIC SoilGrids (`providers/soilgrids.py`):** Consulta de propiedades edáficas (`clay`, `sand`, `silt`, `soc`) con timeout corto (`~2.5s`) y fallback regional pre-cacheado para evitar caídas si SoilGrids no responde.
+  4. **Orquestador y Endpoint FastAPI (`services/simulation_service.py`, `routers/simulate.py`, `main.py`):** Consulta en paralelo (`asyncio.gather`) a NASA + SoilGrids, aplicación de overrides *What-If*, integración con el predictor de ML (con fallback autónomo si la rama de ML aún no fue mergeada) y configuración de CORS.
+
+#### B. Boceto para Track ML & Agronomía (`backend/ml/TASKS_ML.md`)
+- **Alcance de archivos permitido:** `backend/ml/` (`train_baseline.py`, `predictor.py`, `modelo_agro.joblib`) y `backend/services/rotation_matrix.py`.
+- **Interfaz de conexión sugerida con Backend:** Exponer en `backend/ml/predictor.py` una función clara (ej. `evaluate_crops(campana, cultivo_anterior, objetivo_productor, nasa_data, soil_data) -> dict`) que reciba los diccionarios de clima y suelo y devuelva el ranking y la recomendación explicada.
+- **Módulos orientativos a especificar con el agente:**
+  1. **Matriz de Transición Agronómica (`services/rotation_matrix.py`):** Reglas determinísticas para calcular $S_{\text{suelo}}$ (`0` a `100`) según `cultivo_anterior -> cultivo_candidato`, balance C/N, nivel de carbono orgánico (`soc`), diagnóstico de `condicion_rotacion_previa` y armado de `secuencia_sugerida` (`invierno -> verano`).
+  2. **Generador de Dataset FAO-56 y Entrenamiento (`ml/train_baseline.py`):** Calibración de curvas de respuesta hídrica y térmica para los cultivos de invierno y verano sobre las 8 features de la Sección 4.3, entrenamiento de `HistGradientBoostingRegressor` / `RandomForestRegressor` y guardado en `modelo_agro.joblib`.
+  3. **Motor de Inferencia Híbrido y Explicabilidad (`ml/predictor.py`):** Carga en memoria del `.joblib`, combinación ponderada ($w_{\text{clima}}, w_{\text{suelo}}$) según `objetivo_productor`, clasificación semántica del `riesgo` y generación dinámica de `factores_clave_ml` y `explicacion`.
+
+#### C. Boceto para Track Frontend & GIS UI (`frontend/TASKS_FRONTEND.md`)
+- **Alcance de archivos permitido:** Carpeta `frontend/`.
+- **Módulos orientativos a especificar con el agente:**
+  1. **Tipos TypeScript, Lotes Demo y Cliente API (`types/api.ts`, `data/demoFields.ts`, `services/apiClient.ts`):** Contratos idénticos al JSON de la Sección 5, lotes pre-cargados con polígonos reales y cliente HTTP con fallback reactivo local para poder desarrollar sin depender de que el Backend esté encendido.
+  2. **Visor Satelital + Capas NASA GIBS + Carga de Campo (`components/MapView.tsx`):**
+     - Mapa base satelital de alta resolución (`Esri.WorldImagery`) donde se visualizan las divisiones de los campos.
+     - Superposición de teselas WMTS de **NASA GIBS** (`SMAP Humedad Radicular`, `MODIS NDVI`, `MODIS LST`, `IMERG Lluvias`) usando una fecha consolidada segura (`hoy - 5 días`).
+     - Tres formas de seleccionar el lote (enviando siempre el centroide `lat, lon` al Backend): **Lotes Demo pre-pintados**, **Herramienta para pintar el polígono del lote sobre el mapa** y **Clic rápido en una coordenada**.
+  3. **Tarjetas de Telemetría, Simulador What-If y Ranking (`components/`):** Visualización de datos de NASA POWER y SoilGrids, selectores de campaña/antecesor/objetivo, sliders reactivos (*What-If*) y tarjeta principal de recomendación con barras comparativas de cultivos.
+  4. **Dashboard Integrado (`App.tsx`):** Diseño estilo *OneSoil / NASA Worldview* de vista dividida (Mapa + Panel lateral) conectado de punta a punta.
+
 
