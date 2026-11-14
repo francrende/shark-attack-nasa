@@ -1,13 +1,17 @@
+import { useState } from 'react'
 import {
   AlertTriangle,
   Award,
   BarChart3,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   GitCommitHorizontal,
   Info,
   ShieldAlert,
 } from 'lucide-react'
 import { CULTIVOS_CATALOGO } from '../data/demoFields'
+import { THEME_COLORS } from '../theme/mapColors'
 import type {
   CultivoId,
   RankingCultivoItem,
@@ -18,6 +22,7 @@ import type {
 interface RecommendationPanelProps {
   recomendacion: RecomendacionPrincipal
   ranking: RankingCultivoItem[]
+  isWhatIfActive?: boolean
 }
 
 function getCultivoDisplayName(idOrRaw: string): string {
@@ -33,64 +38,84 @@ function getRiskLabelAndClass(riesgo: RiesgoNivel): {
 } {
   switch (riesgo) {
     case 'bajo':
-      return { label: 'Riesgo Bajo', className: 'risk-badge low' }
+      return { label: 'Riesgo bajo', className: 'risk-badge low' }
     case 'medio':
-      return { label: 'Riesgo Medio', className: 'risk-badge medium' }
+      return { label: 'Riesgo medio', className: 'risk-badge medium' }
     case 'alto':
-      return { label: 'Riesgo Alto', className: 'risk-badge high' }
+      return { label: 'Riesgo alto', className: 'risk-badge high' }
     case 'critico':
-      return { label: 'Riesgo Crítico', className: 'risk-badge critical' }
+      return { label: 'Riesgo muy alto', className: 'risk-badge critical' }
   }
 }
 
 export function RecommendationPanel({
   recomendacion,
   ranking,
+  isWhatIfActive = false,
 }: RecommendationPanelProps) {
+  const [showDetail, setShowDetail] = useState<boolean>(false)
+  const [showAllCrops, setShowAllCrops] = useState<boolean>(false)
+
   const winnerName = getCultivoDisplayName(recomendacion.cultivo)
   const winnerMeta = CULTIVOS_CATALOGO[recomendacion.cultivo as CultivoId]
 
-  // Parámetros del anillo SVG del Score Final
+  const roundedFinalScore = Math.round(recomendacion.score_final)
+  const roundedWaterScore = Math.round(recomendacion.sub_scores.hidroclimatico)
+  const roundedSoilScore = Math.round(recomendacion.sub_scores.suelo)
+
+  // Primera oración corta del porqué como conclusión rápida (< 5s)
+  const headlineReason =
+    recomendacion.factores_clave_ml[0] ??
+    'Se adapta mejor al agua disponible en tu lote y cuida la rotación del suelo.'
+
+  // Parámetros del anillo SVG del Puntaje general
   const radius = 38
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset =
-    circumference - (Math.min(100, recomendacion.score_final) / 100) * circumference
+    circumference - (Math.min(100, roundedFinalScore) / 100) * circumference
+
+  // Anti-clutter: mostrar Top 3 por defecto
+  const visibleRanking = showAllCrops ? ranking : ranking.slice(0, 3)
 
   return (
-    <section className="panel-section recommendation-section">
+    <section
+      className="panel-section recommendation-section"
+      aria-live="polite"
+    >
       <div className="section-header-row">
         <div>
           <span className="section-eyebrow">
             <Award size={13} />
-            <span>PASO 3 · DECISIÓN AGRONÓMICA EXPLICADA (ML + MCDA)</span>
+            <span>RECOMENDACIÓN PARA TU LOTE</span>
           </span>
-          <h2 className="section-title">Recomendación y Ranking</h2>
+          <h2 className="section-title">¿Qué te conviene sembrar?</h2>
         </div>
+        {isWhatIfActive && (
+          <span className="what-if-active-pill">Escenario simulado</span>
+        )}
       </div>
 
-      {/* TARJETA DESTACADA DEL CULTIVO GANADOR */}
+      {/* 1. CONCLUSIÓN PRIMERO: CULTIVO GANADOR + PUNTAJE GENERAL + MOTIVO EN 1 LÍNEA */}
       <div className="winner-card">
         <div className="winner-top-row">
           <div className="winner-main-info">
-            <span className="winner-kicker">CULTIVO ÓPTIMO RECOMENDADO</span>
-            <h3 className="winner-crop-name">{winnerName}</h3>
-            {winnerMeta && (
-              <p className="winner-crop-subtitle">
-                {winnerMeta.aporteCarbonoLabel} · Demanda hídrica:{' '}
-                <strong>{winnerMeta.demandaHidricaLabel}</strong>
-              </p>
-            )}
+            <span className="winner-kicker">Cultivo recomendado</span>
+            <h3 className="winner-crop-name">Sembrá {winnerName}</h3>
+            <p className="winner-headline-reason">{headlineReason}</p>
           </div>
 
-          {/* ANILLO SVG DE SCORE FINAL */}
-          <div className="score-ring-box">
+          {/* ANILLO SVG DE PUNTAJE GENERAL */}
+          <div
+            className="score-ring-box"
+            title="Puntaje general (combina agua/clima y aporte al suelo según tu prioridad)"
+          >
             <svg width="96" height="96" viewBox="0 0 96 96">
               <circle
                 cx="48"
                 cy="48"
                 r={radius}
                 fill="none"
-                stroke="rgba(75, 91, 45, 0.16)"
+                stroke={THEME_COLORS.primarySoft}
                 strokeWidth="8"
               />
               <circle
@@ -98,7 +123,7 @@ export function RecommendationPanel({
                 cy="48"
                 r={radius}
                 fill="none"
-                stroke="#4B5B2D"
+                stroke={THEME_COLORS.primary}
                 strokeWidth="8"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
@@ -107,28 +132,26 @@ export function RecommendationPanel({
               />
             </svg>
             <div className="score-ring-text">
-              <span className="score-ring-number">
-                {recomendacion.score_final}
-              </span>
-              <span className="score-ring-unit">PTS</span>
+              <span className="score-ring-number">{roundedFinalScore}</span>
+              <span className="score-ring-unit">/ 100</span>
             </div>
           </div>
         </div>
 
-        {/* DESGLOSE DE LOS 2 PILARES: HIDROCLIMÁTICO (#4A7B9D) VS SUELO (#F05D23) */}
+        {/* 2. EVIDENCIA EN 2 BARRAS: AGUA/CLIMA (AZUL) Y SUELO (NARANJA) */}
         <div className="pillars-breakdown">
           <div className="pillar-item">
             <div className="pillar-label-row">
-              <span>Aptitud frente al Agua y Clima</span>
+              <span>Aptitud frente al agua y el clima</span>
               <strong className="pillar-score water">
-                {recomendacion.sub_scores.hidroclimatico} / 100
+                {roundedWaterScore} / 100
               </strong>
             </div>
             <div className="progress-track water-track">
               <div
                 className="progress-fill water-fill"
                 style={{
-                  width: `${Math.min(100, recomendacion.sub_scores.hidroclimatico)}%`,
+                  width: `${Math.min(100, roundedWaterScore)}%`,
                 }}
               />
             </div>
@@ -136,30 +159,30 @@ export function RecommendationPanel({
 
           <div className="pillar-item">
             <div className="pillar-label-row">
-              <span>Aporte al Suelo y Rotación</span>
+              <span>Aporte al suelo y la rotación</span>
               <strong className="pillar-score heat">
-                {recomendacion.sub_scores.suelo} / 100
+                {roundedSoilScore} / 100
               </strong>
             </div>
             <div className="progress-track heat-track">
               <div
                 className="progress-fill heat-fill"
                 style={{
-                  width: `${Math.min(100, recomendacion.sub_scores.suelo)}%`,
+                  width: `${Math.min(100, roundedSoilScore)}%`,
                 }}
               />
             </div>
           </div>
         </div>
 
-        {/* SECUENCIA ANUAL SUGERIDA (INVIERNO -> VERANO) */}
+        {/* 3. ROTACIÓN SUGERIDA PARA EL AÑO */}
         <div className="sequence-banner">
           <div className="sequence-icon">
             <GitCommitHorizontal size={18} />
           </div>
           <div>
             <span className="sequence-label">
-              Secuencia Anual Sugerida (Invierno → Verano)
+              Rotación sugerida para el año
             </span>
             <strong className="sequence-value">
               {recomendacion.secuencia_sugerida}
@@ -167,43 +190,67 @@ export function RecommendationPanel({
           </div>
         </div>
 
-        {/* FACTORES CLAVE ML */}
-        <div className="ml-factors-list">
-          {recomendacion.factores_clave_ml.map((factor, idx) => (
-            <div key={idx} className="ml-factor-item">
-              <CheckCircle2 size={14} className="ml-factor-icon" />
-              <span>{factor}</span>
-            </div>
-          ))}
-        </div>
+        {/* 4. DIVULGACIÓN PROGRESIVA: "VER DETALLE" */}
+        <button
+          type="button"
+          className="detail-toggle-btn"
+          onClick={() => setShowDetail((prev) => !prev)}
+          aria-expanded={showDetail}
+        >
+          <span>
+            {showDetail
+              ? 'Ocultar detalle'
+              : 'Ver detalle de por qué lo recomendamos'}
+          </span>
+          {showDetail ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+        </button>
 
-        {/* EXPLICACIÓN TRANSPARENTE */}
-        <div className="explanation-callout">
-          <Info size={16} className="explanation-icon" />
-          <p>{recomendacion.explicacion}</p>
-        </div>
+        {showDetail && (
+          <div className="winner-detail-drawer">
+            <span className="detail-section-subtitle">
+              Por qué lo recomendamos
+            </span>
+            <div className="ml-factors-list">
+              {recomendacion.factores_clave_ml.map((factor, idx) => (
+                <div key={idx} className="ml-factor-item">
+                  <CheckCircle2 size={14} className="ml-factor-icon" />
+                  <span>{factor}</span>
+                </div>
+              ))}
+            </div>
+
+            {winnerMeta && (
+              <p className="winner-crop-subtitle">
+                <strong>Aporte al lote:</strong> {winnerMeta.aporteCarbonoLabel}{' '}
+                · <strong>Consumo de agua:</strong>{' '}
+                {winnerMeta.demandaHidricaLabel}
+              </p>
+            )}
+
+            <div className="explanation-callout">
+              <Info size={16} className="explanation-icon" />
+              <p>{recomendacion.explicacion}</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* GRÁFICO DE BARRAS COMPARATIVO: RANKING DE CULTIVOS DE LA CAMPAÑA */}
+      {/* RANKING COMPARATIVO COMPACTO (TOP 3 POR DEFECTO + VER TODOS) */}
       <div className="ranking-box">
         <div className="ranking-header">
           <div className="ranking-title">
             <BarChart3 size={16} />
-            <span>Comparativa de Cultivos Candidatos</span>
+            <span>Comparativa de cultivos para esta campaña</span>
           </div>
-          <div className="ranking-legend">
-            <span className="legend-dot water" />
-            <span>Hidroclimático</span>
-            <span className="legend-dot heat" />
-            <span>Suelo</span>
-          </div>
+          <span className="ranking-subtitle-hint">Puntaje sobre 100</span>
         </div>
 
         <div className="ranking-list">
-          {ranking.map((item, idx) => {
+          {visibleRanking.map((item, idx) => {
             const cropName = getCultivoDisplayName(item.cultivo)
             const riskInfo = getRiskLabelAndClass(item.riesgo)
             const isTop = idx === 0
+            const roundedScore = Math.round(item.score_final)
 
             return (
               <div
@@ -224,35 +271,37 @@ export function RecommendationPanel({
                     </span>
                   </div>
                   <strong className="ranking-total-score">
-                    {item.score_final} pts
+                    {roundedScore} / 100
                   </strong>
                 </div>
 
-                {/* Barra principal de Score Final */}
                 <div className="ranking-bar-track">
                   <div
                     className={`ranking-bar-fill ${isTop ? 'winner-bar' : 'standard-bar'}`}
                     style={{
-                      width: `${Math.min(100, Math.max(6, item.score_final))}%`,
+                      width: `${Math.min(100, Math.max(6, roundedScore))}%`,
                     }}
                   />
                 </div>
-
-                {/* Sub-barras gemelas si están presentes */}
-                {item.sub_scores && (
-                  <div className="ranking-subscores-row">
-                    <span className="subscore-pill water">
-                      Clima/Agua: <strong>{item.sub_scores.hidroclimatico}%</strong>
-                    </span>
-                    <span className="subscore-pill heat">
-                      Suelo/Rotación: <strong>{item.sub_scores.suelo}%</strong>
-                    </span>
-                  </div>
-                )}
               </div>
             )
           })}
         </div>
+
+        {ranking.length > 3 && (
+          <button
+            type="button"
+            className="show-all-crops-btn"
+            onClick={() => setShowAllCrops((prev) => !prev)}
+          >
+            <span>
+              {showAllCrops
+                ? 'Mostrar solo los 3 primeros'
+                : `Ver todos los cultivos (${ranking.length})`}
+            </span>
+            {showAllCrops ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </button>
+        )}
       </div>
     </section>
   )

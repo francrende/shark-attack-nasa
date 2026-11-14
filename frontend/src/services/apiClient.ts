@@ -256,21 +256,24 @@ function buildSuggestedSequence(
   segundo: CultivoId,
   gwetrootPct: number
 ): string {
+  const nombreGanador = CULTIVOS_CATALOGO[ganador]?.nombre ?? ganador
+  const nombreSegundo = CULTIVOS_CATALOGO[segundo]?.nombre ?? segundo
+
   if (campana === 'verano') {
     if (ganador === 'sorgo' || ganador === 'maiz_tardio') {
-      return 'vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)'
+      return 'Vicia de cobertura (invierno) → Sorgo o Maíz tardío (verano)'
     }
     if (ganador === 'maiz_temprano') {
-      return 'trigo / vicia_cobertura (invierno) -> maiz_temprano (verano)'
+      return 'Trigo o Vicia (invierno) → Maíz temprano (verano)'
     }
     if (ganador === 'girasol') {
-      return 'avena_cobertura (invierno) -> girasol (verano)'
+      return 'Avena de cobertura (invierno) → Girasol (verano)'
     }
-    return `trigo (invierno) -> ${ganador} / ${segundo} (verano)`
+    return `Trigo (invierno) → ${nombreGanador} o ${nombreSegundo} (verano)`
   } else {
-    // Campaña de invierno seleccionada
-    const veranoSugerido = gwetrootPct < 45 ? 'sorgo / maiz_tardio' : 'maiz_temprano / soja_segunda'
-    return `${ganador} (invierno) -> ${veranoSugerido} (verano)`
+    const veranoSugerido =
+      gwetrootPct < 45 ? 'Sorgo o Maíz tardío' : 'Maíz temprano o Soja de 2da'
+    return `${nombreGanador} (invierno) → ${veranoSugerido} (verano)`
   }
 }
 
@@ -446,22 +449,25 @@ export function generateSimulatedResponse(
   const nombreAnterior =
     CULTIVOS_CATALOGO[cultivo_anterior]?.nombre ?? cultivo_anterior
 
+  const humedadRedondeada = Math.round(gwetrootEfectivo)
+  const lluviaRedondeada = Math.round(anomaliaEfectiva)
+
   const factoresClave: string[] = [
     gwetrootEfectivo < 42
-      ? `Baja saturación hídrica en zona radicular detectada por NASA (${gwetrootEfectivo}%)`
-      : `Reserva hídrica radicular favorable en perfil SMAP/NASA POWER (${gwetrootEfectivo}%)`,
+      ? `Agua en las raíces ajustada (${humedadRedondeada}%): conviene un cultivo que banque la falta de agua.`
+      : `Buena reserva de agua en las raíces (${humedadRedondeada}%) para sostener el cultivo.`,
     condicionRotacion === 'deficit_rastrojo_por_soja'
-      ? `Alta necesidad de aportar rastrojo de gramínea tras cultivo de ${nombreAnterior}`
-      : `Transición agronómica desde ${nombreAnterior} con foco en balance C/N (${base.suelo.carbono_organico_g_kg} g/kg SOC)`,
+      ? `Tu lote viene de ${nombreAnterior} y necesita sumar rastrojo y raíces para recuperar cobertura.`
+      : `Rotar después de ${nombreAnterior} ayuda a cortar malezas y cuidar la fertilidad del suelo.`,
     anomaliaEfectiva < 0
-      ? `Anomalía de lluvias de ${anomaliaEfectiva}% en los últimos 90 días`
-      : `Balance de precipitaciones de +${anomaliaEfectiva}% en los últimos 90 días`,
+      ? `Llovió un ${Math.abs(lluviaRedondeada)}% menos de lo normal en los últimos 3 meses.`
+      : `Las lluvias de los últimos 3 meses estuvieron un +${lluviaRedondeada}% por encima de lo normal.`,
   ]
 
   const explicacion =
     gwetrootEfectivo < 42
-      ? `Recomendación: Sembrar ${nombreGanador} (secuencia sugerida con cobertura previa). Detectamos vía satélite una reserva hídrica ajustada (${gwetrootEfectivo}% de saturación radicular) y una anomalía de lluvias de ${anomaliaEfectiva}%. Frente a alternativas de mayor vulnerabilidad en floración o repetir ${nombreAnterior}, ${nombreGanador} ofrece un ${ganador.sub_scores.hidroclimatico}% de aptitud hidroclimática y un ${ganador.sub_scores.suelo}% de beneficio edáfico para recomponer la estructura del lote.`
-      : `Recomendación: Sembrar ${nombreGanador}. La telemetría de NASA POWER indica una saturación radicular del ${gwetrootEfectivo}% y una variación de lluvias de ${anomaliaEfectiva >= 0 ? '+' : ''}${anomaliaEfectiva}%. Combinado con el perfil ${base.suelo.textura_predominante.replace(/_/g, ' ')} (${base.suelo.carbono_organico_g_kg} g/kg de carbono orgánico) viniendo de ${nombreAnterior}, ${nombreGanador} alcanza un puntaje integral de ${ganador.score_final} pts (${ganador.sub_scores.hidroclimatico}% hidroclimático y ${ganador.sub_scores.suelo}% edáfico).`
+      ? `Elegimos ${nombreGanador} porque resiste mejor la falta de agua (${humedadRedondeada}% en las raíces) y cuida tu suelo después de ${nombreAnterior}. A diferencia de opciones más exigentes en agua o de repetir el mismo cultivo, logra ${Math.round(ganador.sub_scores.hidroclimatico)} puntos en agua/clima y ${Math.round(ganador.sub_scores.suelo)} puntos en aporte al lote.`
+      : `Elegimos ${nombreGanador} porque aprovecha muy bien la humedad actual de tu lote (${humedadRedondeada}% en las raíces) y mantiene una rotación sana después de ${nombreAnterior}. Combina ${Math.round(ganador.sub_scores.hidroclimatico)} puntos de adaptación al clima con ${Math.round(ganador.sub_scores.suelo)} puntos de beneficio para el suelo.`
 
   return {
     ubicacion: {

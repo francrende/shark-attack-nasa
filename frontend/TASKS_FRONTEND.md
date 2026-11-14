@@ -37,6 +37,9 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-4** | Tarjeta de Recomendación Explicada, Gráficos de Ranking de Cultivos y Dashboard Split-Screen Integrado | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-2`, `FRONT-3` | `[x]` |
 | **FRONT-5** | Ajuste de Capas del Mapa ("Mapa satelital") y Separación de Configuración Principal vs. Simulador *What-If* | `frontend/src/data/demoFields.ts`, `frontend/src/components/SimulationControls.tsx` | `FRONT-2`, `FRONT-3` | `[x]` |
 | **FRONT-6** | Menú Superior de 4 Pestañas (`Info general`, `Planificación de campaña`, `Información histórica`, `Chat`) | `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-4`, `FRONT-5` | `[x]` |
+| **FRONT-7** | Refinamiento UX/UI de `"Planificación de campaña"`, Header y Tokens según `SKILLS_FRONTEND.md` | `frontend/src/theme/mapColors.ts`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-6` | `[x]` |
+| **FRONT-8** | Refinamiento UX/UI de `"Info general"` y Mapa GIS (Fechas humanas, Glosario, Cero Hex Hardcodeados y Anti-clutter) | `frontend/src/utils/formatters.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/data/demoFields.ts`, `frontend/src/App.css` | `FRONT-7` | `[x]` |
+| **FRONT-9** | Pestaña `"Información histórica"` (Línea de Tiempo de 10 Años Sincronizada en Vivo con el Mapa + Desplegable de Variables) | `frontend/src/data/historicalData.ts`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-8` | `[x]` |
 
 ---
 
@@ -147,5 +150,85 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   1. Agregar el estado `activeTab: 'info_general' | 'planificacion' | 'historico' | 'chat'` en `frontend/src/App.tsx` y renderizar la barra de pestañas en el Header superior.
   2. Mantener montado o visible el panel izquierdo del mapa en `info_general`, `planificacion` e `historico`, y ocultarlo cuando `activeTab === 'chat'`.
   3. Estilizar las pestañas del menú superior y los contenedores vacíos de `Información histórica` y `Chat` en `frontend/src/App.css` respetando la paleta `#4B5B2D`, `#FFF5E0` y `#22181C` y las fuentes `Newsreader` / `Plus Jakarta Sans`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-7: Refinamiento UX/UI de `"Planificación de campaña"`, Header y Tokens según `SKILLS_FRONTEND.md`
+- **Objetivo:** Alinear la experiencia de `"Planificación de campaña"`, el menú superior y el uso de tokens de color con las reglas de diseño de [`SKILLS_FRONTEND.md`](./SKILLS_FRONTEND.md) (claridad en `< 5s`, divulgación progresiva, glosario sin tecnicismos, formato entero de puntajes y cero hex hardcodeados).
+- **Archivos Permitidos:**
+  - `frontend/src/theme/mapColors.ts`
+  - `frontend/src/data/demoFields.ts`
+  - `frontend/src/services/apiClient.ts`
+  - `frontend/src/components/SimulationControls.tsx`
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Pestaña inicial por defecto:** Iniciar directamente en **`Planificación de campaña`** (`activeTab = 'planificacion'`) y ordenar las pestañas con `Planificación de campaña` primero.
+  - **Pestaña Chat:** Mantener el botón **`Chat`** visible en el menú superior pero deshabilitado (`disabled`) con una etiqueta discreta **`Próximamente`**.
+  - **Configuración principal (`CampaignConfigPanel`):**
+    - Etiquetas en español rioplatense claro: `Campaña gruesa (verano)` / `Campaña fina (invierno)`, `Último cultivo`, `¿Qué querés priorizar?`.
+    - Tarjetas de objetivo (`Seguridad frente a sequía`, `Equilibrio`, `Cuidar el suelo`) con título claro, descripción breve de 1 línea y barra visual mínima (azul agua / naranja suelo) sin porcentajes técnicos como titular.
+  - **Tarjeta de Recomendación (`RecommendationPanel`):**
+    - **Conclusión primero, evidencia después:** Nombre del cultivo recomendado en `Newsreader`, anillo de **Puntaje general** entero sobre 100 (`91 / 100`) y una frase corta de 1 línea explicando el porqué antes de las barras.
+    - **2 barras de pilares:** `Aptitud frente al agua y el clima` (azul `--color-water-rain`) y `Aporte al suelo y la rotación` (naranja `--color-heat-soil`) con valores enteros.
+    - **Rotación sugerida para el año:** Nombres legibles (`Vicia de cobertura (invierno) → Sorgo o Maíz tardío (verano)`) en vez de códigos `snake_case`.
+    - **Divulgación progresiva ("Ver detalle"):** Los motivos detallados y la explicación extendida se despliegan bajo un botón `"Ver detalle"`, manteniendo la vista inicial limpia (≤ 4 elementos clave).
+    - **Ranking anti-clutter:** Mostrar el **Top 3** por defecto con un botón `"Ver todos los cultivos (N)"`, usando `"Riesgo muy alto"` en lugar de `"Riesgo crítico"` y `aria-live="polite"`.
+  - **Tarjeta `¿Qué pasa si...?` (`WhatIfPanel`):**
+    - Visualmente secundaria, con insignia `"Escenario simulado"` cuando está activa, controles en palabras simples (`Agua en las raíces al sembrar`, `Lluvias de la campaña`) y botón `"Volver al dato real"`.
+  - **Tokens de color (`src/theme/mapColors.ts`):** Centralizar constantes de color para SVG/Leaflet eliminando códigos hexadecimales sueltos en componentes y reglas de `App.css`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-8: Refinamiento UX/UI de `"Info general"` y Mapa GIS (Fechas humanas, Glosario, Cero Hex Hardcodeados y Anti-clutter)
+- **Objetivo:** Refinar `"Info general"` (`TelemetryCards.tsx`) y el visor satelital (`MapView.tsx`) para cumplir el 100% de [`SKILLS_FRONTEND.md`](./SKILLS_FRONTEND.md) (fechas en formato humano `"8 nov. 2026"`, glosario obligatorio §3.3, aviso de resolución zonal en capas SMAP/IMERG al hacer zoom, ocultamiento automático de pistas tras el primer clic y colores desde `mapColors.ts`).
+- **Archivos Permitidos:** `frontend/src/utils/formatters.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/data/demoFields.ts`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Pregunta guía de `"Info general"` (§1):** Responder `"¿Cómo está mi lote hoy?"` en `< 5s` con un resumen claro y las 2 tarjetas semánticas (Agua/Lluvias en azul `#4A7B9D` y Calor/Suelo en naranja `#F05D23`).
+  - **Glosario obligatorio (§3.3) y formato de datos (§3.4):**
+    - `Agua en las raíces`, `Humedad para sembrar`, `Lluvias de los últimos 3 meses`, `Riesgo de golpe de calor`, `Materia orgánica del suelo` y `Tipo de suelo`, cada uno con su tooltip explicativo corto.
+    - Porcentajes enteros emparejados con su interpretación cualitativa (`"34% · Reserva ajustada"`), anomalías con signo (`"−24%"`, `"+7%"`), coordenadas con máximo 3 decimales y fechas en formato humano (`"8 nov. 2026"`).
+  - **Pautas de Mapa GIS (§4.1 y §5):**
+    - Botones de modo en lenguaje natural: `Lotes de ejemplo`, `Dibujar mi lote`, `Tocar un punto`.
+    - Ocultar el mensaje de ayuda de `"Tocar un punto"` automáticamente después del primer clic en el mapa.
+    - Mostrar aviso sutil de resolución zonal (`"Esta capa muestra la tendencia de la zona, no el detalle del lote."`) cuando una capa de baja resolución nativa (`Agua en el suelo` o `Lluvias recientes`) se visualiza con zoom cercano.
+    - Reemplazar todos los colores hexadecimales inline de `MapView.tsx` y `demoFields.ts` por `THEME_COLORS` (`src/theme/mapColors.ts`) y clases CSS.
+- **Especificación Técnica:**
+  1. Crear `frontend/src/utils/formatters.ts` con funciones para formatear fechas ISO a formato humano (`formatHumanDate`, `formatShortHumanDate`), porcentajes enteros y anomalías con signo (`−`).
+  2. Actualizar `frontend/src/components/TelemetryCards.tsx` aplicando el glosario §3.3, valores enteros + etiquetas cualitativas, fecha humana y gaveta opcional `"Ver detalle del suelo"`.
+  3. Actualizar `frontend/src/components/MapView.tsx` y `frontend/src/data/demoFields.ts` para usar `THEME_COLORS`, detectar el nivel de zoom para la nota de resolución zonal y ocultar la pista interactiva tras el primer clic.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-9: Pestaña `"Información histórica"` (Línea de Tiempo de 10 Años Sincronizada en Vivo con el Mapa + Desplegable de Variables)
+- **Objetivo:** Implementar la experiencia de `"Información histórica"` donde el productor desliza el año en una ventana de 10 años (`2017–2026`) y ve cambiar en tiempo real el lote en el mapa y la fecha de la capa satelital de la NASA, mostrando por defecto la evolución de los cultivos sembrados y permitiendo cambiar de variable histórica mediante un menú desplegable.
+- **Archivos Permitidos:**
+  - `frontend/src/data/historicalData.ts`
+  - `frontend/src/components/HistoricalPanel.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Sincronización en tiempo real con el Mapa (2017–2026):** Al mover el año, el polígono del lote cambia de color y etiqueta en el mapa según el año y la variable elegida, y la fecha de la capa satelital de NASA GIBS se actualiza al año correspondiente.
+  - **Vista por defecto + Menú desplegable de variables históricas:**
+    - Por defecto muestra la **Evolución de los cultivos sembrados** (rotación año por año, familia del cultivo y rinde/resultado).
+    - Incluye un selector desplegable para cambiar el dato histórico visualizado a:
+      1. `Cultivos sembrados en el lote` *(por defecto)*
+      2. `Lluvias acumuladas y agua en el suelo` (`--color-water-rain`)
+      3. `Evaporación y demanda de agua del ambiente` (`--color-water-rain` / `--color-gold-yellow`)
+      4. `Temperatura y días de golpe de calor` (`--color-heat-soil`)
+      5. `Materia orgánica del suelo` (`--color-heat-soil` / `--color-earth-brown`)
+  - **Cumplimiento estricto de `SKILLS_FRONTEND.md`:** Cero siglas técnicas, máximo 3–4 métricas por tarjeta, colores semánticos (azul = agua, naranja = calor/suelo, verde = cultivos/decisión) y controles accesibles.
+- **Especificación Técnica:**
+  1. Crear `frontend/src/data/historicalData.ts` con series históricas de 10 años (`2017–2026`) por lote/coordenada y metadatos de las 5 variables históricas (incluyendo color de lote en el mapa y capa NASA GIBS sugerida).
+  2. Crear `frontend/src/components/HistoricalPanel.tsx` con el control deslizante de año (`2017–2026`) + botón Reproducir/Pausar, el desplegable de variable histórica, el resumen del año seleccionado y la visualización limpia de los 10 años (línea de cultivos por defecto o barras interactivas de la variable elegida).
+  3. Actualizar `frontend/src/components/MapView.tsx` y `frontend/src/App.tsx` para que, cuando la pestaña `"Información histórica"` esté activa, el mapa reciba el año histórico seleccionado (`historicalYear`), la fecha satelital histórica y el estilo/etiqueta dinámica de cada lote en ese año.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

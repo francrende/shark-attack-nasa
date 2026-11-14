@@ -1,12 +1,19 @@
+import { useState } from 'react'
 import {
+  ChevronDown,
+  ChevronUp,
   CloudRain,
   Droplets,
   Flame,
   Layers,
-  Satellite,
+  MapPin,
   Sprout,
 } from 'lucide-react'
 import type { Coordenadas, PerfilSuelo, TelemetriaNasa } from '../types/api'
+import {
+  formatHumanDate,
+  formatSignedAnomalyPct,
+} from '../utils/formatters'
 
 interface TelemetryCardsProps {
   ubicacion: Coordenadas
@@ -18,20 +25,53 @@ interface TelemetryCardsProps {
 }
 
 function formatSoilTexture(textureRaw: string): string {
-  return textureRaw
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (l) => l.toUpperCase())
+  const clean = textureRaw.replace(/_/g, ' ')
+  return clean.charAt(0).toUpperCase() + clean.slice(1)
 }
 
 function formatRotationCondition(condRaw: string): string {
   const map: Record<string, string> = {
-    deficit_rastrojo_por_soja: 'Déficit de rastrojo tras Soja (baja relación C/N)',
-    buena_cobertura_graminea: 'Buena cobertura de rastrojo gramíneo',
-    suelo_enriquecido_en_nitrogeno: 'Suelo enriquecido en N por leguminosa de servicio',
-    alerta_extraccion_nutrientes: 'Alerta de extracción y baja cobertura superficial',
-    rotacion_equilibrada_oleaginosa: 'Rotación equilibrada post-oleaginosa',
+    deficit_rastrojo_por_soja:
+      'Quedó poca cobertura después de la soja; conviene sumar raíces y rastrojo.',
+    buena_cobertura_graminea:
+      'Buena cobertura de rastrojo que ayuda a conservar la humedad.',
+    suelo_enriquecido_en_nitrogeno:
+      'Lote enriquecido en nitrógeno gracias al cultivo de cobertura previo.',
+    alerta_extraccion_nutrientes:
+      'Poca cobertura superficial; el suelo necesita reponer materia orgánica.',
+    rotacion_equilibrada_oleaginosa:
+      'Rotación equilibrada luego del cultivo anterior.',
   }
   return map[condRaw] ?? condRaw.replace(/_/g, ' ')
+}
+
+function getRootWaterMeaning(pct: number): string {
+  if (pct < 38) return 'Reserva ajustada'
+  if (pct < 55) return 'Reserva intermedia'
+  return 'Buena reserva'
+}
+
+function getSurfaceWaterMeaning(pct: number): string {
+  if (pct < 32) return 'Seco en superficie'
+  if (pct < 52) return 'Humedad justa'
+  return 'Óptimo para sembrar'
+}
+
+function getHeatRiskMeaning(riesgoRaw: string): {
+  label: string
+  percent: number
+} {
+  const lower = riesgoRaw.toLowerCase()
+  if (lower === 'extremo') return { label: 'Riesgo muy alto', percent: 92 }
+  if (lower === 'alto') return { label: 'Riesgo alto', percent: 76 }
+  if (lower === 'moderado') return { label: 'Riesgo medio', percent: 48 }
+  return { label: 'Riesgo bajo', percent: 24 }
+}
+
+function getOrganicMatterMeaning(socGKg: number): string {
+  if (socGKg < 17) return 'Baja fertilidad'
+  if (socGKg < 20.5) return 'Nivel medio'
+  return 'Suelo bien nutrido'
 }
 
 export function TelemetryCards({
@@ -42,70 +82,79 @@ export function TelemetryCards({
   perfilSuelo,
   isWhatIfActive,
 }: TelemetryCardsProps) {
-  const radicularPct = telemetria.indice_humedad_radicular_pct
-  const superficialPct = telemetria.indice_humedad_superficial_pct
-  const lluviaAnom = telemetria.anomalia_lluvia_90d_pct
-  const socNormPct = Math.min(
-    100,
-    Math.round((perfilSuelo.carbono_organico_g_kg / 30) * 100)
-  )
+  const [showSoilDetail, setShowSoilDetail] = useState<boolean>(false)
 
-  const riesgoTermicoLower = telemetria.riesgo_termico_verano.toLowerCase()
-  const heatRiskPercent =
-    riesgoTermicoLower === 'extremo'
-      ? 92
-      : riesgoTermicoLower === 'alto'
-        ? 76
-        : riesgoTermicoLower === 'moderado'
-          ? 48
-          : 24
+  const radicularPct = Math.round(telemetria.indice_humedad_radicular_pct)
+  const superficialPct = Math.round(telemetria.indice_humedad_superficial_pct)
+  const lluviaAnom = Math.round(telemetria.anomalia_lluvia_90d_pct)
+  const socRounded = Math.round(perfilSuelo.carbono_organico_g_kg)
+  const socNormPct = Math.min(100, Math.round((socRounded / 30) * 100))
+
+  const heatInfo = getHeatRiskMeaning(telemetria.riesgo_termico_verano)
+  const humanDate = formatHumanDate(telemetria.fecha_ultimo_dato_valido)
+
+  // Resumen en 1 oración para responder "¿Cómo está mi lote hoy?" en < 5 segundos
+  const quickSummarySentence =
+    radicularPct < 38
+      ? `Hoy tu lote tiene una reserva de agua ajustada (${radicularPct}%) y lluvias ${lluviaAnom < 0 ? `por debajo de lo normal (${formatSignedAnomalyPct(lluviaAnom)})` : 'normales'}.`
+      : `Hoy tu lote cuenta con buena humedad en las raíces (${radicularPct}%) y suelo ${formatSoilTexture(perfilSuelo.textura_predominante).toLowerCase()}.`
 
   return (
     <section className="panel-section telemetry-section">
       <div className="section-header-row">
         <div>
-          <span className="section-eyebrow">
-            <Satellite size={13} />
-            <span>PASO 1 · TELEMETRÍA SATELITAL Y SUELO</span>
-          </span>
-          <h2 className="section-title">{loteLabel}</h2>
+          <span className="section-eyebrow">ESTADO ACTUAL DEL LOTE</span>
+          <h2 className="section-title">¿Cómo está mi lote hoy?</h2>
+          <p className="telemetry-lote-subtitle">{loteLabel}</p>
         </div>
-        <div className="coords-pill">
+        <div
+          className="coords-pill"
+          title="Ubicación del lote (centroide analizado)"
+        >
+          <MapPin size={13} />
+          <span>Ubicación del lote:</span>
           <code>
-            {ubicacion.lat.toFixed(4)}, {ubicacion.lon.toFixed(4)}
+            {ubicacion.lat.toFixed(3)}, {ubicacion.lon.toFixed(3)}
           </code>
           {superficieHa !== null && superficieHa > 0 && (
-            <span className="coords-ha">{superficieHa} ha</span>
+            <span className="coords-ha">{Math.round(superficieHa)} ha</span>
           )}
         </div>
       </div>
 
-      <div className="telemetry-meta-bar">
-        <span>
-          Última lectura satelital consolidada:{' '}
-          <strong>{telemetria.fecha_ultimo_dato_valido}</strong>
-        </span>
-        {isWhatIfActive && (
-          <span className="what-if-active-pill">Escenario Simulado Activo</span>
-        )}
+      {/* RESUMEN RÁPIDO EN 1 LÍNEA + FECHA HUMANA */}
+      <div className="telemetry-summary-banner">
+        <p className="telemetry-summary-text">{quickSummarySentence}</p>
+        <div className="telemetry-meta-bar">
+          <span>
+            Último dato satelital: <strong>{humanDate}</strong>
+          </span>
+          {isWhatIfActive && (
+            <span className="what-if-active-pill">Escenario simulado</span>
+          )}
+        </div>
       </div>
 
-      {/* GRILLA DE 2 DIMENSIONES: HIDROLOGÍA (#4A7B9D) Y CALOR/SUELO (#F05D23) */}
+      {/* GRILLA DE 2 TARJETAS: AGUA (AZUL) Y CALOR/SUELO (NARANJA) — MÁX 3 MÉTRICAS POR TARJETA */}
       <div className="telemetry-grid">
-        {/* TARJETA 1: HIDROLOGÍA SATELITAL NASA (AZUL #4A7B9D) */}
+        {/* TARJETA 1: AGUA Y LLUVIAS */}
         <div className="telemetry-card water-card">
           <div className="telemetry-card-head">
             <span className="card-badge water">
-              <Droplets size={14} />
-              <span>Agua en el Suelo y Lluvias</span>
+              <Droplets size={15} />
+              <span>Agua y lluvias</span>
             </span>
-            <span className="sensor-tag">Satélite NASA</span>
           </div>
 
-          <div className="metric-block">
+          <div
+            className="metric-block"
+            title="Humedad guardada hasta 1 m de profundidad."
+          >
             <div className="metric-label-row">
-              <span>Agua en Zona de Raíces (hasta 1 m)</span>
-              <strong className="metric-value water">{radicularPct}%</strong>
+              <span>Agua en las raíces</span>
+              <strong className="metric-value water">
+                {radicularPct}% · {getRootWaterMeaning(radicularPct)}
+              </strong>
             </div>
             <div className="progress-track water-track">
               <div
@@ -113,19 +162,17 @@ export function TelemetryCards({
                 style={{ width: `${Math.min(100, Math.max(4, radicularPct))}%` }}
               />
             </div>
-            <span className="metric-subtext">
-              {radicularPct < 38
-                ? 'Reserva ajustada: poca agua guardada en profundidad'
-                : radicularPct < 55
-                  ? 'Reserva intermedia disponible para las raíces'
-                  : 'Muy buena reserva de agua acumulada en el perfil'}
-            </span>
           </div>
 
-          <div className="metric-block">
+          <div
+            className="metric-block"
+            title="Humedad en los primeros 5 cm del suelo."
+          >
             <div className="metric-label-row">
-              <span>Humedad Superficial para Siembra (0–5 cm)</span>
-              <strong className="metric-value water">{superficialPct}%</strong>
+              <span>Humedad para sembrar</span>
+              <strong className="metric-value water">
+                {superficialPct}% · {getSurfaceWaterMeaning(superficialPct)}
+              </strong>
             </div>
             <div className="progress-track water-track">
               <div
@@ -137,49 +184,55 @@ export function TelemetryCards({
             </div>
           </div>
 
-          <div className="rain-anomaly-box">
+          <div
+            className="rain-anomaly-box"
+            title="Comparado con lo normal en tu zona (últimos 20 años)."
+          >
             <div className="rain-anomaly-left">
               <CloudRain size={16} />
-              <span>Lluvias últimos 3 meses vs. promedio</span>
+              <span>Lluvias de los últimos 3 meses</span>
             </div>
             <strong
               className={`rain-anomaly-val ${lluviaAnom < 0 ? 'deficit' : 'surplus'}`}
             >
-              {lluviaAnom > 0 ? `+${lluviaAnom}%` : `${lluviaAnom}%`}
+              {formatSignedAnomalyPct(lluviaAnom)}
             </strong>
           </div>
         </div>
 
-        {/* TARJETA 2: CALOR Y SALUD DEL SUELO (NARANJA TERRACOTA #F05D23) */}
+        {/* TARJETA 2: CALOR Y SUELO */}
         <div className="telemetry-card heat-soil-card">
           <div className="telemetry-card-head">
             <span className="card-badge heat">
-              <Flame size={14} />
-              <span>Calor y Salud del Suelo</span>
+              <Flame size={15} />
+              <span>Calor y salud del suelo</span>
             </span>
-            <span className="sensor-tag">Suelo & Clima</span>
           </div>
 
-          <div className="metric-block">
+          <div
+            className="metric-block"
+            title="Días muy calurosos en el momento crítico del cultivo."
+          >
             <div className="metric-label-row">
-              <span>Riesgo de Golpes de Calor en Verano</span>
-              <strong className="metric-value heat">
-                {telemetria.riesgo_termico_verano.toUpperCase()}
-              </strong>
+              <span>Riesgo de golpe de calor</span>
+              <strong className="metric-value heat">{heatInfo.label}</strong>
             </div>
             <div className="progress-track heat-track">
               <div
                 className="progress-fill heat-fill"
-                style={{ width: `${heatRiskPercent}%` }}
+                style={{ width: `${heatInfo.percent}%` }}
               />
             </div>
           </div>
 
-          <div className="metric-block">
+          <div
+            className="metric-block"
+            title="Indicador de fertilidad y salud del lote."
+          >
             <div className="metric-label-row">
-              <span>Materia Orgánica / Carbono del Suelo</span>
+              <span>Materia orgánica del suelo</span>
               <strong className="metric-value heat">
-                {perfilSuelo.carbono_organico_g_kg} g/kg
+                {socRounded} g/kg · {getOrganicMatterMeaning(socRounded)}
               </strong>
             </div>
             <div className="progress-track heat-track">
@@ -190,20 +243,47 @@ export function TelemetryCards({
             </div>
           </div>
 
-          <div className="soil-details-footer">
-            <div className="soil-chip">
-              <Layers size={13} />
-              <span>
-                Textura: <strong>{formatSoilTexture(perfilSuelo.textura_predominante)}</strong>
-              </span>
-            </div>
-            <div className="soil-chip">
-              <Sprout size={13} />
-              <span>{formatRotationCondition(perfilSuelo.condicion_rotacion_previa)}</span>
-            </div>
+          <div
+            className="soil-chip"
+            title="Define cuánta agua retiene tu suelo."
+          >
+            <Layers size={14} />
+            <span>
+              Tipo de suelo:{' '}
+              <strong>
+                {formatSoilTexture(perfilSuelo.textura_predominante)}
+              </strong>
+            </span>
           </div>
         </div>
       </div>
+
+      {/* DIVULGACIÓN PROGRESIVA: VER DETALLE DEL SUELO Y RASTROJO */}
+      <button
+        type="button"
+        className="detail-toggle-btn"
+        onClick={() => setShowSoilDetail((prev) => !prev)}
+        aria-expanded={showSoilDetail}
+      >
+        <span>
+          {showSoilDetail
+            ? 'Ocultar detalle del lote'
+            : 'Ver detalle de cobertura y suelo'}
+        </span>
+        {showSoilDetail ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+      </button>
+
+      {showSoilDetail && (
+        <div className="winner-detail-drawer">
+          <div className="soil-chip">
+            <Sprout size={15} />
+            <span>
+              <strong>Estado tras el último cultivo:</strong>{' '}
+              {formatRotationCondition(perfilSuelo.condicion_rotacion_previa)}
+            </span>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

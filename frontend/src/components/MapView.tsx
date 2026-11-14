@@ -13,6 +13,7 @@ import 'leaflet/dist/leaflet.css'
 import {
   CheckCircle2,
   Crosshair,
+  Info,
   Layers,
   MapPin,
   Pentagon,
@@ -24,17 +25,30 @@ import {
   getConsolidatedGibsDate,
   NASA_GIBS_LAYERS,
 } from '../data/demoFields'
+import {
+  getLotHistoricalVisualForYear,
+  type HistoricalMetricId,
+} from '../data/historicalData'
+import { THEME_COLORS } from '../theme/mapColors'
 import type {
   Coordenadas,
   DemoField,
   GibsLayerId,
   SelectionMode,
 } from '../types/api'
+import { formatShortHumanDate } from '../utils/formatters'
 import {
   buildNasaGibsTileUrl,
   calculateCentroid,
   calculatePolygonAreaHa,
 } from '../utils/geo'
+
+export interface HistoricalMapConfig {
+  active: boolean
+  year: number
+  metric: HistoricalMetricId
+  gibsDateIso: string
+}
 
 interface MapViewProps {
   selectedCoords: Coordenadas
@@ -43,6 +57,7 @@ interface MapViewProps {
   customPolygon: [number, number][]
   isPolygonClosed: boolean
   activeGibsLayer: GibsLayerId
+  historicalMode?: HistoricalMapConfig
   onSelectDemoField: (field: DemoField) => void
   onChangeSelectionMode: (mode: SelectionMode) => void
   onSelectPoint: (coords: Coordenadas) => void
@@ -65,29 +80,34 @@ function MapCameraController({
 
   useEffect(() => {
     map.flyTo([targetCoords.lat, targetCoords.lon], zoom, {
-      duration: 1.15,
+      duration: 1.1,
     })
   }, [map, targetCoords.lat, targetCoords.lon, zoom])
 
   return null
 }
 
-function MapClickHandler({
+function MapInteractionHandler({
   selectionMode,
   isPolygonClosed,
   onMapClick,
+  onZoomChange,
 }: {
   selectionMode: SelectionMode
   isPolygonClosed: boolean
   onMapClick: (lat: number, lon: number) => void
+  onZoomChange: (zoom: number) => void
 }) {
-  useMapEvents({
+  const map = useMapEvents({
     click(e) {
       if (selectionMode === 'point') {
         onMapClick(e.latlng.lat, e.latlng.lng)
       } else if (selectionMode === 'polygon' && !isPolygonClosed) {
         onMapClick(e.latlng.lat, e.latlng.lng)
       }
+    },
+    zoomend() {
+      onZoomChange(map.getZoom())
     },
   })
   return null
@@ -100,6 +120,7 @@ export function MapView({
   customPolygon,
   isPolygonClosed,
   activeGibsLayer,
+  historicalMode,
   onSelectDemoField,
   onChangeSelectionMode,
   onSelectPoint,
@@ -107,6 +128,9 @@ export function MapView({
   onChangeGibsLayer,
 }: MapViewProps) {
   const [gibsOpacity, setGibsOpacity] = useState<number>(0.62)
+  const [currentZoom, setCurrentZoom] = useState<number>(13)
+  const [hasClickedPointOnce, setHasClickedPointOnce] =
+    useState<boolean>(false)
   const [cameraTarget, setCameraTarget] = useState<{
     coords: Coordenadas
     zoom: number
@@ -118,11 +142,32 @@ export function MapView({
   const currentGibsConfig =
     NASA_GIBS_LAYERS.find((l) => l.id === activeGibsLayer) ??
     NASA_GIBS_LAYERS[0]
-  const gibsDate = getConsolidatedGibsDate()
 
-  const drawnAreaHa = calculatePolygonAreaHa(customPolygon)
+  const isHistoricalActive = Boolean(historicalMode?.active)
+  const gibsDateIso =
+    isHistoricalActive && historicalMode
+      ? historicalMode.gibsDateIso
+      : getConsolidatedGibsDate()
+  const gibsHumanShortDate = formatShortHumanDate(gibsDateIso)
+
+  const drawnAreaHa = Math.round(calculatePolygonAreaHa(customPolygon))
   const drawnCentroid =
     customPolygon.length > 0 ? calculateCentroid(customPolygon) : selectedCoords
+
+  const selectedCoordHistoricalVisual =
+    isHistoricalActive && historicalMode
+      ? getLotHistoricalVisualForYear(
+          selectedCoords,
+          historicalMode.year,
+          historicalMode.metric
+        )
+      : null
+
+  // Aviso cuando la capa temática es de baja resolución nativa (SMAP/IMERG = nivel 6) y el zoom es alto
+  const isCoarseLayerZoomedIn =
+    currentGibsConfig.id !== 'none' &&
+    currentGibsConfig.maxNativeZoom <= 6 &&
+    currentZoom > 8
 
   const handleDemoFieldSelect = (field: DemoField) => {
     setCameraTarget({ coords: field.centroide, zoom: 14 })
@@ -134,6 +179,7 @@ export function MapView({
     const roundedLon = Math.round(lon * 10000) / 10000
 
     if (selectionMode === 'point') {
+      setHasClickedPointOnce(true)
       onSelectPoint({ lat: roundedLat, lon: roundedLon })
     } else if (selectionMode === 'polygon' && !isPolygonClosed) {
       const nextPoints: [number, number][] = [
@@ -165,16 +211,20 @@ export function MapView({
 
   return (
     <div className="map-wrapper">
-      {/* BARRA FLOTANTE SUPERIOR: 3 MODOS DE SELECCIÓN DE LOTE */}
+      {/* PANEL FLOTANTE 1 (SUPERIOR): SELECCIÓN DE LOTE */}
       <div className="map-overlay-top">
-        <div className="map-mode-switcher">
+        <div
+          className="map-mode-switcher"
+          role="group"
+          aria-label="Modo de selección de lote"
+        >
           <button
             type="button"
             className={`mode-btn ${selectionMode === 'demo' ? 'active' : ''}`}
             onClick={() => onChangeSelectionMode('demo')}
           >
             <MapPin size={15} />
-            <span>Lotes Demo</span>
+            <span>Lotes de ejemplo</span>
           </button>
           <button
             type="button"
@@ -182,15 +232,18 @@ export function MapView({
             onClick={() => onChangeSelectionMode('polygon')}
           >
             <Pentagon size={15} />
-            <span>Dibujar Lote</span>
+            <span>Dibujar mi lote</span>
           </button>
           <button
             type="button"
             className={`mode-btn ${selectionMode === 'point' ? 'active' : ''}`}
-            onClick={() => onChangeSelectionMode('point')}
+            onClick={() => {
+              setHasClickedPointOnce(false)
+              onChangeSelectionMode('point')
+            }}
           >
             <Crosshair size={15} />
-            <span>Clic Rápido</span>
+            <span>Tocar un punto</span>
           </button>
         </div>
 
@@ -222,12 +275,12 @@ export function MapView({
                 {isPolygonClosed
                   ? 'Lote cerrado'
                   : customPolygon.length === 0
-                    ? 'Hacé clic en el mapa para marcar vértices'
-                    : `${customPolygon.length} vértices marcados`}
+                    ? 'Tocá las esquinas de tu lote en el mapa'
+                    : `${customPolygon.length} esquinas marcadas`}
               </span>
               {customPolygon.length >= 3 && (
                 <span className="polygon-metrics">
-                  <strong>{drawnAreaHa} ha</strong> · Centroide:{' '}
+                  <strong>{drawnAreaHa} ha</strong> · Ubicación:{' '}
                   <code>
                     {drawnCentroid.lat.toFixed(3)}, {drawnCentroid.lon.toFixed(3)}
                   </code>
@@ -243,14 +296,14 @@ export function MapView({
                 title="Deshacer último punto"
               >
                 <RotateCcw size={14} />
-                <span>Deshacer punto</span>
+                <span>Deshacer</span>
               </button>
               <button
                 type="button"
                 className="poly-action-btn primary"
                 onClick={handleClosePolygon}
                 disabled={customPolygon.length < 3 || isPolygonClosed}
-                title="Cerrar polígono del lote y simular"
+                title="Cerrar lote y calcular recomendación"
               >
                 <CheckCircle2 size={14} />
                 <span>Cerrar lote</span>
@@ -260,24 +313,21 @@ export function MapView({
                 className="poly-action-btn danger"
                 onClick={handleClearPolygon}
                 disabled={customPolygon.length === 0}
-                title="Limpiar polígono"
+                title="Borrar dibujo"
               >
                 <Trash2 size={14} />
-                <span>Limpiar</span>
+                <span>Borrar</span>
               </button>
             </div>
           </div>
         )}
 
-        {selectionMode === 'point' && (
+        {/* Regla §4.1: ocultar el texto de ayuda una vez que el usuario ya hizo clic */}
+        {selectionMode === 'point' && !hasClickedPointOnce && (
           <div className="map-point-hint">
             <Crosshair size={14} />
             <span>
-              Tocá cualquier punto del mapa para analizar el agua y el suelo de ese lote (
-              <code>
-                {selectedCoords.lat.toFixed(4)}, {selectedCoords.lon.toFixed(4)}
-              </code>
-              )
+              Tocá cualquier lugar del mapa para analizar ese lote.
             </span>
           </div>
         )}
@@ -294,57 +344,90 @@ export function MapView({
           targetCoords={cameraTarget.coords}
           zoom={cameraTarget.zoom}
         />
-        <MapClickHandler
+        <MapInteractionHandler
           selectionMode={selectionMode}
           isPolygonClosed={isPolygonClosed}
           onMapClick={handleInteractiveMapClick}
+          onZoomChange={setCurrentZoom}
         />
 
-        {/* 1. Capa Base Óptica de Alta Resolución (Esri WorldImagery) */}
+        {/* 1. Capa Base ("Mapa satelital" Esri WorldImagery) */}
         <TileLayer
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          attribution="Tiles &copy; Esri &mdash; Source: Esri, USDA, USGS, GeoEye"
+          attribution="Tiles &copy; Esri"
           maxZoom={18}
         />
 
-        {/* 2. Superposición Satelital NASA GIBS WMTS (True Color por defecto, SMAP, NDVI, LST, IMERG) */}
+        {/* 2. Capa Temática NASA GIBS WMTS (actualiza su fecha en modo histórico) */}
         {currentGibsConfig.id !== 'none' &&
           currentGibsConfig.nasaLayerIdentifier && (
             <TileLayer
-              key={`${currentGibsConfig.id}-${gibsDate}`}
+              key={`${currentGibsConfig.id}-${gibsDateIso}`}
               url={buildNasaGibsTileUrl(
                 currentGibsConfig.nasaLayerIdentifier,
-                gibsDate,
+                gibsDateIso,
                 currentGibsConfig.tileMatrixSet,
                 currentGibsConfig.format
               )}
               opacity={gibsOpacity}
               maxNativeZoom={currentGibsConfig.maxNativeZoom}
               maxZoom={18}
-              attribution="NASA EOSDIS GIBS / Worldview"
+              attribution="NASA EOSDIS GIBS"
             />
           )}
 
-        {/* 3. Etiquetas Híbridas de Localidades y Rutas */}
+        {/* 3. Etiquetas de Localidades y Caminos */}
         <TileLayer
           url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
           opacity={0.75}
           maxZoom={18}
         />
 
-        {/* 4. Polígonos de Lotes Demo pre-cargados */}
+        {/* 4. Polígonos de Lotes de ejemplo (cambian de color/dato en vivo en Información histórica) */}
         {DEMO_FIELDS.map((field) => {
           const isSelected =
             selectionMode === 'demo' && field.id === selectedDemoFieldId
+
+          const histVisual =
+            isHistoricalActive && historicalMode
+              ? getLotHistoricalVisualForYear(
+                  field.centroide,
+                  historicalMode.year,
+                  historicalMode.metric
+                )
+              : null
+
+          const strokeColor = histVisual
+            ? isSelected
+              ? THEME_COLORS.bg
+              : histVisual.strokeColor
+            : isSelected
+              ? THEME_COLORS.primary
+              : THEME_COLORS.earthBrown
+
+          const fillColor = histVisual
+            ? histVisual.fillColor
+            : isSelected
+              ? THEME_COLORS.primary
+              : THEME_COLORS.goldYellow
+
+          const fillOpacity = histVisual
+            ? isSelected
+              ? 0.52
+              : 0.32
+            : isSelected
+              ? 0.35
+              : 0.16
+
           return (
             <Polygon
-              key={field.id}
+              key={`${field.id}-${historicalMode?.year ?? 'now'}-${historicalMode?.metric ?? 'base'}`}
               positions={field.poligono}
               pathOptions={{
-                color: isSelected ? '#FFF5E0' : '#4B5B2D',
+                color: strokeColor,
                 weight: isSelected ? 3 : 2,
-                fillColor: isSelected ? '#4B5B2D' : '#D99B26',
-                fillOpacity: isSelected ? 0.38 : 0.2,
+                fillColor,
+                fillOpacity,
               }}
               eventHandlers={{
                 click: () => {
@@ -354,37 +437,44 @@ export function MapView({
               }}
             >
               <Tooltip sticky direction="top">
-                <div style={{ fontWeight: 700, color: '#4B5B2D' }}>
-                  {field.nombre}
-                </div>
-                <div style={{ fontSize: '12px', color: '#22181C' }}>
-                  {field.superficieHa} ha · Humedad Radicular:{' '}
-                  {field.telemetriaBase.indice_humedad_radicular_pct}%
+                <div className="map-tooltip-title">{field.nombre}</div>
+                <div className="map-tooltip-sub">
+                  {histVisual
+                    ? histVisual.detailText
+                    : `${field.superficieHa} ha · Agua en las raíces: ${Math.round(field.telemetriaBase.indice_humedad_radicular_pct)}%`}
                 </div>
               </Tooltip>
             </Polygon>
           )
         })}
 
-        {/* 5. Polígono Dibujado por el Productor (Modo 'polygon') */}
+        {/* 5. Polígono Dibujado por el Productor */}
         {selectionMode === 'polygon' && customPolygon.length > 0 && (
           <>
             {isPolygonClosed || customPolygon.length >= 3 ? (
               <Polygon
                 positions={customPolygon}
                 pathOptions={{
-                  color: isPolygonClosed ? '#4B5B2D' : '#F05D23',
+                  color: selectedCoordHistoricalVisual
+                    ? THEME_COLORS.bg
+                    : isPolygonClosed
+                      ? THEME_COLORS.primary
+                      : THEME_COLORS.heatSoil,
                   weight: 3,
                   dashArray: isPolygonClosed ? undefined : '6 6',
-                  fillColor: isPolygonClosed ? '#4B5B2D' : '#F05D23',
-                  fillOpacity: 0.32,
+                  fillColor: selectedCoordHistoricalVisual
+                    ? selectedCoordHistoricalVisual.fillColor
+                    : isPolygonClosed
+                      ? THEME_COLORS.primary
+                      : THEME_COLORS.heatSoil,
+                  fillOpacity: selectedCoordHistoricalVisual ? 0.48 : 0.3,
                 }}
               />
             ) : (
               <Polyline
                 positions={customPolygon}
                 pathOptions={{
-                  color: '#F05D23',
+                  color: THEME_COLORS.heatSoil,
                   weight: 3,
                   dashArray: '6 6',
                 }}
@@ -397,56 +487,63 @@ export function MapView({
                 center={[lat, lon]}
                 radius={5}
                 pathOptions={{
-                  color: '#FFF5E0',
+                  color: THEME_COLORS.bg,
                   weight: 2,
-                  fillColor: '#F05D23',
+                  fillColor: THEME_COLORS.heatSoil,
                   fillOpacity: 1,
                 }}
               >
-                <Tooltip direction="top">Vértice #{idx + 1}</Tooltip>
+                <Tooltip direction="top">Esquina #{idx + 1}</Tooltip>
               </CircleMarker>
             ))}
           </>
         )}
 
-        {/* 6. Marcador del Centroide / Coordenada Activa Analizada por NASA POWER */}
+        {/* 6. Marcador de la Ubicación del Lote (muestra el dato del año en vivo en modo histórico) */}
         <CircleMarker
           center={[selectedCoords.lat, selectedCoords.lon]}
           radius={8}
           pathOptions={{
-            color: '#FFF5E0',
+            color: THEME_COLORS.bg,
             weight: 3,
-            fillColor: '#4B5B2D',
+            fillColor: selectedCoordHistoricalVisual
+              ? selectedCoordHistoricalVisual.fillColor
+              : THEME_COLORS.primary,
             fillOpacity: 1,
           }}
         >
-          <Tooltip permanent direction="right" offset={[10, 0]}>
-            <span
-              style={{
-                fontWeight: 700,
-                fontSize: '11px',
-                color: '#22181C',
-              }}
-            >
-              Lote analizado ({selectedCoords.lat.toFixed(3)},{' '}
-              {selectedCoords.lon.toFixed(3)})
+          <Tooltip
+            key={`${historicalMode?.year ?? 'live'}-${historicalMode?.metric ?? 'base'}`}
+            permanent
+            direction="right"
+            offset={[10, 0]}
+          >
+            <span className="map-point-label">
+              {selectedCoordHistoricalVisual
+                ? selectedCoordHistoricalVisual.badgeText
+                : `Ubicación del lote (${selectedCoords.lat.toFixed(3)}, ${selectedCoords.lon.toFixed(3)})`}
             </span>
           </Tooltip>
         </CircleMarker>
       </MapContainer>
 
-      {/* PANEL FLOTANTE INFERIOR: FILTROS VISUALES DEL MAPA EXPLICADOS EN SIMPLE */}
+      {/* PANEL FLOTANTE 2 (INFERIOR): CAPAS TEMÁTICAS Y LEYENDA */}
       <div className="map-overlay-bottom">
         <div className="gibs-panel-header">
           <div className="gibs-title">
             <Layers size={15} />
-            <span>Filtros del Mapa: ¿Qué querés observar en la zona?</span>
+            <span>
+              {isHistoricalActive && historicalMode
+                ? `Capas del mapa · Campaña ${historicalMode.year} (${gibsHumanShortDate} ${historicalMode.year})`
+                : `Capas del mapa · Imagen del ${gibsHumanShortDate}`}
+            </span>
           </div>
           {currentGibsConfig.id !== 'none' && (
             <label className="gibs-opacity-control">
-              <span>Intensidad del filtro {Math.round(gibsOpacity * 100)}%</span>
+              <span>Intensidad {Math.round(gibsOpacity * 100)}%</span>
               <input
                 type="range"
+                aria-label="Intensidad de la capa del mapa"
                 min={0.15}
                 max={0.95}
                 step={0.05}
@@ -486,6 +583,16 @@ export function MapView({
             </div>
           )}
         </div>
+
+        {/* Regla §5: aviso sutil cuando una capa regional (SMAP/IMERG) se mira con mucho zoom */}
+        {isCoarseLayerZoomedIn && (
+          <div className="gibs-coarse-note">
+            <Info size={13} />
+            <span>
+              Esta capa muestra la tendencia de la zona, no el detalle del lote.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

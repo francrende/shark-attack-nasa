@@ -43,7 +43,7 @@ const OBJETIVOS_KEYS: ObjetivoProductor[] = [
 
 /**
  * TARJETA 1 PRINCIPAL EN PLANIFICACIÓN DE CAMPAÑA:
- * Selección de Tipo de Campaña, Último Cultivo y Objetivo del Productor.
+ * Selección de Tipo de campaña, Último cultivo y ¿Qué querés priorizar?
  */
 export function CampaignConfigPanel({
   campana,
@@ -59,27 +59,31 @@ export function CampaignConfigPanel({
         <div>
           <span className="section-eyebrow">
             <Compass size={13} />
-            <span>CONFIGURACIÓN PRINCIPAL DE CAMPAÑA</span>
+            <span>CONFIGURACIÓN DE LA CAMPAÑA</span>
           </span>
-          <h2 className="section-title">Definición de Siembra y Objetivo</h2>
+          <h2 className="section-title">¿Cómo venís y qué vas a sembrar?</h2>
         </div>
       </div>
 
       <div className="controls-row-2col">
-        {/* 1. Tipo de Campaña (Invierno vs Verano) */}
+        {/* 1. Tipo de Campaña */}
         <div className="control-group">
           <label className="control-label">
             <Calendar size={14} />
-            <span>Tipo de Campaña</span>
+            <span>Campaña a sembrar</span>
           </label>
-          <div className="campaign-toggle">
+          <div
+            className="campaign-toggle"
+            role="group"
+            aria-label="Seleccionar campaña a sembrar"
+          >
             <button
               type="button"
               className={`campaign-btn ${campana === 'verano' ? 'active' : ''}`}
               onClick={() => onChangeCampana('verano')}
             >
               <Sun size={15} />
-              <span>Gruesa (Verano)</span>
+              <span>Campaña gruesa (verano)</span>
             </button>
             <button
               type="button"
@@ -87,7 +91,7 @@ export function CampaignConfigPanel({
               onClick={() => onChangeCampana('invierno')}
             >
               <Snowflake size={15} />
-              <span>Fina (Invierno)</span>
+              <span>Campaña fina (invierno)</span>
             </button>
           </div>
         </div>
@@ -95,7 +99,7 @@ export function CampaignConfigPanel({
         {/* 2. Último Cultivo */}
         <div className="control-group">
           <label className="control-label" htmlFor="cultivo-anterior-select">
-            <span>Último Cultivo (De qué viene el lote)</span>
+            <span>Último cultivo en el lote</span>
           </label>
           <select
             id="cultivo-anterior-select"
@@ -105,7 +109,7 @@ export function CampaignConfigPanel({
               onChangeCultivoAnterior(e.target.value as CultivoId)
             }
           >
-            <optgroup label="Cultivos de Verano (Gruesa)">
+            <optgroup label="Campaña gruesa (verano)">
               {TODOS_LOS_CULTIVOS.filter((c) => c.campana === 'verano').map(
                 (c) => (
                   <option key={c.id} value={c.id}>
@@ -114,7 +118,7 @@ export function CampaignConfigPanel({
                 )
               )}
             </optgroup>
-            <optgroup label="Cultivos de Invierno / Coberturas (Fina)">
+            <optgroup label="Campaña fina (invierno y coberturas)">
               {TODOS_LOS_CULTIVOS.filter((c) => c.campana === 'invierno').map(
                 (c) => (
                   <option key={c.id} value={c.id}>
@@ -127,13 +131,17 @@ export function CampaignConfigPanel({
         </div>
       </div>
 
-      {/* 3. Objetivo del Productor */}
+      {/* 3. ¿Qué querés priorizar? */}
       <div className="control-group">
         <label className="control-label">
           <Sparkles size={14} />
-          <span>Objetivo Principal para esta Campaña</span>
+          <span>¿Qué querés priorizar?</span>
         </label>
-        <div className="objective-cards-grid">
+        <div
+          className="objective-cards-grid"
+          role="radiogroup"
+          aria-label="Prioridad de la campaña"
+        >
           {OBJETIVOS_KEYS.map((key) => {
             const meta = OBJETIVOS_PRODUCTOR_META[key]
             const isSelected = objetivoProductor === key
@@ -141,27 +149,25 @@ export function CampaignConfigPanel({
               <button
                 key={key}
                 type="button"
+                role="radio"
+                aria-checked={isSelected}
                 className={`objective-card ${isSelected ? 'selected' : ''}`}
                 onClick={() => onChangeObjetivo(key)}
               >
-                <div className="objective-card-top">
-                  <span className="objective-title">{meta.titulo}</span>
-                </div>
-                <div className="objective-weights-bar">
+                <span className="objective-title">{meta.titulo}</span>
+                <p className="objective-desc">{meta.subtitulo}</p>
+                <div
+                  className="objective-mini-split"
+                  title="Proporción entre Agua/Clima (azul) y Suelo (naranja)"
+                >
                   <span
-                    className="weight-segment water"
+                    className="mini-split-water"
                     style={{ width: `${meta.pesoClima * 100}%` }}
-                    title={`Peso Agua y Clima: ${Math.round(meta.pesoClima * 100)}%`}
-                  >
-                    {Math.round(meta.pesoClima * 100)}% Agua/Clima
-                  </span>
+                  />
                   <span
-                    className="weight-segment soil"
+                    className="mini-split-soil"
                     style={{ width: `${meta.pesoSuelo * 100}%` }}
-                    title={`Peso Salud de Suelo: ${Math.round(meta.pesoSuelo * 100)}%`}
-                  >
-                    {Math.round(meta.pesoSuelo * 100)}% Suelo
-                  </span>
+                  />
                 </div>
               </button>
             )
@@ -173,8 +179,8 @@ export function CampaignConfigPanel({
 }
 
 /**
- * TARJETA 3 INDEPENDIENTE EN PLANIFICACIÓN DE CAMPAÑA:
- * Simulador Interactivo "What-If" separado de la configuración principal.
+ * TARJETA 3 INDEPENDIENTE Y SECUNDARIA EN PLANIFICACIÓN DE CAMPAÑA:
+ * Simulador Interactivo "¿Qué pasa si...?"
  */
 export function WhatIfPanel({
   whatIf,
@@ -186,8 +192,10 @@ export function WhatIfPanel({
     whatIf.override_humedad_radicular_pct !== null ||
     whatIf.variacion_lluvia_esperada_pct !== 0
 
-  const effectiveHumidity =
+  const effectiveHumidity = Math.round(
     whatIf.override_humedad_radicular_pct ?? nasaDetectedHumidityPct
+  )
+  const rainVariation = Math.round(whatIf.variacion_lluvia_esperada_pct)
 
   return (
     <section className="panel-section what-if-standalone-section">
@@ -195,9 +203,14 @@ export function WhatIfPanel({
         <div>
           <span className="section-eyebrow">
             <Sliders size={13} />
-            <span>SIMULACIÓN DE ESCENARIOS ("WHAT-IF")</span>
+            <span>SIMULADOR DE ESCENARIOS</span>
           </span>
-          <h2 className="section-title">¿Qué pasa si cambia el clima?</h2>
+          <div className="what-if-title-line">
+            <h2 className="section-title">¿Qué pasa si...?</h2>
+            {isWhatIfModified && (
+              <span className="what-if-active-pill">Escenario simulado</span>
+            )}
+          </div>
         </div>
         {isWhatIfModified && (
           <button
@@ -212,25 +225,26 @@ export function WhatIfPanel({
       </div>
 
       <p className="what-if-helper-text">
-        Mové los controles para probar cómo cambiaría el ranking si llueve más o menos antes de sembrar:
+        Probá escenarios más secos o más lluviosos para ver cómo cambia el cultivo recomendado.
       </p>
 
       <div className="what-if-box">
         <div className="what-if-sliders">
-          {/* Slider 1: Override Humedad Radicular */}
+          {/* Slider 1: Agua en las raíces */}
           <div className="slider-control">
             <div className="slider-label-row">
-              <span>Agua acumulada en las raíces al sembrar</span>
+              <span>Agua en las raíces al sembrar</span>
               <strong className="slider-val water">
-                {effectiveHumidity}%{' '}
+                {effectiveHumidity}% ·{' '}
                 {whatIf.override_humedad_radicular_pct === null
-                  ? '(Dato Real)'
-                  : '(Simulado)'}
+                  ? 'Dato real'
+                  : 'Simulado'}
               </strong>
             </div>
             <input
               type="range"
               className="ag-range water-range"
+              aria-label="Agua en las raíces al sembrar"
               min={10}
               max={95}
               step={1}
@@ -243,31 +257,31 @@ export function WhatIfPanel({
               }
             />
             <div className="slider-ticks">
-              <span>10% (Sequía)</span>
-              <span>50% (Media)</span>
-              <span>95% (Suelo lleno)</span>
+              <span>Poca agua (10%)</span>
+              <span>Media (50%)</span>
+              <span>Mucha agua (95%)</span>
             </div>
           </div>
 
-          {/* Slider 2: Variación de Lluvia Esperada */}
+          {/* Slider 2: Lluvias esperadas */}
           <div className="slider-control">
             <div className="slider-label-row">
-              <span>Variación de lluvias en la campaña</span>
+              <span>Lluvias esperadas en la campaña</span>
               <strong
-                className={`slider-val ${whatIf.variacion_lluvia_esperada_pct < 0 ? 'heat' : 'water'}`}
+                className={`slider-val ${rainVariation < 0 ? 'heat' : 'water'}`}
               >
-                {whatIf.variacion_lluvia_esperada_pct > 0
-                  ? `+${whatIf.variacion_lluvia_esperada_pct}%`
-                  : `${whatIf.variacion_lluvia_esperada_pct}%`}
+                {rainVariation > 0 ? `+${rainVariation}%` : `${rainVariation}%`}{' '}
+                · {rainVariation === 0 ? 'Normal' : 'Simulado'}
               </strong>
             </div>
             <input
               type="range"
               className="ag-range rain-range"
+              aria-label="Lluvias esperadas en la campaña"
               min={-50}
               max={50}
               step={5}
-              value={whatIf.variacion_lluvia_esperada_pct}
+              value={rainVariation}
               onChange={(e) =>
                 onChangeWhatIf({
                   ...whatIf,
@@ -276,9 +290,9 @@ export function WhatIfPanel({
               }
             />
             <div className="slider-ticks">
-              <span>-50% (Más seco)</span>
-              <span>0% (Normal)</span>
-              <span>+50% (Más lluvioso)</span>
+              <span>Más seco (−50%)</span>
+              <span>Normal (0%)</span>
+              <span>Más lluvioso (+50%)</span>
             </div>
           </div>
         </div>
