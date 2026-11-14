@@ -1,8 +1,7 @@
 import {
   Calendar,
-  Compass,
+  Play,
   RotateCcw,
-  Sliders,
   Sparkles,
   Sun,
   Snowflake,
@@ -19,12 +18,16 @@ import type {
 } from '../types/api'
 
 interface CampaignConfigProps {
-  campana: Campana
-  cultivoAnterior: CultivoId
+  campana: Campana | null
+  cultivoAnterior: CultivoId | null
   objetivoProductor: ObjetivoProductor
+  canPlan: boolean
+  isPlanning: boolean
+  isHistoricalReady: boolean
   onChangeCampana: (campana: Campana) => void
   onChangeCultivoAnterior: (cultivo: CultivoId) => void
   onChangeObjetivo: (objetivo: ObjetivoProductor) => void
+  onPlan: () => void
 }
 
 interface WhatIfPanelProps {
@@ -49,18 +52,18 @@ export function CampaignConfigPanel({
   campana,
   cultivoAnterior,
   objetivoProductor,
+  canPlan,
+  isPlanning,
+  isHistoricalReady,
   onChangeCampana,
   onChangeCultivoAnterior,
   onChangeObjetivo,
+  onPlan,
 }: CampaignConfigProps) {
   return (
     <section className="panel-section controls-section">
       <div className="section-header-row">
         <div>
-          <span className="section-eyebrow">
-            <Compass size={13} />
-            <span>CONFIGURACIÓN DE LA CAMPAÑA</span>
-          </span>
           <h2 className="section-title">Planificación de campaña</h2>
         </div>
       </div>
@@ -104,11 +107,16 @@ export function CampaignConfigPanel({
           <select
             id="cultivo-anterior-select"
             className="ag-select"
-            value={cultivoAnterior}
-            onChange={(e) =>
-              onChangeCultivoAnterior(e.target.value as CultivoId)
-            }
+            value={cultivoAnterior ?? ''}
+            onChange={(e) => {
+              if (e.target.value) {
+                onChangeCultivoAnterior(e.target.value as CultivoId)
+              }
+            }}
           >
+            <option value="" disabled>
+              Seleccione el cultivo antecesor...
+            </option>
             <optgroup label="Campaña gruesa (verano)">
               {TODOS_LOS_CULTIVOS.filter((c) => c.campana === 'verano').map(
                 (c) => (
@@ -174,6 +182,26 @@ export function CampaignConfigPanel({
           })}
         </div>
       </div>
+
+      {/* 4. Acción principal: Planificar */}
+      <div className="plan-action-footer">
+        <span className="plan-status-hint">
+          {!canPlan
+            ? 'Seleccione campaña y cultivo antecesor para consultar los datos históricos.'
+            : isHistoricalReady
+              ? 'Datos históricos cargados. Presione Planificar para ver la recomendación.'
+              : 'Cargando datos históricos del lote...'}
+        </span>
+        <button
+          type="button"
+          className="plan-submit-btn"
+          disabled={!canPlan || isPlanning}
+          onClick={onPlan}
+        >
+          <Play size={14} />
+          <span>{isPlanning ? 'Planificando...' : 'Planificar'}</span>
+        </button>
+      </div>
     </section>
   )
 }
@@ -201,10 +229,7 @@ export function WhatIfPanel({
     <section className="panel-section what-if-standalone-section">
       <div className="section-header-row">
         <div>
-          <span className="section-eyebrow">
-            <Sliders size={13} />
-            <span>ANÁLISIS DE SENSIBILIDAD</span>
-          </span>
+
           <div className="what-if-title-line">
             <h2 className="section-title">Simulación de escenarios</h2>
             {isWhatIfModified && (

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   AlertTriangle,
-  Award,
   BarChart3,
   CheckCircle2,
   ChevronDown,
@@ -84,11 +83,8 @@ export function RecommendationPanel({
     >
       <div className="section-header-row">
         <div>
-          <span className="section-eyebrow">
-            <Award size={13} />
-            <span>ESTRATEGIA DE ROTACIÓN</span>
-          </span>
-          <h2 className="section-title">Recomendación de cultivo</h2>
+
+          <h2 className="section-title">Estrategia de rotación</h2>
         </div>
         {isWhatIfActive && (
           <span className="what-if-active-pill">Escenario simulado</span>

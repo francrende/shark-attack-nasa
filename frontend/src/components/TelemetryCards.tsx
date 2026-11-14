@@ -103,7 +103,6 @@ export function TelemetryCards({
     <section className="panel-section telemetry-section">
       <div className="section-header-row">
         <div>
-          <span className="section-eyebrow">ESTADO ACTUAL DEL LOTE</span>
           <h2 className="section-title">Info general</h2>
           <p className="telemetry-lote-subtitle">{loteLabel}</p>
         </div>

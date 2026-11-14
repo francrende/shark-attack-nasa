@@ -46,6 +46,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-13** | Diversificación Cromática de Botones y Controles Seleccionados (No Todo Verde) | `frontend/src/index.css`, `frontend/src/App.css`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/HistoricalPanel.tsx` | `FRONT-11`, `FRONT-12` | `[x]` |
 | **FRONT-14** | Header Sólido `#3A0C00`, Eliminación de Pestaña Chat y Alineación de Pestañas al 40% del Panel Derecho | `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-10` | `[x]` |
 | **FRONT-15** | Integración de las Pestañas de Carpeta al Componente Derecho Superpuestas sobre el Header | `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-14` | `[x]` |
+| **FRONT-16** | Diferir Estrategia de Rotación hasta Seleccionar Campaña y Cultivo Antecesor (Con Estado Vacío y Carga Asíncrona) | `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-12` | `[x]` |
+| **FRONT-17** | Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"` | `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-16` | `[x]` |
 
 ---
 
@@ -127,6 +129,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
 ### `[x]` FRONT-5: Ajuste de Capas del Mapa ("Mapa satelital") y Separación de Configuración Principal vs. Simulador *What-If*
 - **Objetivo:** Eliminar la capa `"Vista Real del cielo"`, renombrar `"Solo lotes y caminos"` a `"Mapa satelital"` como opción por defecto, y desacoplar los controles de planificación en dos componentes independientes: `CampaignConfigPanel` (Tipo de campaña, Último cultivo y Objetivo) y `WhatIfPanel` (Simulador interactivo separado).
 - **Archivos Permitidos:** `frontend/src/data/demoFields.ts`, `frontend/src/components/SimulationControls.tsx`
@@ -156,6 +170,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   1. Agregar el estado `activeTab: 'info_general' | 'planificacion' | 'historico' | 'chat'` en `frontend/src/App.tsx` y renderizar la barra de pestañas en el Header superior.
   2. Mantener montado o visible el panel izquierdo del mapa en `info_general`, `planificacion` e `historico`, y ocultarlo cuando `activeTab === 'chat'`.
   3. Estilizar las pestañas del menú superior y los contenedores vacíos de `Información histórica` y `Chat` en `frontend/src/App.css` respetando la paleta `#4B5B2D`, `#FFF5E0` y `#22181C` y las fuentes `Newsreader` / `Plus Jakarta Sans`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
 
@@ -191,6 +217,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
 ### `[x]` FRONT-8: Refinamiento UX/UI de `"Info general"` y Mapa GIS (Fechas humanas, Glosario, Cero Hex Hardcodeados y Anti-clutter)
 - **Objetivo:** Refinar `"Info general"` (`TelemetryCards.tsx`) y el visor satelital (`MapView.tsx`) para cumplir el 100% de [`SKILLS_FRONTEND.md`](./SKILLS_FRONTEND.md) (fechas en formato humano `"8 nov. 2026"`, glosario obligatorio §3.3, aviso de resolución zonal en capas SMAP/IMERG al hacer zoom, ocultamiento automático de pistas tras el primer clic y colores desde `mapColors.ts`).
 - **Archivos Permitidos:** `frontend/src/utils/formatters.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/data/demoFields.ts`, `frontend/src/App.css`
@@ -208,6 +246,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   1. Crear `frontend/src/utils/formatters.ts` con funciones para formatear fechas ISO a formato humano (`formatHumanDate`, `formatShortHumanDate`), porcentajes enteros y anomalías con signo (`−`).
   2. Actualizar `frontend/src/components/TelemetryCards.tsx` aplicando el glosario §3.3, valores enteros + etiquetas cualitativas, fecha humana y gaveta opcional `"Ver detalle del suelo"`.
   3. Actualizar `frontend/src/components/MapView.tsx` y `frontend/src/data/demoFields.ts` para usar `THEME_COLORS`, detectar el nivel de zoom para la nota de resolución zonal y ocultar la pista interactiva tras el primer clic.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
 
@@ -236,6 +286,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   1. Crear `frontend/src/data/historicalData.ts` con series históricas de 10 años (`2017–2026`) por lote/coordenada y metadatos de las 5 variables históricas (incluyendo color de lote en el mapa y capa NASA GIBS sugerida).
   2. Crear `frontend/src/components/HistoricalPanel.tsx` con el control deslizante de año (`2017–2026`) + botón Reproducir/Pausar, el desplegable de variable histórica, el resumen del año seleccionado y la visualización limpia de los 10 años (línea de cultivos por defecto o barras interactivas de la variable elegida).
   3. Actualizar `frontend/src/components/MapView.tsx` y `frontend/src/App.tsx` para que, cuando la pestaña `"Información histórica"` esté activa, el mapa reciba el año histórico seleccionado (`historicalYear`), la fecha satelital histórica y el estilo/etiqueta dinámica de cada lote en ese año.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
 
@@ -314,6 +376,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
 ### `[x]` FRONT-14: Header Sólido `#3A0C00`, Eliminación de Pestaña Chat y Alineación de Pestañas al 40% del Panel Derecho
 - **Objetivo:** Aplicar el color sólido `#3A0C00` (sin gradiente) al Header, remover por completo la pestaña `Chat` y restringir el contenedor de las 3 pestañas de carpeta física para que no supere el 40% de ancho correspondiente al panel derecho.
 - **Archivos Permitidos:** `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md`
@@ -330,6 +404,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
 ### `[x]` FRONT-15: Integración de las Pestañas de Carpeta al Componente Derecho Superpuestas sobre el Header
 - **Objetivo:** Mover las 3 pestañas de carpeta física dentro del componente derecho (`aside.right-analysis-pane`) de modo que nazcan desde la tarjeta/panel derecho y se proyecten hacia arriba superponiéndose directamente sobre el Header `#3A0C00`.
 - **Archivos Permitidos:** `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md`
@@ -339,5 +425,42 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Especificación Técnica:**
   1. En `frontend/src/App.tsx`, trasladar `<nav className="top-nav-tabs">` desde `<header className="top-navbar">` hacia el interior de `<aside className="right-analysis-pane">`, envolviendo el contenido desplazable en `<div className="right-folder-body">`.
   2. En `frontend/src/App.css`, configurar `.right-analysis-pane` con `overflow: visible` y `z-index: 25`, aplicar `margin-top: -42px` a `.top-nav-tabs` para superponer las solapas sobre `.top-navbar`, y delegar el `overflow-y: auto` a `.right-folder-body`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-16: Diferir Estrategia de Rotación hasta Seleccionar Campaña y Cultivo Antecesor (Con Estado Vacío y Carga Asíncrona)
+- **Objetivo:** No mostrar la tarjeta de estrategia de rotación (`RecommendationPanel`) ni el simulador `WhatIfPanel` hasta que el usuario seleccione explícitamente tanto el **tipo de campaña** como el **cultivo antecesor**, dando tiempo a la API para ejecutar las requests asíncronas.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - `campana` y `cultivoAnterior` inician sin selección (`null`) al cargar la aplicación.
+  - Al seleccionar un lote en el mapa, se actualizan las coordenadas y telemetría de `Info general`, pero no se pre-completan automáticamente campaña ni cultivo antecesor.
+  - Mientras falte alguno de los dos campos, se muestra únicamente `CampaignConfigPanel` junto a un aviso limpio indicando que debe completar ambos campos para generar la estrategia de rotación.
+  - Una vez completados ambos campos, se invoca `simulateCropRotation` de forma asíncrona (con estado de carga tipo skeleton y debounce en sliders).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-17: Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"`
+- **Objetivo:** Separar la carga de datos históricos (automática apenas el usuario completa campaña y cultivo antecesor) de la visualización de la recomendación de cultivo, la cual se muestra al presionar el botón **`"Planificar"`** según el objetivo seleccionado.
+- **Archivos Permitidos:** `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
+  - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
+  - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

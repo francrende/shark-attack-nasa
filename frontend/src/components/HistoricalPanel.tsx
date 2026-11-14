@@ -3,7 +3,6 @@ import {
   Calendar,
   CloudRain,
   Flame,
-  History,
   Pause,
   Play,
   Sprout,
@@ -146,10 +145,7 @@ export function HistoricalPanel({
       <section className="panel-section historical-controls-section">
         <div className="section-header-row">
           <div>
-            <span className="section-eyebrow">
-              <History size={13} />
-              <span>SERIE HISTÓRICA DE 10 AÑOS (2017–2026)</span>
-            </span>
+
             <h2 className="section-title">Información histórica</h2>
             <p className="telemetry-lote-subtitle">{loteLabel}</p>
           </div>

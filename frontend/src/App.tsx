@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Compass,
   History,
@@ -19,7 +19,10 @@ import {
   getHistoricalSeriesForCoords,
   type HistoricalMetricId,
 } from './data/historicalData'
-import { generateSimulatedResponse } from './services/apiClient'
+import {
+  generateSimulatedResponse,
+  simulateCropRotation,
+} from './services/apiClient'
 import type {
   Campana,
   Coordenadas,
@@ -29,6 +32,7 @@ import type {
   ObjetivoProductor,
   SelectionMode,
   SimulacionWhatIf,
+  SimulateResponse,
 } from './types/api'
 import { calculatePolygonAreaHa } from './utils/geo'
 
@@ -53,47 +57,126 @@ export function App() {
   const [activeGibsLayer, setActiveGibsLayer] =
     useState<GibsLayerId>('none')
 
-  // Estado agronómico y simulación What-If
-  const [campana, setCampana] = useState<Campana>(defaultField.campanaDefault)
-  const [cultivoAnterior, setCultivoAnterior] = useState<CultivoId>(
-    defaultField.cultivoAnteriorDefault
-  )
+  // Estado agronómico y simulación What-If (campaña y cultivo anterior inician sin selección)
+  const [campana, setCampana] = useState<Campana | null>(null)
+  const [cultivoAnterior, setCultivoAnterior] = useState<CultivoId | null>(null)
   const [objetivoProductor, setObjetivoProductor] =
     useState<ObjetivoProductor>('equilibrio')
   const [whatIf, setWhatIf] = useState<SimulacionWhatIf>({
     override_humedad_radicular_pct: null,
     variacion_lluvia_esperada_pct: 0,
   })
+  const [simulationResult, setSimulationResult] =
+    useState<SimulateResponse | null>(null)
+  const [isSimulating, setIsSimulating] = useState<boolean>(false)
+  const [isHistoricalReady, setIsHistoricalReady] = useState<boolean>(false)
+  const [hasPlanned, setHasPlanned] = useState<boolean>(false)
 
   // Estado de la pestaña 'Información histórica' (10 años en vivo con el mapa)
   const [historicalYear, setHistoricalYear] = useState<number>(2026)
   const [historicalMetric, setHistoricalMetric] =
     useState<HistoricalMetricId>('cultivos')
 
-  // Cálculo reactivo instantáneo en cada cambio de estado
-  const simulationResult = useMemo(() => {
-    return generateSimulatedResponse({
-      coordenadas: selectedCoords,
-      campana,
-      cultivo_anterior: cultivoAnterior,
-      objetivo_productor: objetivoProductor,
-      simulacion_what_if: whatIf,
-    })
-  }, [selectedCoords, campana, cultivoAnterior, objetivoProductor, whatIf])
+  const isRotationReady = campana !== null && cultivoAnterior !== null
 
-  // Humedad base sin override para mostrar en el control What-If
+  // Paso 1: Apenas estén completos campaña y cultivo anterior, realiza el pedido de datos históricos
+  useEffect(() => {
+    setHasPlanned(false)
+    setSimulationResult(null)
+
+    if (!campana || !cultivoAnterior) {
+      setIsHistoricalReady(false)
+      return
+    }
+
+    let cancelled = false
+    setIsHistoricalReady(false)
+
+    const timer = window.setTimeout(() => {
+      if (!cancelled) {
+        getHistoricalSeriesForCoords(selectedCoords)
+        setIsHistoricalReady(true)
+      }
+    }, 150)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [selectedCoords, campana, cultivoAnterior])
+
+  // Paso 2: Al presionar "Planificar" (o al ajustar objetivo/What-If ya planificado), consulta la recomendación
+  useEffect(() => {
+    if (!hasPlanned || !campana || !cultivoAnterior) {
+      setIsSimulating(false)
+      return
+    }
+
+    let cancelled = false
+    setIsSimulating(true)
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await simulateCropRotation({
+          coordenadas: selectedCoords,
+          campana,
+          cultivo_anterior: cultivoAnterior,
+          objetivo_productor: objetivoProductor,
+          simulacion_what_if: whatIf,
+        })
+        if (!cancelled) {
+          setSimulationResult(result)
+        }
+      } catch {
+        if (!cancelled) {
+          setSimulationResult(
+            generateSimulatedResponse({
+              coordenadas: selectedCoords,
+              campana,
+              cultivo_anterior: cultivoAnterior,
+              objetivo_productor: objetivoProductor,
+              simulacion_what_if: whatIf,
+            })
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSimulating(false)
+        }
+      }
+    }, 150)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [hasPlanned, selectedCoords, campana, cultivoAnterior, objetivoProductor, whatIf])
+
+  const handlePlan = () => {
+    if (!isRotationReady) return
+    setHasPlanned(true)
+  }
+
+  // Telemetría base para Info general y valor real de humedad en What-If
   const baselineResult = useMemo(() => {
     return generateSimulatedResponse({
       coordenadas: selectedCoords,
-      campana,
-      cultivo_anterior: cultivoAnterior,
+      campana: campana ?? defaultField.campanaDefault,
+      cultivo_anterior: cultivoAnterior ?? defaultField.cultivoAnteriorDefault,
       objetivo_productor: objetivoProductor,
       simulacion_what_if: {
         override_humedad_radicular_pct: null,
         variacion_lluvia_esperada_pct: 0,
       },
     })
-  }, [selectedCoords, campana, cultivoAnterior, objetivoProductor])
+  }, [
+    selectedCoords,
+    campana,
+    cultivoAnterior,
+    objetivoProductor,
+    defaultField.campanaDefault,
+    defaultField.cultivoAnteriorDefault,
+  ])
 
   // Fecha satelital histórica correspondiente al año elegido
   const currentHistoricalGibsDate = useMemo(() => {
@@ -133,8 +216,6 @@ export function App() {
     setSelectionMode('demo')
     setSelectedDemoFieldId(field.id)
     setSelectedCoords(field.centroide)
-    setCampana(field.campanaDefault)
-    setCultivoAnterior(field.cultivoAnteriorDefault)
     setWhatIf({
       override_humedad_radicular_pct: null,
       variacion_lluvia_esperada_pct: 0,
@@ -250,35 +331,72 @@ export function App() {
                   campana={campana}
                   cultivoAnterior={cultivoAnterior}
                   objetivoProductor={objetivoProductor}
+                  canPlan={isRotationReady}
+                  isPlanning={isSimulating}
+                  isHistoricalReady={isHistoricalReady}
                   onChangeCampana={setCampana}
                   onChangeCultivoAnterior={setCultivoAnterior}
                   onChangeObjetivo={setObjetivoProductor}
+                  onPlan={handlePlan}
                 />
 
-                <RecommendationPanel
-                  recomendacion={simulationResult.recomendacion_principal}
-                  ranking={simulationResult.ranking_cultivos}
-                  isWhatIfActive={isWhatIfActive}
-                />
+                {!hasPlanned && (
+                  <section className="panel-section empty-rotation-card">
+                    <span className="section-eyebrow">ESTRATEGIA DE ROTACIÓN</span>
+                    <p className="empty-rotation-text">
+                      {!isRotationReady
+                        ? 'Seleccione el tipo de campaña y el cultivo antecesor para consultar los datos históricos.'
+                        : 'Elija la prioridad de manejo y presione "Planificar" para generar la recomendación de cultivo.'}
+                    </p>
+                  </section>
+                )}
 
-                <WhatIfPanel
-                  whatIf={whatIf}
-                  nasaDetectedHumidityPct={
-                    baselineResult.telemetria_nasa.indice_humedad_radicular_pct
-                  }
-                  onChangeWhatIf={setWhatIf}
-                  onResetWhatIf={handleResetWhatIf}
-                />
+                {hasPlanned && isSimulating && !simulationResult && (
+                  <section
+                    className="panel-section skeleton-card"
+                    aria-busy="true"
+                    aria-label="Calculando estrategia de rotación"
+                  >
+                    <div className="skeleton-line short" />
+                    <div className="skeleton-line title" />
+                    <div className="skeleton-box" />
+                    <div className="skeleton-line" />
+                  </section>
+                )}
+
+                {hasPlanned && simulationResult && (
+                  <>
+                    <RecommendationPanel
+                      recomendacion={simulationResult.recomendacion_principal}
+                      ranking={simulationResult.ranking_cultivos}
+                      isWhatIfActive={isWhatIfActive}
+                    />
+
+                    <WhatIfPanel
+                      whatIf={whatIf}
+                      nasaDetectedHumidityPct={
+                        baselineResult.telemetria_nasa.indice_humedad_radicular_pct
+                      }
+                      onChangeWhatIf={setWhatIf}
+                      onResetWhatIf={handleResetWhatIf}
+                    />
+                  </>
+                )}
               </>
             )}
 
             {activeTab === 'info_general' && (
               <TelemetryCards
-                ubicacion={simulationResult.ubicacion}
+                ubicacion={baselineResult.ubicacion}
                 loteLabel={currentLoteLabel}
                 superficieHa={currentSuperficieHa}
-                telemetria={simulationResult.telemetria_nasa}
-                perfilSuelo={simulationResult.perfil_suelo}
+                telemetria={
+                  simulationResult?.telemetria_nasa ??
+                  baselineResult.telemetria_nasa
+                }
+                perfilSuelo={
+                  simulationResult?.perfil_suelo ?? baselineResult.perfil_suelo
+                }
                 isWhatIfActive={isWhatIfActive}
               />
             )}
