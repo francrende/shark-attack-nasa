@@ -36,6 +36,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | ID | Tarea Atómica | Archivos Involucrados | Depende de | Estado |
 | :--- | :--- | :--- | :---: | :---: |
 | `ML-1` | Generación del Dataset con Telemetría Histórica Real NASA POWER (20 años) + SRTM + SoilGrids, Desacople Espacial y Split Temporal (70/15/15) | `backend/ml/generate_dataset.py`, `backend/ml/data/nasa_raw_telemetry.json`, `backend/ml/data/train.csv`, `backend/ml/data/val.csv`, `backend/ml/data/test.csv` | — | `[x]` |
+| `ML-2` | Entrenamiento, Selección de Modelo (`HistGradientBoosting` vs `RandomForest`), Importancias por Permutación y Validación Agronómica | `backend/ml/train_baseline.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json` | `ML-1` | `[x]` |
 
 ---
 
@@ -67,3 +68,43 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   4. Etiquetar `s_hidroclimatico` con las curvas FAO GAEZ v4 / FAO-56 y exportar `train.csv` (11.550 filas), `val.csv` (2.475 filas), `test.csv` (2.475 filas) y `dataset_metadata.json`.
 - **Definition of Done (Comando de Verificación):**
   - `backend\.venv\Scripts\python.exe backend/ml/generate_dataset.py`
+
+---
+
+### `[x]` ML-2: Entrenamiento, Selección de Modelo (`HistGradientBoosting` vs `RandomForest`), Importancias por Permutación y Validación Agronómica
+- **Objetivo:** Entrenar y evaluar el modelo regresor que predice el puntaje de aptitud hidroclimática y topográfica (`s_hidroclimatico`, de `0` a `100`) sobre los splits temporales `train.csv` (2006–2019), `val.csv` (2020–2022) y `test.csv` (2023–2025), seleccionando el mejor estimador y empaquetando el modelo junto con sus metadatos e importancias precalculadas en `backend/ml/modelo_agro.joblib`.
+- **Archivos Permitidos:** `backend/ml/train_baseline.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `backend/ml/TASKS_ML.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Estrategia de Modelado y Selección:**
+    - Entrenar y comparar `HistGradientBoostingRegressor` (con soporte nativo de feature categórica para `cultivo_candidato` y regularización `l2_regularization` / `min_samples_leaf` para evitar sobreajuste) contra `RandomForestRegressor` evaluando sobre `val.csv` (`2020–2022`), y seleccionar el mejor según RMSE/MAE en validación.
+  - **Estructura del Artefacto (`backend/ml/modelo_agro.joblib`):**
+    - Serializar un diccionario/bundle autocontenido con:
+      - `model`: estimador entrenado ganador (`scikit-learn`).
+      - `model_name`: nombre del modelo ganador y sus hiperparámetros.
+      - `feature_columns`: lista ordenada de las 12 features oficiales de `CONTEXT.md`.
+      - `crops_catalog`: mapeo oficial `crop_name -> {id, campana}` e inverso `id -> crop_name`.
+      - `feature_importances`: importancias globales y por cultivo precalculadas mediante `permutation_importance` sobre `val.csv`, más estadísticas de referencia (`feature_baselines`: media y desvío de cada feature en el dataset) para calcular sensibilidad local en `< 1 ms` durante la inferencia.
+      - `metrics`: reporte completo de métricas en `train`, `val` y `test` (global y desglosado por los 11 cultivos).
+    - Guardar además el reporte legible en `backend/ml/data/training_metrics.json`.
+  - **Explicabilidad (`factores_clave_ml`):**
+    - Precalcular `permutation_importance` en `val.csv` tanto a nivel global como condicionado por cada uno de los 11 cultivos, normalizando los pesos para que `predictor.py` pueda combinar importancia intrínseca del cultivo + desvío físico de la telemetría del lote sin costo computacional en producción.
+  - **Sanity Checks Automáticos y Criterios de Aceptación (DoD):**
+    - Verificar automáticamente al finalizar `train_baseline.py`:
+      1. `R² > 0.85` y `MAE < 5.0` en el conjunto de **Test Out-of-Time (`2023–2025`)**.
+      2. Control de generalización sin overfitting severo (diferencia acotada entre Train y Test).
+      3. Latencia de inferencia para un lote (evaluando todos los cultivos de una campaña en batch) `< 15 ms`.
+      4. Coherencia agronómica en el escenario benchmark de sequía de `CONTEXT.md` (`GWETROOT = 34%`, anomalía de lluvia `-24.2%`, pendiente `1.8%`): `sorgo` y `girasol` deben superar ampliamente a `soja_primera` y `maiz_temprano`, con predicciones acotadas en `[0.0, 100.0]`.
+- **Especificación Técnica:**
+  1. Implementar `backend/ml/train_baseline.py` cargando `train.csv`, `val.csv`, `test.csv` y `dataset_metadata.json`.
+  2. Ejecutar búsqueda de hiperparámetros / comparación entre candidatos de `HistGradientBoostingRegressor` (`categorical_features=[11]`) y `RandomForestRegressor` usando `val.csv`.
+  3. Evaluar el modelo ganador en `train.csv`, `val.csv` y `test.csv` (métricas globales `MAE`, `RMSE`, `R²`, `MaxError` y métricas por cultivo).
+  4. Calcular `permutation_importance` global y por cultivo sobre `val.csv` y estadísticas base de features.
+  5. Ejecutar la suite de *Sanity Checks* (umbrales en Test, latencia `< 15 ms` y benchmark de sequía de `CONTEXT.md`) y serializar `backend/ml/modelo_agro.joblib` y `backend/ml/data/training_metrics.json`.
+- **Definition of Done (Comando de Verificación):**
+  - `backend\.venv\Scripts\python.exe backend/ml/train_baseline.py`
+- **Resultado de la Verificación (2026-11-14):**
+  - Ganador: `hist_gradient_boosting_v3` (`learning_rate=0.03`, `max_leaf_nodes=31`, `min_samples_leaf=15`, `l2_regularization=0.5`). Random Forest quedó en Val RMSE ≈ 6.3 vs 3.24 del HGB.
+  - Test Out-of-Time (2023–2025): `MAE = 2.22`, `RMSE = 3.30`, `R² = 0.9887` (gap R² Train–Test = `0.008`).
+  - Latencia batch (6 cultivos de verano): `p50 = 8.4 ms`, `p95 = 10.8 ms`.
+  - Benchmark de sequía de `CONTEXT.md`: `sorgo 91.9` · `girasol 86.9` · `maiz_tardio 80.4` · `soja_segunda 58.2` · `soja_primera 56.2` · `maiz_temprano 45.6` (margen `30.7` pts).
+  - Nota para `predictor.py`: las predicciones crudas pueden salir por debajo de 0 (mín. `-28.8`), así que siempre hay que acotarlas a `[0, 100]`.
