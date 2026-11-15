@@ -3,8 +3,6 @@ import {
   Compass,
   History,
   Info,
-  LogOut,
-  User,
 } from 'lucide-react'
 import './App.css'
 import { AuthScreen } from './components/AuthScreen'
@@ -18,6 +16,7 @@ import {
   WhatIfPanel,
 } from './components/SimulationControls'
 import { TelemetryCards } from './components/TelemetryCards'
+import { UserSettingsModal } from './components/UserSettingsModal'
 import { DEMO_FIELDS } from './data/demoFields'
 import {
   getHistoricalSeriesForCoords,
@@ -90,6 +89,7 @@ export function App() {
 
   // Por regla de SKILLS_FRONTEND.md §3 y §4, la app inicia directamente en 'Planificación de campaña'
   const [activeTab, setActiveTab] = useState<NavTabId>('planificacion')
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
 
   // Estado GIS y gestión de campos del usuario desde backend (FRONT-21)
   const [userFields, setUserFields] = useState<UserField[]>([])
@@ -97,7 +97,6 @@ export function App() {
   const [isFieldsLoading, setIsFieldsLoading] = useState<boolean>(false)
   const [isSavingField, setIsSavingField] = useState<boolean>(false)
   const [fieldsError, setFieldsError] = useState<string | null>(null)
-  const [isFieldsBarOpen, setIsFieldsBarOpen] = useState<boolean>(false)
   const [isDrawingNewField, setIsDrawingNewField] = useState<boolean>(false)
   const [selectedCoords, setSelectedCoords] = useState<Coordenadas>(
     defaultField.centroide
@@ -429,6 +428,7 @@ export function App() {
     setActiveToken(null)
     setUserFields([])
     setSelectedFieldId(null)
+    setIsSettingsOpen(false)
     setAuthStatus('unauthenticated')
   }
 
@@ -459,41 +459,10 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* HEADER SUPERIOR SÓLIDO (#3A0C00) */}
+      {/* HEADER SUPERIOR (#FFF5E0) */}
       <header className="top-navbar">
         <div className="top-navbar-left">
           <BrandBlock />
-
-          <div className="header-session-bar">
-            {authStatus === 'authenticated' && currentUser ? (
-              <>
-                <span className="header-user-pill">
-                  <User size={14} aria-hidden="true" />
-                  <span>{currentUser.nombre || currentUser.email}</span>
-                </span>
-                <button
-                  type="button"
-                  className="header-session-btn"
-                  onClick={handleLogout}
-                >
-                  <LogOut size={14} aria-hidden="true" />
-                  <span>Cerrar sesión</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="header-demo-pill">Modo demo</span>
-                <button
-                  type="button"
-                  className="header-session-btn"
-                  onClick={handleLogout}
-                >
-                  <User size={14} aria-hidden="true" />
-                  <span>Iniciar sesión</span>
-                </button>
-              </>
-            )}
-          </div>
         </div>
       </header>
 
@@ -506,10 +475,17 @@ export function App() {
             isLoading={isFieldsLoading}
             isSaving={isSavingField}
             errorMsg={fieldsError}
-            isOpen={isFieldsBarOpen}
             isDrawing={isDrawingNewField}
             customPolygon={customPolygon}
-            onToggleOpen={() => setIsFieldsBarOpen((prev) => !prev)}
+            isDemo={authStatus === 'demo'}
+            isUserSettingsOpen={isSettingsOpen}
+            onUserAction={() => {
+              if (authStatus === 'demo') {
+                handleLogout()
+              } else {
+                setIsSettingsOpen(true)
+              }
+            }}
             onSelectField={handleSelectUserField}
             onStartDrawing={handleStartDrawing}
             onCancelDrawing={handleCancelDrawing}
@@ -654,6 +630,12 @@ export function App() {
           </div>
         </aside>
       </main>
+
+      <UserSettingsModal
+        isOpen={isSettingsOpen && authStatus === 'authenticated'}
+        user={currentUser}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   )
 }

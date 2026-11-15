@@ -13,7 +13,6 @@ export function BrandBlock() {
           <span className="brand-wordmark-ere">Ere</span>
           <span className="brand-wordmark-ia">ia</span>
         </h1>
-        <p className="brand-subtitle">Soporte para el cultivo</p>
       </div>
     </div>
   )

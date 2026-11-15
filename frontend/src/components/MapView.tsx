@@ -14,7 +14,7 @@ import {
   getLotHistoricalVisualForYear,
   type HistoricalMetricId,
 } from '../data/historicalData'
-import { THEME_COLORS } from '../theme/mapColors'
+import { getFieldColorByIndex, THEME_COLORS } from '../theme/mapColors'
 import type {
   Coordenadas,
   UserField,
@@ -157,9 +157,10 @@ export function MapView({
         />
 
         {/* 4. Campos del Usuario desde la Base de Datos */}
-        {userFields.map((field) => {
+        {userFields.map((field, idx) => {
           const isSelected = !isDrawingNewField && field.id === selectedFieldId
           const fieldCoords = { lat: field.lat, lon: field.lon }
+          const { hex: fieldColor } = getFieldColorByIndex(idx)
 
           const histVisual =
             isHistoricalActive && historicalMode
@@ -174,23 +175,17 @@ export function MapView({
             ? isSelected
               ? THEME_COLORS.bg
               : histVisual.strokeColor
-            : isSelected
-              ? THEME_COLORS.primary
-              : THEME_COLORS.earthBrown
+            : fieldColor
 
-          const fillColor = histVisual
-            ? histVisual.fillColor
-            : isSelected
-              ? THEME_COLORS.primary
-              : THEME_COLORS.goldYellow
+          const fillColor = histVisual ? histVisual.fillColor : fieldColor
 
           const fillOpacity = histVisual
             ? isSelected
-              ? 0.52
-              : 0.32
+              ? 0.58
+              : 0.36
             : isSelected
-              ? 0.35
-              : 0.16
+              ? 0.65
+              : 0.24
 
           const tooltipContent = (
             <Tooltip sticky direction="top">
@@ -212,7 +207,7 @@ export function MapView({
                 positions={field.polygon}
                 pathOptions={{
                   color: strokeColor,
-                  weight: isSelected ? 3 : 2,
+                  weight: isSelected ? 3.5 : 2,
                   fillColor,
                   fillOpacity,
                 }}
