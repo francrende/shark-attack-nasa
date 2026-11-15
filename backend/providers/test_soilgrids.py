@@ -476,3 +476,95 @@ def test_lote_ejemplo_a_mas_de_100m_no_aplica():
 def test_coordenadas_invalidas(lat, lon):
     with pytest.raises(ValueError):
         asyncio.run(fetch_perfil_suelo(lat, lon))
+
+
+# ---------- BACK-19: grilla de suelo ISRIC (respaldo antes de GeoINTA) ----------
+
+from providers.soilgrids import ADV_GRILLA, _armar_perfil, registrar_grilla  # noqa: E402
+
+NORTE_SANTA_FE = (-29.0, -60.0)  # sin localidad GeoINTA a 100 km
+
+
+def _entrada_grilla(lat, lon, raw=PERGAMINO_RAW, fuente="isric_soilgrids_v2"):
+    perfil = _armar_perfil(_parsear(_payload(raw)), fuente, 0.0)
+    return {clave_coordenada(lat, lon): {"lat": lat, "lon": lon, "perfil": perfil_a_dict(perfil)}}
+
+
+def _timeout(req):
+    raise httpx.ReadTimeout("timeout", request=req)
+
+
+def test_grilla_por_timeout_perfil_completo_y_no_se_cachea():
+    registrar_grilla(_entrada_grilla(-29.2, -60.3))
+    perfil, llamadas = _run(_timeout, NORTE_SANTA_FE)
+    assert len(llamadas) == 1
+    assert perfil.fuente == "grilla_isric"
+    assert perfil.textura_predominante == "franco_limoso" and perfil.carbono_organico_g_kg is not None
+    assert perfil.distancia_fuente_km == pytest.approx(36.3, abs=1.0)
+    assert perfil.advertencias[0] == ADV_GRILLA.format(distancia=perfil.distancia_fuente_km)
+    assert perfil.reintentar_soilgrids is True
+    assert _en_cache(NORTE_SANTA_FE) is None and _en_secundaria(NORTE_SANTA_FE) is None
+
+
+def test_grilla_con_corte_activo_sin_request():
+    registrar_grilla(_entrada_grilla(-29.2, -60.3))
+    _run(_timeout, NORTE_SANTA_FE)  # abre el corte
+    perfil, llamadas = _run(lambda req: httpx.Response(200, json=_payload(PERGAMINO_RAW)), NORTE_SANTA_FE)
+    assert llamadas == []
+    assert perfil.fuente == "grilla_isric"
+
+
+def test_grilla_tiene_prioridad_sobre_geointa():
+    registrar_grilla(_entrada_grilla(-34.3, -60.9))  # ~50 km; GeoINTA Pergamino está a ~7 km
+    perfil, _ = _run(lambda req: httpx.Response(503))
+    assert perfil.fuente == "grilla_isric"
+    assert perfil.localidad_fallback is None
+
+
+def test_sin_grilla_cerca_cae_a_geointa():
+    registrar_grilla(_entrada_grilla(-38.0, -58.0))  # Balcarce: a más de 120 km de Pergamino
+    perfil, _ = _run(lambda req: httpx.Response(503))
+    assert perfil.fuente == "fallback_regional"
+
+
+def test_sin_grilla_ni_geointa_lanza_unavailable():
+    registrar_grilla(_entrada_grilla(-33.95, -60.57))
+    with pytest.raises(SoilGridsUnavailable):
+        _run(lambda req: httpx.Response(503), NORTE_SANTA_FE)
+
+
+def test_grilla_radio_120km():
+    registrar_grilla(_entrada_grilla(-30.0, -60.0))  # ~111 km al norte del punto pedido
+    perfil, _ = _run(_timeout, NORTE_SANTA_FE)
+    assert perfil.fuente == "grilla_isric"
+
+
+def test_grilla_en_pixel_sin_dato_no_se_marca_para_reintentar():
+    registrar_grilla(_entrada_grilla(-29.2, -60.3))
+    perfil, llamadas = _run(lambda req: httpx.Response(200, json=_payload(NULOS)), NORTE_SANTA_FE)
+    assert len(llamadas) == 5
+    assert perfil.fuente == "grilla_isric"
+    assert perfil.reintentar_soilgrids is False
+
+
+def test_grilla_reemplaza_advertencia_de_vecino_y_conserva_las_propias():
+    raw = dict(PERGAMINO_RAW, soc=(None, None, None))
+    registrar_grilla(_entrada_grilla(-29.2, -60.3, raw, fuente="isric_soilgrids_v2_vecino"))
+    perfil, _ = _run(_timeout, NORTE_SANTA_FE)
+    assert ADV_VECINO not in perfil.advertencias
+    assert ADV_SIN_SOC in perfil.advertencias
+
+
+def test_registrar_grilla_descarta_entradas_mal_formadas():
+    entradas = {**_entrada_grilla(-29.2, -60.3), "rota": {"lat": -30}, "otra": "texto"}
+    assert registrar_grilla(entradas) == 1
+
+
+def test_puntos_grilla_dentro_de_las_provincias():
+    from providers.generar_precache import puntos_grilla
+    from providers.regional import haversine_km
+
+    puntos = puntos_grilla()
+    assert 75 <= len(puntos) <= 95
+    assert all(-41.5 < la < -27.5 and -68.5 < lo < -56.5 for la, lo in puntos)
+    assert min(haversine_km(*NORTE_SANTA_FE, la, lo) for la, lo in puntos) < 71

@@ -27,6 +27,7 @@ from providers.cache import (  # noqa: E402
 )
 from providers.cache_supabase import CacheSupabase, crear_cache_supabase  # noqa: E402
 from providers.nasa_telemetry import ESPACIO_HIST, cargar_climatologia_precalculada  # noqa: E402
+from providers.soilgrids import ESPACIO_GRILLA, registrar_grilla  # noqa: E402
 from routers import auth, campaigns, fields  # noqa: E402
 from routers.simulate import router as simulate_router  # noqa: E402
 
@@ -34,6 +35,7 @@ settings = get_settings()
 
 _cache_persistente: CacheSupabase | None = None
 _filas_precargadas = 0
+_puntos_grilla_suelo = 0
 
 
 def _no_esta_en_el_precalculo(espacio: str, clave: str) -> bool:
@@ -43,13 +45,15 @@ def _no_esta_en_el_precalculo(espacio: str, clave: str) -> bool:
 
 async def _iniciar_cache_persistente() -> CacheSupabase | None:
     """BACK-18: precarga la caché de Supabase y la enchufa como capa secundaria."""
-    global _filas_precargadas
+    global _filas_precargadas, _puntos_grilla_suelo
     cache = crear_cache_supabase(settings, filtro_escritura=_no_esta_en_el_precalculo)
     if cache is None:
         return None
     filas = await asyncio.to_thread(cache.hidratar)
     _filas_precargadas = filas
-    logger.info("cache_supabase: %d filas precargadas", filas)
+    # BACK-19: la grilla de suelo viene en la misma precarga (sin consultas extra).
+    _puntos_grilla_suelo = registrar_grilla(cache.entradas(ESPACIO_GRILLA))
+    logger.info("cache_supabase: %d filas precargadas (%d puntos de grilla de suelo)", filas, _puntos_grilla_suelo)
     configurar_cache(CacheEnCapas(CacheMemoria(), secundaria=cache, ttl_por_espacio=TTL_POR_ESPACIO_DEFAULT))
     return cache
 
@@ -101,4 +105,5 @@ def health_check() -> dict[str, str | bool | int]:
         "cache_persistente": _cache_persistente is not None,
         # Filas de provider_cache bajadas en el último arranque (verificación sin mirar logs).
         "cache_filas_precargadas": _filas_precargadas,
+        "grilla_suelo_puntos": _puntos_grilla_suelo,
     }

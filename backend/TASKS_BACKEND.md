@@ -53,7 +53,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-15` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado (`FRONT-30`) *(antes BACK-8)* | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
 | `BACK-16` | Deploy en Render (creación): Web Service Free desde `main`, versiones fijas, `/health` con `HEAD` | `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md` | `BACK-13` | `[x]` |
 | `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[~]` |
-| `BACK-18` | Capa de caché persistente en Supabase (`provider_cache`): precarga al arrancar, escritura en segundo plano | `backend/sql/schema.sql`, `backend/providers/cache_supabase.py`, `backend/providers/test_cache_supabase.py`, `backend/config.py`, `backend/.env.example`, `backend/main.py`, `backend/conftest.py` | `BACK-10`, tabla `provider_cache` (la crea la desarrolladora) | `[~]` |
+| `BACK-18` | Capa de caché persistente en Supabase (`provider_cache`): precarga al arrancar, escritura en segundo plano | `backend/sql/schema.sql`, `backend/providers/cache_supabase.py`, `backend/providers/test_cache_supabase.py`, `backend/config.py`, `backend/.env.example`, `backend/main.py`, `backend/conftest.py` | `BACK-10`, tabla `provider_cache` (la crea la desarrolladora) | `[x]` |
 | `BACK-19` | Grilla de suelo ISRIC cada 100 km en Supabase como respaldo antes de GeoINTA | `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/test_soilgrids.py`, `backend/main.py` | `BACK-18` | `[~]` |
 
 ---
@@ -773,7 +773,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 > **Origen (15/11/2026):** en Render, ISRIC respondió en 5–19 s, contra el timeout de 8 s. En Marcos Juárez el timeout abrió el corte automático, y durante ese corte (−29,0, −60,0), en el norte de Santa Fe, dio `503`: no hay ninguna localidad GeoINTA a menos de 100 km. Además, la caché en memoria se pierde en cada deploy o reinicio de Render.
 
-### `[~]` BACK-18: Capa de caché persistente en Supabase
+### `[x]` BACK-18: Capa de caché persistente en Supabase
+> **Verificación en Render (15/11/2026, commit `adbb64c`):**
+> - `/health` da `cache_persistente: true` y `cache_filas_precargadas: 3`.
+> - Render escribió en `provider_cache` la topografía SRTM y el **suelo ISRIC real** de (−33,40, −62,80).
+> - Después del redeploy, ese punto respondió con el suelo real (carbono 12,9 g/kg, sin advertencias).
+> - **Agregado:** `/health` suma `cache_filas_precargadas`, porque el visor de logs del plan Free no muestra el arranque.
+>
 > **Implementación y verificación local (15/11/2026):**
 > - **Tabla y claves:** la desarrolladora creó `provider_cache` y cargó `SUPABASE_SECRET_KEY` en Render y en `.env`.
 >   - Con la secret key nueva (`sb_secret_`), supabase-py 2.34.1 escribe y lee.
@@ -793,7 +799,6 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 >   3. El suelo no se guardó porque ISRIC volvió a pasarse de 8 s: el fallback transitorio no se persiste, por diseño.
 >   4. El `nasa_hist` de la celda no se subió (filtro).
 > - **Nota:** `actualizado_en` registra la primera inserción; un upsert posterior no lo actualiza.
-> - **Falta:** merge a `main`, deploy en Render y el DoD en Render (`/health` con `cache_persistente: true`, y un restart que conserve las filas).
 - **Objetivo:** Que las respuestas reales de los providers (suelo, topografía e histórico de NASA) sobrevivan a los reinicios de Render, usando la capa secundaria que dejó prevista BACK-10. Ninguna consulta de `/simulate` debe esperar a Supabase.
 - **Archivos Permitidos:**
   - `backend/providers/cache_supabase.py` y `backend/providers/test_cache_supabase.py` (nuevos).
@@ -860,6 +865,28 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     4. El mismo punto responde sin consultar a ISRIC (el log no muestra la llamada) y `/health` da `cache_persistente: true`.
 
 ### `[~]` BACK-19: Grilla de suelo ISRIC cada 100 km (respaldo en Supabase)
+> **Implementación (15/11/2026):**
+> - **`soilgrids.py`:**
+>   - Se agregan `registrar_grilla`, `_punto_grilla_mas_cercano` y `_perfil_de_grilla`, la `Fuente` `"grilla_isric"` y `ADV_GRILLA`.
+>   - `_consultar` acepta `timeout_s`, que solo se usa en la generación offline.
+>   - `reiniciar_estado` también limpia la grilla.
+> - **`generar_precache.py grilla`:**
+>   - `puntos_grilla()` arma 84 puntos con un paso de 100 km (en longitud, ajustado por cos(lat)), dentro de las 5 provincias con `enabled` en `frontend/src/data/argentinaProvinces.json`, que se lee sin modificarlo.
+>   - Consulta ISRIC con timeout de 60 s, una llamada cada 13 s; si el píxel no tiene dato, prueba los vecinos.
+>   - Sube cada punto con `CacheSupabase.set` y es reanudable.
+> - **`main.py`:**
+>   - Después de la precarga, `registrar_grilla(cache.entradas("suelo_grilla"))`.
+>   - `/health` suma `grilla_suelo_puntos`.
+> - **Tests:** 10 nuevos en `test_soilgrids.py`. La suite completa da **277 en verde**.
+>   - Los tests de latencia de `ml/test_predictor.py` fallaron una vez con la máquina cargada y pasaron al repetir. No tienen relación con esta tarea.
+> - **Cambios respecto de la especificación:**
+>   - **Radio propio de la grilla, 120 km** (`RADIO_GRILLA_KM`). Con un muestreo cada 10 km dentro de las provincias, el peor caso quedó a 111,4 km del punto más cercano (extremo norte de Santa Fe, −28,02°), con 16 de 8.247 muestras por encima de 100 km. GeoINTA sigue en 100 km.
+>   - **La grilla también se usa con el píxel sin dato determinístico** (urbano o agua, con los 4 vecinos en `null`), con `reintentar_soilgrids=False`, porque da un perfil completo y GeoINTA solo la arcilla.
+>   - **Advertencias:** la de "vecino a 500 m" del punto de grilla se reemplaza por `ADV_GRILLA`, y se conservan las propias (por ejemplo, sin carbono).
+> - **Generación (15/11/2026):** `generar_precache grilla` guardó **83/84 puntos** en `provider_cache` (`suelo_grilla`), sin escrituras fallidas. 3 puntos salieron de un vecino a 500 m.
+>   - El que falta es (−30,677, −62,535), en la laguna Mar Chiquita (Córdoba). Ni el punto ni sus vecinos tienen dato y es determinístico: reintentar no sirve.
+>   - Sin ese punto la cobertura no cambia: el peor caso sigue en 111,4 km, por debajo del radio de 120 km.
+> - **Falta:** merge a `main`, deploy y el DoD en Render (`grilla_suelo_puntos: 83` en `/health`, y (−29,0, −60,0) sin `503`).
 - **Objetivo:** Que ningún punto de las provincias habilitadas termine en `503` cuando ISRIC no responde. Para eso se usa el perfil real de ISRIC del punto de una grilla precargada más cercano, que trae textura y carbono, no solo arcilla.
 - **Archivos Permitidos:**
   - `backend/providers/soilgrids.py`: la cascada.

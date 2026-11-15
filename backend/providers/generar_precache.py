@@ -3,6 +3,7 @@
 Uso (desde backend/):
     python -m providers.generar_precache nasa    # climatología + días de calor por celda pampeana
     python -m providers.generar_precache suelo   # perfil SoilGrids de los lotes de ejemplo
+    python -m providers.generar_precache grilla  # BACK-19: grilla de suelo ISRIC (~100 km) -> Supabase
 
 Ambos son secuenciales (las consultas en paralelo a NASA POWER se colgaban y ISRIC limita a
 5 llamadas/minuto), reanudables (saltean lo ya generado con la versión vigente) y guardan
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import sys
 import time
 from datetime import datetime, timezone
@@ -33,7 +35,17 @@ from providers.nasa_telemetry import (
     calcular_referencia,
     referencia_a_dict,
 )
-from providers.soilgrids import RUTA_LOTES_EJEMPLO, fetch_perfil_suelo, perfil_a_dict
+from providers.cache import clave_coordenada
+from providers.soilgrids import (
+    ESPACIO_GRILLA,
+    RUTA_LOTES_EJEMPLO,
+    _armar_perfil,
+    _consultar,
+    _haversine_km,
+    _vecinos,
+    fetch_perfil_suelo,
+    perfil_a_dict,
+)
 
 # Región pampeana (centros de celda de la grilla de NASA POWER)
 LAT_MIN, LAT_MAX = -39.0, -28.0
@@ -156,12 +168,145 @@ async def generar_suelo(ruta: Path = RUTA_LOTES_EJEMPLO) -> None:
     print(f"Lotes guardados: {len(lotes)}/{len(LOTES_EJEMPLO)} en {ruta}", flush=True)
 
 
+# ---------------------------------------------------------------------------
+# BACK-19: grilla de suelo ISRIC cada ~100 km, guardada solo en Supabase (provider_cache)
+# ---------------------------------------------------------------------------
+
+# Mismos polígonos que usa el selector de provincias del frontend (solo lectura).
+RUTA_PROVINCIAS = Path(__file__).resolve().parents[2] / "frontend" / "src" / "data" / "argentinaProvinces.json"
+PASO_GRILLA_KM = 100.0
+KM_POR_GRADO_LAT = 111.0
+TIMEOUT_GRILLA_S = 60.0  # offline: se puede esperar a ISRIC
+SEPARACION_LLAMADAS_S = 13.0  # holgura para el límite de 5 llamadas/minuto de ISRIC
+
+
+def _punto_en_anillo(lon: float, lat: float, anillo: list[list[float]]) -> bool:
+    dentro = False
+    j = len(anillo) - 1
+    for i in range(len(anillo)):
+        xi, yi = anillo[i][0], anillo[i][1]
+        xj, yj = anillo[j][0], anillo[j][1]
+        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
+            dentro = not dentro
+        j = i
+    return dentro
+
+
+def _poligonos_habilitados(ruta: Path) -> list[list[list[list[float]]]]:
+    """Polígonos (anillos GeoJSON [lon, lat]) de las provincias con ``enabled = true``."""
+    datos = json.loads(ruta.read_text(encoding="utf-8"))
+    poligonos = []
+    for feature in datos["features"]:
+        if not feature["properties"].get("enabled"):
+            continue
+        geom = feature["geometry"]
+        poligonos += [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
+    return poligonos
+
+
+def _en_poligono(lon: float, lat: float, anillos: list[list[list[float]]]) -> bool:
+    if not anillos or not _punto_en_anillo(lon, lat, anillos[0]):
+        return False
+    return not any(_punto_en_anillo(lon, lat, hueco) for hueco in anillos[1:])
+
+
+def puntos_grilla(ruta: Path = RUTA_PROVINCIAS, paso_km: float = PASO_GRILLA_KM) -> list[tuple[float, float]]:
+    """Puntos (lat, lon) cada ``paso_km`` dentro de las provincias habilitadas en el frontend.
+
+    En latitud el paso es fijo; en longitud se ajusta por cos(lat) para que la separación
+    real sea ~``paso_km`` en todas las filas.
+    """
+    poligonos = _poligonos_habilitados(ruta)
+    todos = [c for p in poligonos for c in p[0]]
+    lat_min, lat_max = min(c[1] for c in todos), max(c[1] for c in todos)
+    lon_min, lon_max = min(c[0] for c in todos), max(c[0] for c in todos)
+    paso_lat = paso_km / KM_POR_GRADO_LAT
+    puntos = []
+    lat = lat_min + paso_lat / 2
+    while lat < lat_max:
+        paso_lon = paso_km / (KM_POR_GRADO_LAT * math.cos(math.radians(lat)))
+        lon = lon_min + paso_lon / 2
+        while lon < lon_max:
+            if any(_en_poligono(lon, lat, p) for p in poligonos):
+                puntos.append((round(lat, 4), round(lon, 4)))
+            lon += paso_lon
+        lat += paso_lat
+    return puntos
+
+
+async def _perfil_isric_offline(client: httpx.AsyncClient, lat: float, lon: float) -> tuple[dict | None, str]:
+    """Perfil real del punto (o de un vecino a 500 m si el píxel es urbano o agua).
+
+    Devuelve (perfil_dict o None, detalle). Respeta el límite de 5 llamadas/minuto de ISRIC.
+    """
+    for i, (qlat, qlon) in enumerate([(lat, lon)] + _vecinos(lat, lon)):
+        if i:
+            await asyncio.sleep(SEPARACION_LLAMADAS_S)
+        estado, valores, detalle = await _consultar(client, qlat, qlon, timeout_s=TIMEOUT_GRILLA_S)
+        if estado == "error":
+            return None, detalle
+        if estado == "ok":
+            fuente = "isric_soilgrids_v2" if i == 0 else "isric_soilgrids_v2_vecino"
+            perfil = _armar_perfil(valores, fuente, _haversine_km(lat, lon, qlat, qlon))  # type: ignore[arg-type]
+            return perfil_a_dict(perfil), fuente
+    return None, "píxel y vecinos sin dato"
+
+
+async def generar_grilla() -> None:
+    from config import get_settings
+    from providers.cache_supabase import crear_cache_supabase
+
+    cache = crear_cache_supabase(get_settings())
+    if cache is None:
+        print("Falta SUPABASE_SECRET_KEY (o SUPABASE_URL) en backend/.env: la grilla vive solo en Supabase.")
+        sys.exit(1)
+    cache.hidratar(timeout_s=30)
+    existentes = cache.entradas(ESPACIO_GRILLA)
+    puntos = puntos_grilla()
+    pendientes = [(la, lo) for la, lo in puntos if clave_coordenada(la, lo) not in existentes]
+    print(
+        f"Puntos de grilla: {len(puntos)} | ya en Supabase: {len(puntos) - len(pendientes)} | "
+        f"pendientes: {len(pendientes)} (~{len(pendientes) * SEPARACION_LLAMADAS_S / 60:.0f} min)",
+        flush=True,
+    )
+
+    fallidos: list[str] = []
+    async with httpx.AsyncClient() as client:
+        for i, (lat, lon) in enumerate(pendientes, start=1):
+            t0 = time.perf_counter()
+            perfil, detalle = await _perfil_isric_offline(client, lat, lon)
+            clave = clave_coordenada(lat, lon)
+            if perfil is None:
+                fallidos.append(clave)
+                print(f"[{i}/{len(pendientes)}] {clave}: SIN DATO ({detalle}, {time.perf_counter() - t0:.1f}s)", flush=True)
+            else:
+                cache.set(ESPACIO_GRILLA, clave, {"lat": lat, "lon": lon, "perfil": perfil})
+                print(
+                    f"[{i}/{len(pendientes)}] {clave}: {perfil['textura_predominante']}, "
+                    f"arcilla {perfil['arcilla_pct']}%, soc {perfil['carbono_organico_g_kg']} g/kg "
+                    f"({detalle}, {time.perf_counter() - t0:.1f}s)",
+                    flush=True,
+                )
+            if i < len(pendientes):
+                await asyncio.sleep(max(0.0, SEPARACION_LLAMADAS_S - (time.perf_counter() - t0)))
+    cache.cerrar(timeout_s=30)
+    print(
+        f"Listo. Guardados: {len(pendientes) - len(fallidos)} | sin dato: {len(fallidos)} | "
+        f"escrituras fallidas en Supabase: {cache.escrituras_fallidas}",
+        flush=True,
+    )
+    if fallidos:
+        print("Volvé a correr el comando para reintentar solo los que faltan.", flush=True)
+
+
 if __name__ == "__main__":
     comando = sys.argv[1] if len(sys.argv) > 1 else ""
     if comando == "nasa":
         asyncio.run(generar_nasa())
     elif comando == "suelo":
         asyncio.run(generar_suelo())
+    elif comando == "grilla":
+        asyncio.run(generar_grilla())
     else:
         print(__doc__)
         sys.exit(1)

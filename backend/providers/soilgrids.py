@@ -5,9 +5,11 @@ de respaldo:
 
 1. Punto pedido.
 2. Si el píxel no tiene dato (``null``: zona urbana / agua): 4 vecinos a ~500 m (N, S, E, O).
-3. Si hay timeout / 429 / 5xx / red, o los vecinos tampoco tienen dato: arcilla de la
-   localidad GeoINTA más cercana (≤ 100 km), con advertencia visible.
-4. Fuera de 100 km: ``SoilGridsUnavailable`` (el router lo mapea a 503).
+3. Si hay timeout / 429 / 5xx / red, o los vecinos tampoco tienen dato:
+   a. BACK-19: perfil ISRIC del punto de la grilla precargada (Supabase, cada ~100 km) más
+      cercano (≤ 100 km), con advertencia visible.
+   b. Si no hay grilla cerca: arcilla de la localidad GeoINTA más cercana (≤ 100 km).
+4. Sin grilla ni localidad a 100 km: ``SoilGridsUnavailable`` (el router lo mapea a 503).
 
 Respeta el límite de ISRIC (5 llamadas/minuto por IP) con un limitador de ventana
 deslizante, y cachea por coordenada redondeada (~100 m) sin vencimiento.
@@ -37,6 +39,8 @@ D_FACTOR_DEFAULT = 10.0
 TIMEOUT_S = 8.0
 OFFSET_VECINO_GRADOS = 0.0045  # ~500 m en latitud
 RADIO_FALLBACK_KM = 100.0
+# BACK-19: con puntos cada 100 km, el peor caso dentro de las provincias es ~111 km (puntas finas).
+RADIO_GRILLA_KM = 120.0
 LIMITE_LLAMADAS = 5
 VENTANA_LIMITE_S = 60.0
 CACHE_DECIMALES = 3  # ~100 m (ver providers.cache.clave_coordenada)
@@ -53,11 +57,18 @@ ADV_VECINO = (
     "Perfil de suelo tomado a ~500 m del punto marcado "
     "(sin dato en SoilGrids: zona urbana o espejo de agua)."
 )
+ADV_GRILLA = (
+    "Perfil de suelo de ISRIC tomado de un punto de referencia a {distancia:.0f} km "
+    "(ISRIC no respondió a tiempo o no tiene dato en el punto). Textura y carbono son aproximados."
+)
 ADV_SIN_SOC = "Carbono orgánico no disponible: el ajuste de rotación por carbono no se aplicó."
 ADV_SIN_PH = "pH no disponible: el ajuste de rotación por pH no se aplicó."
 ADV_SIN_TEXTURA = "Arena/limo no disponibles: no se pudo determinar la clase textural."
 
-Fuente = Literal["isric_soilgrids_v2", "isric_soilgrids_v2_vecino", "precache", "fallback_regional"]
+Fuente = Literal[
+    "isric_soilgrids_v2", "isric_soilgrids_v2_vecino", "precache", "grilla_isric", "fallback_regional"
+]
+ESPACIO_GRILLA = "suelo_grilla"  # BACK-19: filas de provider_cache con la grilla de ~100 km
 
 # Tabla GeoINTA, limitador y corte automático: compartidos con el provider de SRTM (BACK-5).
 # Se reexportan con los mismos nombres para no romper a quien ya los importa desde acá.
@@ -105,19 +116,40 @@ _SIN_DATO = {"sin_dato": True}  # entrada de caché: punto + 4 vecinos sin dato 
 _limitador = LimitadorTasa(LIMITE_LLAMADAS, VENTANA_LIMITE_S)
 _corte = CorteAutomatico(DURACION_CORTE_S)
 _lotes_ejemplo: list[dict[str, Any]] | None = None
+_grilla: list[dict[str, Any]] = []  # BACK-19: [{"lat", "lon", "perfil"}], vacía hasta registrarla
 
 
 def reiniciar_estado(
     limitador: LimitadorTasa | None = None,
     corte: CorteAutomatico | None = None,
     lotes_ejemplo: list[dict[str, Any]] | None = None,
+    grilla: dict[str, Any] | None = None,
 ) -> None:
-    """Reinicia limitador, corte y lotes de ejemplo (uso en tests). La caché se configura
-    aparte con ``providers.cache.configurar_cache``."""
+    """Reinicia limitador, corte, lotes de ejemplo y grilla (uso en tests). La caché se
+    configura aparte con ``providers.cache.configurar_cache``."""
     global _limitador, _corte, _lotes_ejemplo
     _limitador = limitador or LimitadorTasa(LIMITE_LLAMADAS, VENTANA_LIMITE_S)
     _corte = corte or CorteAutomatico(DURACION_CORTE_S)
     _lotes_ejemplo = lotes_ejemplo
+    registrar_grilla(grilla or {})
+
+
+def registrar_grilla(entradas: dict[str, Any]) -> int:
+    """BACK-19: carga la grilla de suelo (``CacheSupabase.entradas("suelo_grilla")``).
+
+    Cada valor es ``{"lat", "lon", "perfil": perfil_a_dict(...)}``. Las entradas mal formadas
+    se descartan. Devuelve cuántos puntos quedaron cargados.
+    """
+    global _grilla
+    puntos = []
+    for valor in entradas.values():
+        try:
+            dict_a_perfil(valor["perfil"])  # valida la forma
+            puntos.append({"lat": float(valor["lat"]), "lon": float(valor["lon"]), "perfil": valor["perfil"]})
+        except (KeyError, TypeError, ValueError):
+            continue
+    _grilla = puntos
+    return len(puntos)
 
 
 def cargar_lotes_ejemplo(ruta: Path = RUTA_LOTES_EJEMPLO) -> list[dict[str, Any]]:
@@ -275,12 +307,43 @@ def _lote_ejemplo_cercano(lat: float, lon: float) -> PerfilSueloSatelital | None
     return None
 
 
+def _punto_grilla_mas_cercano(
+    lat: float, lon: float, radio_km: float = RADIO_GRILLA_KM
+) -> tuple[dict[str, Any], float] | None:
+    """Punto de la grilla más cercano y su distancia, o ``None`` si no hay ninguno a ``radio_km``."""
+    if not _grilla:
+        return None
+    mejor = min(((p, _haversine_km(lat, lon, p["lat"], p["lon"])) for p in _grilla), key=lambda par: par[1])
+    return mejor if mejor[1] <= radio_km else None
+
+
+def _perfil_de_grilla(punto: dict[str, Any], distancia: float, *, transitorio: bool) -> PerfilSueloSatelital:
+    base = dict_a_perfil(punto["perfil"])
+    # Las advertencias propias del punto (p. ej. sin carbono) siguen valiendo; la de "vecino a
+    # 500 m" se reemplaza por la de la grilla.
+    propias = tuple(a for a in base.advertencias if a != ADV_VECINO)
+    return PerfilSueloSatelital(
+        **{
+            **base.__dict__,
+            "fuente": "grilla_isric",
+            "distancia_fuente_km": round(distancia, 2),
+            "localidad_fallback": None,
+            "advertencias": (ADV_GRILLA.format(distancia=distancia),) + propias,
+            "reintentar_soilgrids": transitorio,
+        }
+    )
+
+
 def _fallback_regional(lat: float, lon: float, motivo: str, *, transitorio: bool) -> PerfilSueloSatelital:
+    """Grilla ISRIC (BACK-19) → localidad GeoINTA → ``SoilGridsUnavailable``. Nunca se cachea."""
+    en_grilla = _punto_grilla_mas_cercano(lat, lon)
+    if en_grilla is not None:
+        return _perfil_de_grilla(*en_grilla, transitorio=transitorio)
     cercana = _localidad_mas_cercana(lat, lon)
     if cercana is None:
         raise SoilGridsUnavailable(
-            f"SoilGrids sin dato ({motivo}) y ninguna localidad GeoINTA a menos de "
-            f"{RADIO_FALLBACK_KM:.0f} km de ({lat}, {lon})"
+            f"SoilGrids sin dato ({motivo}), sin punto de grilla ISRIC a {RADIO_GRILLA_KM:.0f} km "
+            f"ni localidad GeoINTA a {RADIO_FALLBACK_KM:.0f} km de ({lat}, {lon})"
         )
     loc, distancia = cercana
     return PerfilSueloSatelital(
@@ -306,15 +369,18 @@ Estado = Literal["ok", "null", "error"]
 
 
 async def _consultar(
-    client: httpx.AsyncClient, lat: float, lon: float
+    client: httpx.AsyncClient, lat: float, lon: float, timeout_s: float = TIMEOUT_S
 ) -> tuple[Estado, dict[str, float | None] | None, str]:
-    """Una llamada a SoilGrids. Devuelve (estado, valores, detalle)."""
+    """Una llamada a SoilGrids. Devuelve (estado, valores, detalle).
+
+    ``timeout_s`` solo se cambia en la generación offline de la grilla (BACK-19).
+    """
     params: list[tuple[str, str | float]] = [("lat", lat), ("lon", lon)]
     params += [("property", p) for p in PROPIEDADES]
     params += [("depth", d) for d in PROFUNDIDADES]
     params.append(("value", "mean"))
     try:
-        resp = await client.get(BASE_URL, params=params, timeout=TIMEOUT_S)
+        resp = await client.get(BASE_URL, params=params, timeout=timeout_s)
     except httpx.TimeoutException:
         _corte.registrar_falla()
         return "error", None, "timeout"
@@ -379,11 +445,12 @@ async def fetch_perfil_suelo(
 ) -> PerfilSueloSatelital:
     """Perfil edáfico 0–30 cm del punto.
 
-    Orden: lote de ejemplo (≤100 m) → caché → SoilGrids (punto, vecinos) → fallback GeoINTA.
+    Orden: lote de ejemplo (≤100 m) → caché → SoilGrids (punto, vecinos) → grilla ISRIC
+    (BACK-19) → fallback GeoINTA.
 
     Raises:
         ValueError: coordenadas fuera de rango.
-        SoilGridsUnavailable: sin dato y sin localidad GeoINTA a menos de 100 km.
+        SoilGridsUnavailable: sin dato y sin punto de grilla ni localidad GeoINTA a 100 km.
     """
     _validar_coordenadas(lat, lon)
 
