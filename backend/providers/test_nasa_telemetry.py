@@ -498,3 +498,83 @@ def test_referencia_desde_1981_no_cambia_climatologia_ni_dias_de_calor():
     assert larga.dias_calor_verano_promedio == corta.dias_calor_verano_promedio == 10.0
     assert min(larga.calendario_eventos) == 1981 and min(corta.calendario_eventos) == 2006
     assert {a: t for a, t in larga.calendario_eventos.items() if a >= 2006} == corta.calendario_eventos
+
+
+# ---------- BACK-26: clima histórico por celda desde Supabase (bajo demanda) ----------
+
+import json as _json  # noqa: E402
+import time as _time  # noqa: E402
+
+from ml.escenarios import escenarios_por_cultivo  # noqa: E402
+
+
+@pytest.fixture
+def _sin_lector():
+    yield
+    nasa_telemetry.configurar_lector_hist(None)
+
+
+def _entrada_sintetica(dias_calor=30.0, mm=200.0):
+    return nasa_telemetry.referencia_a_dict(
+        nasa_telemetry.ReferenciaHistorica(clim_por_doy={d: mm for d in range(1, 367)}, dias_calor_verano_promedio=dias_calor)
+    )
+
+
+def test_hist_desde_supabase_sin_json_ni_request(_sin_lector):
+    pedidas = []
+    nasa_telemetry.configurar_lector_hist(lambda clave: pedidas.append(clave) or _entrada_sintetica())
+    nasa_telemetry.reiniciar_estado({clave_celda_power(-33.95, -60.57): _entrada_sintetica(dias_calor=1.0)})
+    llamadas = []
+    telemetria = _build(_handler_contador(_reciente(), _hist_sintetico(), llamadas))
+    assert pedidas == [clave_celda_power(-33.95, -60.57)]
+    assert llamadas == ["reciente"]
+    assert telemetria.riesgo_termico_verano == "alto"  # 30 días: el de Supabase, no el del JSON (1 día)
+
+
+def test_hist_supabase_con_error_usa_json(_sin_lector):
+    def falla(_clave):
+        raise RuntimeError("401 invalid api key")
+
+    nasa_telemetry.configurar_lector_hist(falla)
+    nasa_telemetry.reiniciar_estado({clave_celda_power(-33.95, -60.57): _entrada_sintetica(dias_calor=30.0)})
+    llamadas = []
+    telemetria = _build(_handler_contador(_reciente(), _hist_sintetico(), llamadas))
+    assert llamadas == ["reciente"]
+    assert telemetria.riesgo_termico_verano == "alto"
+
+
+def test_hist_supabase_lento_corta_por_timeout_y_usa_json(_sin_lector, monkeypatch):
+    monkeypatch.setattr(nasa_telemetry, "TIMEOUT_LECTOR_HIST_S", 0.05)
+    nasa_telemetry.configurar_lector_hist(lambda _clave: _time.sleep(0.5) or _entrada_sintetica(dias_calor=1.0))
+    nasa_telemetry.reiniciar_estado({clave_celda_power(-33.95, -60.57): _entrada_sintetica(dias_calor=30.0)})
+    telemetria = _build(_handler_contador(_reciente(), _hist_sintetico(), []))
+    assert telemetria.riesgo_termico_verano == "alto"  # el del JSON
+
+
+def test_hist_supabase_version_vieja_usa_json_y_reescribe(_sin_lector):
+    vieja = dict(_entrada_sintetica(dias_calor=1.0), version_calculo="telemetria-v1")
+    nasa_telemetry.configurar_lector_hist(lambda _clave: vieja)
+    clave = clave_celda_power(-33.95, -60.57)
+    nasa_telemetry.reiniciar_estado({clave: _entrada_sintetica(dias_calor=30.0)})
+    telemetria = _build(_handler_contador(_reciente(), _hist_sintetico(), []))
+    assert telemetria.riesgo_termico_verano == "alto"
+    assert obtener_cache().get(nasa_telemetry.ESPACIO_HIST, clave)["version_calculo"] == nasa_telemetry.VERSION_CALCULO
+
+
+def test_paridad_ensemble_json_vs_supabase_con_celdas_reales():
+    """La misma celda leída del JSON o de Supabase (ida y vuelta por jsonb) da la misma
+    referencia y los mismos años análogos por cultivo para el ensemble del ML."""
+    celdas = _json.loads(nasa_telemetry.RUTA_PRECALCULO.read_text(encoding="utf-8"))["celdas"]
+    claves = [clave_celda_power(-33.95, -60.57), clave_celda_power(-29.0, -60.0), clave_celda_power(-37.85, -58.26)]
+    for clave in claves:
+        desde_json = nasa_telemetry.dict_a_referencia(celdas[clave])
+        desde_supabase = nasa_telemetry.dict_a_referencia(_json.loads(_json.dumps(celdas[clave])))
+        assert desde_json is not None and desde_json == desde_supabase
+        for corte, oni in ((date(2026, 11, 11), -0.6), (date(2026, 5, 20), 0.0)):
+            cultivos = ["soja_primera", "maiz_tardio", "girasol", "trigo", "cebada"]
+            a = escenarios_por_cultivo(desde_json.calendario_eventos, desde_json.calendario_lluvia, cultivos, corte, oni_actual=oni)
+            b = escenarios_por_cultivo(
+                desde_supabase.calendario_eventos, desde_supabase.calendario_lluvia, cultivos, corte, oni_actual=oni
+            )
+            assert a == b
+            assert any(a.values())  # hay años análogos

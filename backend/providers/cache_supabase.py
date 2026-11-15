@@ -5,9 +5,11 @@ Segunda capa de ``CacheEnCapas`` (BACK-10) sobre la tabla ``public.provider_cach
     espacio text, clave text, valor jsonb, actualizado_en timestamptz, PK (espacio, clave)
 
 Diseño:
-- **Lectura sin espera:** ``hidratar()`` baja al arrancar todas las filas de los espacios
-  persistidos a una copia en memoria. ``get`` solo lee esa copia: un ``/simulate`` nunca
+- **Lectura sin espera:** ``hidratar()`` baja al arrancar las filas de los espacios de
+  precarga a una copia en memoria. ``get`` solo lee esa copia: un ``/simulate`` nunca
   espera a Supabase.
+- **Lectura bajo demanda (BACK-26):** ``nasa_hist`` (~53 KB por celda) no se precarga. Se
+  lee de a una celda con ``leer`` cuando se la necesita.
 - **Escritura en segundo plano:** ``set`` actualiza la copia y encola un upsert. Un hilo
   daemon los manda en lotes.
 - **Nunca rompe el servidor:** cualquier falla de Supabase (tabla inexistente, red,
@@ -34,6 +36,10 @@ TABLA = "provider_cache"
 ESPACIOS_PERSISTIDOS: frozenset[str] = frozenset(
     {"suelo", "topografia", "nasa_elevacion", "nasa_hist", "suelo_grilla"}
 )
+# BACK-26: el clima histórico por celda se lee bajo demanda, no al arrancar (15,8 MB).
+ESPACIOS_BAJO_DEMANDA: frozenset[str] = frozenset({"nasa_hist"})
+ESPACIOS_PRECARGA: frozenset[str] = ESPACIOS_PERSISTIDOS - ESPACIOS_BAJO_DEMANDA
+TAM_LOTE_DIRECTO = 10  # filas grandes (nasa_hist): lotes chicos por request
 TAM_PAGINA = 1000  # máximo de filas por request de PostgREST
 TAM_LOTE_ESCRITURA = 50
 TIMEOUT_REQUEST_S = 10.0
@@ -83,6 +89,8 @@ class CacheSupabase:
             return
         copia = _copia_json(valor)
         with self._lock:
+            if self._datos.get((espacio, clave)) == copia:
+                return  # ya está así en Supabase (leído o escrito antes): no se reescribe
             self._datos[(espacio, clave)] = copia
         self._asegurar_hilo()
         self._cola.put((espacio, clave, copia))
@@ -105,7 +113,7 @@ class CacheSupabase:
                 resp = (
                     self._cliente.table(self._tabla)
                     .select("espacio,clave,valor")
-                    .in_("espacio", sorted(self.espacios))
+                    .in_("espacio", sorted(self.espacios - ESPACIOS_BAJO_DEMANDA))
                     .order("espacio")
                     .order("clave")
                     .range(desde, desde + self._tam_pagina - 1)
@@ -122,6 +130,62 @@ class CacheSupabase:
         except Exception as exc:  # noqa: BLE001 - nunca debe impedir el arranque
             logger.warning("cache_supabase: precarga fallida, sigo con memoria (%s)", exc)
         return cargadas
+
+    def leer(self, espacio: str, clave: str) -> Any | None:
+        """BACK-26: una fila bajo demanda (bloqueante: llamarla desde un thread).
+
+        Primero la copia en memoria; si no está, Supabase, y queda en la copia. Nunca lanza:
+        ante un error devuelve ``None`` (el que llama sigue con su respaldo).
+        """
+        with self._lock:
+            if (espacio, clave) in self._datos:
+                return _copia_json(self._datos[(espacio, clave)])
+        try:
+            resp = (
+                self._cliente.table(self._tabla)
+                .select("valor")
+                .eq("espacio", espacio)
+                .eq("clave", clave)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("cache_supabase: no se pudo leer %s/%s (%s)", espacio, clave, exc)
+            return None
+        filas = resp.data or []
+        if not filas:
+            return None
+        valor = filas[0]["valor"]
+        with self._lock:
+            self._datos[(espacio, clave)] = valor
+        return _copia_json(valor)
+
+    def claves(self, espacio: str) -> set[str]:
+        """Claves guardadas de un espacio, paginando (para scripts reanudables). Lanza si falla."""
+        claves: set[str] = set()
+        desde = 0
+        while True:
+            resp = (
+                self._cliente.table(self._tabla)
+                .select("clave")
+                .eq("espacio", espacio)
+                .order("clave")
+                .range(desde, desde + self._tam_pagina - 1)
+                .execute()
+            )
+            filas = resp.data or []
+            claves.update(f["clave"] for f in filas)
+            if len(filas) < self._tam_pagina:
+                return claves
+            desde += self._tam_pagina
+
+    def escribir_directo(self, espacio: str, entradas: dict[str, Any], tam_lote: int = TAM_LOTE_DIRECTO) -> int:
+        """Upsert sincrónico en lotes chicos (scripts offline con filas grandes). Lanza si falla."""
+        items = list(entradas.items())
+        for i in range(0, len(items), tam_lote):
+            filas = [{"espacio": espacio, "clave": c, "valor": _copia_json(v)} for c, v in items[i : i + tam_lote]]
+            self._cliente.table(self._tabla).upsert(filas).execute()
+        return len(items)
 
     def entradas(self, espacio: str) -> dict[str, Any]:
         """Todas las entradas cargadas de un espacio (BACK-19: la grilla de suelo)."""

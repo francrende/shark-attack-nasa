@@ -20,7 +20,9 @@ class _Consulta:
         self.op = None
         self.payload: Any = None
         self.espacios: list[str] | None = None
+        self.filtros: dict[str, str] = {}
         self.rango: tuple[int, int] | None = None
+        self.limite: int | None = None
 
     def select(self, _cols):
         self.op = "select"
@@ -28,6 +30,14 @@ class _Consulta:
 
     def in_(self, _col, valores):
         self.espacios = list(valores)
+        return self
+
+    def eq(self, col, valor):
+        self.filtros[col] = valor
+        return self
+
+    def limit(self, n):
+        self.limite = n
         return self
 
     def order(self, _col):
@@ -48,8 +58,13 @@ class _Consulta:
         if self.op == "select":
             self.c.selects.append(self.rango)
             filas = [f for f in self.c.filas if self.espacios is None or f["espacio"] in self.espacios]
-            desde, hasta = self.rango
-            return SimpleNamespace(data=filas[desde : hasta + 1])
+            filas = [f for f in filas if all(f[k] == v for k, v in self.filtros.items())]
+            if self.rango is not None:
+                desde, hasta = self.rango
+                filas = filas[desde : hasta + 1]
+            if self.limite is not None:
+                filas = filas[: self.limite]
+            return SimpleNamespace(data=filas)
         self.c.upserts.append(self.payload)
         self.c.escrito.set()
         return SimpleNamespace(data=self.payload)
@@ -198,3 +213,46 @@ def test_cerrar_sin_hilo_no_falla():
 )
 def test_crear_devuelve_none_sin_credenciales_o_desactivada(ajustes):
     assert crear_cache_supabase(SimpleNamespace(**ajustes)) is None
+
+
+# ---------- BACK-26: nasa_hist bajo demanda ----------
+
+
+def test_precarga_no_baja_nasa_hist():
+    cliente = ClienteFalso([_fila("nasa_hist", "c1", {"grande": True}), _fila("suelo", "s")])
+    cache = CacheSupabase(cliente)
+    assert cache.hidratar() == 1
+    assert cache.get("nasa_hist", "c1") is None
+    assert cache.get("suelo", "s") == {"v": "s"}
+
+
+def test_leer_bajo_demanda_consulta_una_vez_y_queda_en_memoria():
+    cliente = ClienteFalso([_fila("nasa_hist", "c1", {"x": 1}), _fila("nasa_hist", "c2", {"x": 2})])
+    cache = CacheSupabase(cliente)
+    assert cache.leer("nasa_hist", "c2") == {"x": 2}
+    assert len(cliente.selects) == 1
+    assert cache.leer("nasa_hist", "c2") == {"x": 2}
+    assert len(cliente.selects) == 1  # la segunda sale de la copia en memoria
+    assert cache.leer("nasa_hist", "no_existe") is None
+
+
+def test_leer_con_error_devuelve_none():
+    assert CacheSupabase(ClienteFalso(error=TimeoutError())).leer("nasa_hist", "c1") is None
+
+
+def test_set_no_reescribe_lo_que_ya_leyo():
+    cliente = ClienteFalso([_fila("nasa_hist", "c1", {"x": 1})])
+    cache = CacheSupabase(cliente)
+    cache.leer("nasa_hist", "c1")
+    cache.set("nasa_hist", "c1", {"x": 1})  # mismo valor: no se sube de nuevo
+    cache.set("nasa_hist", "c2", {"x": 2})  # nuevo: se sube
+    cache.cerrar()
+    assert [f["clave"] for lote in cliente.upserts for f in lote] == ["c2"]
+
+
+def test_claves_pagina_y_escribir_directo_en_lotes():
+    cliente = ClienteFalso([_fila("nasa_hist", f"c{i}") for i in range(5)] + [_fila("suelo", "s")])
+    cache = CacheSupabase(cliente, tam_pagina=2)
+    assert cache.claves("nasa_hist") == {f"c{i}" for i in range(5)}
+    assert cache.escribir_directo("nasa_hist", {f"n{i}": {"i": i} for i in range(7)}, tam_lote=3) == 7
+    assert [len(lote) for lote in cliente.upserts] == [3, 3, 1]
