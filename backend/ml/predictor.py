@@ -135,19 +135,23 @@ def classify_soil_texture(arcilla_pct: float, arena_pct: float | None = None) ->
     return "arcilloso"
 
 
-def classify_summer_thermal_risk(
-    frecuencia_estres_termico: float,
-    gwetroot_saturacion_pct: float,
-) -> Literal["bajo", "medio", "alto"]:
-    """Clasifica el riesgo térmico de verano combinando días > 34°C y reserva hídrica."""
-    effective_days = float(frecuencia_estres_termico) + (
-        2.0 if gwetroot_saturacion_pct < 38.0 and frecuencia_estres_termico >= 4 else 0.0
-    )
-    if effective_days >= 7.0:
-        return "alto"
-    if effective_days >= 3.5:
+# Cortes de días con T2M_MAX > 34 °C en ~90 días: espejo de providers.nasa_telemetry
+# (RIESGO_BAJO_HASTA / RIESGO_MEDIO_HASTA / RIESGO_ALTO_HASTA; test de paridad en test_predictor.py)
+# para que `riesgo_termico_verano` y la anomalía `estres_termico_critico` usen la misma escala.
+THERMAL_RISK_THRESHOLDS: tuple[float, float, float] = (15.0, 25.0, 40.0)
+
+
+def classify_summer_thermal_risk(frecuencia_estres_termico: float) -> CropRiskLevel:
+    """Clasifica días con T2M_MAX > 34 °C en una ventana de ~90 días (misma escala que BACK-2)."""
+    dias = float(frecuencia_estres_termico)
+    bajo_hasta, medio_hasta, alto_hasta = THERMAL_RISK_THRESHOLDS
+    if dias < bajo_hasta:
+        return "bajo"
+    if dias < medio_hasta:
         return "medio"
-    return "bajo"
+    if dias <= alto_hasta:
+        return "alto"
+    return "critico"
 
 
 def classify_slope_runoff_risk(
@@ -186,11 +190,17 @@ def apply_what_if_simulation(
     rain_delta = float(variacion_lluvia_esperada_pct or 0.0)
     has_manual_moisture = override_humedad_radicular_pct is not None
 
-    # 1. Variación de lluvia esperada (-50% a +50%)
+    # 1. Variación de lluvia esperada (-50% a +50%): "llueve X% más/menos" que lo observado,
+    # es decir, multiplica la lluvia acumulada. Con anomalía a y variación v:
+    # lluvia/clim = (1 + a/100)(1 + v/100) → nueva anomalía = (100 + a)(1 + v/100) - 100.
     if abs(rain_delta) > 1e-6:
         rain_delta_clamped = _clamp(rain_delta, -60.0, 60.0)
         sim["anomalia_lluvia_90d_pct"] = round(
-            _clamp(sim["anomalia_lluvia_90d_pct"] + rain_delta_clamped, -80.0, 150.0),
+            _clamp(
+                (100.0 + sim["anomalia_lluvia_90d_pct"]) * (1.0 + rain_delta_clamped / 100.0) - 100.0,
+                -80.0,
+                150.0,
+            ),
             2,
         )
         scale_factor = max(0.15, 1.0 + (rain_delta_clamped / 100.0))
@@ -522,15 +532,16 @@ def detect_physical_anomalies(
         )
 
     # 6. Estrés Térmico Crítico (Verano) o Riesgo de Helada (Invierno/Temprana)
-    if campana == "verano" and estres_termico >= 8:
-        sev = "alta" if estres_termico >= 12 else "media"
+    nivel_termico = classify_summer_thermal_risk(estres_termico)
+    if campana == "verano" and nivel_termico in ("alto", "critico"):
+        sev = "alta" if nivel_termico == "critico" else "media"
         anomalies.append(
             {
                 "tipo": "estres_termico_critico",
                 "severidad": sev,
                 "evidencia": (
-                    f"Alta exposición a golpes de calor con {estres_termico} días esperados "
-                    f"con T2M_MAX > 34°C en ventana reproductiva (Climatología NASA POWER)."
+                    f"Riesgo térmico {nivel_termico}: {estres_termico} días esperados con "
+                    f"T2M_MAX > 34°C en los próximos 90 días (años análogos de NASA POWER)."
                 ),
             }
         )
@@ -895,11 +906,12 @@ class AgroPredictor:
         elif lowest_crop != winner_crop:
             contrast_parts.append(f"{lowest_prof.nombre_legible} (menor adaptación al escenario actual)")
 
-        contrast_clause = (
-            f"A diferencia de {' o '.join(contrast_parts[:2])}, "
-            if contrast_parts
-            else ""
-        )
+        contrast_clause = ""
+        if contrast_parts:
+            contrastes = " o ".join(contrast_parts[:2])
+            # Contracción obligatoria: "de el" -> "del"
+            prep = "del " + contrastes[3:] if contrastes.startswith("el ") else "de " + contrastes
+            contrast_clause = f"A diferencia {prep}, "
 
         return (
             f"Recomendación: Sembrar {winner_prof.nombre_legible}{alt_phrase}. "
@@ -1137,8 +1149,7 @@ class AgroPredictor:
                     round(float(effective_features["frecuencia_tormentas_extremas"]))
                 ),
                 "riesgo_termico_verano": classify_summer_thermal_risk(
-                    frecuencia_estres_termico=effective_features["frecuencia_estres_termico"],
-                    gwetroot_saturacion_pct=effective_features["gwetroot_saturacion_pct"],
+                    effective_features["frecuencia_estres_termico"]
                 ),
             },
             "topografia_srtm": {

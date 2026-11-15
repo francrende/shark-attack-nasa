@@ -10,6 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from ml.predictor import THERMAL_RISK_THRESHOLDS, classify_summer_thermal_risk
+from providers import nasa_telemetry
 from providers.features import FEATURES_FUTURAS, InsumosML, construir_insumos_ml
 from providers.nasa_power import NasaPowerUnavailable
 from providers.soilgrids import PerfilSueloSatelital, SoilGridsUnavailable
@@ -112,6 +114,16 @@ def cliente():
 def test_paridad_cultivos_con_rotation_matrix():
     assert set(CULTIVOS_VALIDOS) == set(ALL_CROPS)
     assert set(CULTIVO_ANTERIOR_NEUTRO) <= NEUTRAL_PREVIOUS_VALUES
+
+
+def test_paridad_escala_termica_ml_backend():
+    assert THERMAL_RISK_THRESHOLDS == (
+        nasa_telemetry.RIESGO_BAJO_HASTA,
+        nasa_telemetry.RIESGO_MEDIO_HASTA,
+        nasa_telemetry.RIESGO_ALTO_HASTA,
+    )
+    for dias in (0, 14, 15, 21, 25, 40, 41, 60):
+        assert classify_summer_thermal_risk(dias) == nasa_telemetry.clasificar_riesgo_termico(dias)
 
 
 def test_simulate_contrato_completo_con_ensemble(cliente):

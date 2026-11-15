@@ -204,7 +204,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   "objetivo_productor": "equilibrio", // opciones: "resiliencia_hidroclimatica", "conservacion_suelo", "equilibrio"
   "simulacion_what_if": {
     "override_humedad_radicular_pct": null, // opcional (0-100): si es null, usa el dato real de NASA POWER
-    "variacion_lluvia_esperada_pct": 0 // opcional (-50 a +50): ej. -25 para simular escenario seco, +25 para húmedo
+    "variacion_lluvia_esperada_pct": 0 // opcional (-50 a +50): "llueve X% más/menos" que lo observado (multiplica la lluvia: con anomalía -37% y -40 queda -62%). Ej. -25 seco, +25 húmedo
   }
 }
 ```

@@ -11,10 +11,12 @@ from backend.ml.predictor import (
     CURRENT_FEATURES,
     FUTURE_FEATURES,
     NUMERIC_FEATURES,
+    THERMAL_RISK_THRESHOLDS,
     AgroPredictor,
     apply_what_if_simulation,
     build_ensemble_risk_sentence,
     classify_crop_risk,
+    classify_summer_thermal_risk,
     compute_hybrid_final_score,
     detect_physical_anomalies,
     escalate_risk_level,
@@ -108,12 +110,17 @@ class TestAgroPredictorML4(unittest.TestCase):
     def test_03_what_if_internal_coupling_and_independent_controls(self) -> None:
         """Verifica que los sliders What-If sean independientes pero mantengan consistencia física."""
         # A) Solo variación de lluvia (+30%) -> actualiza anomalía, índice de aridez y humedad acoplada
+        # Multiplicativa: (100 - 24.2) * 1.30 - 100 = -1.46 (llueve 30% más que lo observado)
         sim_rain = apply_what_if_simulation(
             self.context_drought_features,
             override_humedad_radicular_pct=None,
             variacion_lluvia_esperada_pct=30.0,
         )
-        self.assertAlmostEqual(sim_rain["anomalia_lluvia_90d_pct"], 5.8, places=1)
+        self.assertAlmostEqual(sim_rain["anomalia_lluvia_90d_pct"], -1.46, places=2)
+        sim_dry = apply_what_if_simulation(
+            self.context_drought_features, variacion_lluvia_esperada_pct=-40.0
+        )
+        self.assertAlmostEqual(sim_dry["anomalia_lluvia_90d_pct"], 75.8 * 0.6 - 100.0, places=2)
         self.assertGreater(
             sim_rain["indice_aridez_evaporativa"],
             self.context_drought_features["indice_aridez_evaporativa"],
@@ -179,7 +186,7 @@ class TestAgroPredictorML4(unittest.TestCase):
         waterlog_feat = dict(self.context_drought_features)
         waterlog_feat["gwetroot_saturacion_pct"] = 89.0
         waterlog_feat["anomalia_lluvia_90d_pct"] = 45.0
-        waterlog_feat["frecuencia_estres_termico"] = 13.0
+        waterlog_feat["frecuencia_estres_termico"] = 30.0
         anom_wet = detect_physical_anomalies(waterlog_feat, campana="verano")
         tipos_wet = {a["tipo"] for a in anom_wet}
         self.assertIn("exceso_hidrico_anegamiento", tipos_wet)
@@ -496,6 +503,47 @@ class TestEnsembleML5(unittest.TestCase):
             timings_ms.append((time.perf_counter() - t0) * 1000.0)
         p95_ms = float(np.percentile(timings_ms, 95))
         self.assertLess(p95_ms, 15.0, f"Latencia p95 ensemble ({p95_ms:.2f} ms) superó 15 ms")
+
+
+
+class TestConsistenciaTextos(unittest.TestCase):
+    """Arreglos post BACK-7: escala térmica única y redacción de la explicación."""
+
+    def test_escala_termica(self) -> None:
+        # Paridad con providers.nasa_telemetry en routers/test_simulate.py
+        self.assertEqual(THERMAL_RISK_THRESHOLDS, (15.0, 25.0, 40.0))
+        esperado = {0: "bajo", 14: "bajo", 15: "medio", 21: "medio", 25: "alto", 40: "alto", 41: "critico"}
+        for dias, nivel in esperado.items():
+            self.assertEqual(classify_summer_thermal_risk(dias), nivel, dias)
+
+    def test_anomalia_termica_solo_con_riesgo_alto_o_critico(self) -> None:
+        base = {f: 50.0 for f in NUMERIC_FEATURES}
+        base.update(gwetroot_saturacion_pct=55.0, gwettop_saturacion_pct=50.0,
+                    tendencia_humedad_15d_pct=0.0, anomalia_lluvia_90d_pct=0.0,
+                    indice_aridez_evaporativa=1.0, pendiente_terreno_pct=0.5,
+                    textura_arcilla_pct=24.0, frecuencia_tormentas_extremas=0.0,
+                    frecuencia_riesgo_helada=0.0)
+        esperado = {21: None, 25: "media", 40: "media", 45: "alta"}
+        for dias, sev in esperado.items():
+            anomalias = detect_physical_anomalies({**base, "frecuencia_estres_termico": float(dias)}, campana="verano")
+            termica = [a for a in anomalias if a["tipo"] == "estres_termico_critico"]
+            if sev is None:
+                self.assertEqual(termica, [], dias)
+            else:
+                self.assertEqual(termica[0]["severidad"], sev, dias)
+
+    def test_explicacion_sin_de_el(self) -> None:
+        features = {
+            "gwetroot_saturacion_pct": 15.0, "gwettop_saturacion_pct": 20.0,
+            "tendencia_humedad_15d_pct": -14.0, "anomalia_lluvia_90d_pct": -60.0,
+            "frecuencia_tormentas_extremas": 0.0, "frecuencia_estres_termico": 21.0,
+            "frecuencia_riesgo_helada": 0.0, "indice_aridez_evaporativa": 0.45,
+            "pendiente_terreno_pct": 0.8, "elevacion_m": 69.0, "textura_arcilla_pct": 23.4,
+        }
+        resp = run_recommendation(features, campana="verano", cultivo_anterior="soja_primera")
+        explicacion = resp["recomendacion_principal"]["explicacion"]
+        self.assertNotIn(" de el ", explicacion)
+        self.assertIn("A diferencia del Maíz Temprano", explicacion)
 
 
 if __name__ == "__main__":
