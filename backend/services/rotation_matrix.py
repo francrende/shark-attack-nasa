@@ -813,18 +813,40 @@ def compare_rotation_strategies(
         phh2o=phh2o,
     )
 
+    # Testigo = lo que haría el productor sin cambiar nada:
+    # - anterior de la misma campaña -> repetirlo (monocultivo);
+    # - anterior de la otra campaña -> el cultivo convencional de esta campaña tras ese anterior
+    #   (no se puede "repetir" un cultivo de verano en invierno ni al revés);
+    # - sin anterior -> monocultivo del cultivo convencional.
     prev_id = _normalize_previous_crop(cultivo_anterior)
+    convencional = "soja_primera" if campana == "verano" else "trigo"
     if prev_id in evals:
         testigo_res = evals[prev_id]
+        testigo_titulo = "Estrategia Testigo (Repetir Cultivo / Barbecho Desnudo)"
+        testigo_secuencia = (
+            f"barbecho_desnudo (invierno) -> {prev_id} (repetido)"
+            if campana == "verano"
+            else f"{prev_id} (invierno, repetido) -> barbecho_desnudo (verano)"
+        )
+    elif prev_id is not None:
+        testigo_res = evals[convencional]
+        testigo_titulo = "Estrategia Testigo (Práctica Convencional)"
+        otra = "invierno" if campana == "verano" else "verano"
+        testigo_secuencia = f"{prev_id} ({otra}) -> {convencional} ({campana})"
     else:
-        default_testigo = "soja_primera" if campana == "verano" else "trigo"
         testigo_res = evaluate_soil_and_rotation(
-            cultivo_candidato=default_testigo,
-            cultivo_anterior=default_testigo,
+            cultivo_candidato=convencional,
+            cultivo_anterior=convencional,
             carbono_organico_g_kg=carbono_organico_g_kg,
             pendiente_terreno_pct=pendiente_terreno_pct,
             arcilla_pct=arcilla_pct,
             phh2o=phh2o,
+        )
+        testigo_titulo = "Estrategia Testigo (Repetir Cultivo / Barbecho Desnudo)"
+        testigo_secuencia = (
+            f"barbecho_desnudo (invierno) -> {convencional} (repetido)"
+            if campana == "verano"
+            else f"{convencional} (invierno, repetido) -> barbecho_desnudo (verano)"
         )
 
     defensiva_id = "sorgo" if campana == "verano" else "camelina"
@@ -838,9 +860,9 @@ def compare_rotation_strategies(
     return (
         RotationStrategyComparison(
             estrategia_id="rotacion_actual_testigo",
-            titulo="Estrategia Testigo (Repetir Cultivo / Barbecho Desnudo)",
+            titulo=testigo_titulo,
             cultivo_evaluado=testigo_res.cultivo_candidato,
-            secuencia_anual=f"barbecho_desnudo (invierno) -> {testigo_res.cultivo_candidato} (repetido)",
+            secuencia_anual=testigo_secuencia,
             s_suelo=testigo_res.s_suelo,
             riesgo_erosion_suelo=testigo_res.riesgo_erosion_suelo,
             meses_suelo_desnudo=testigo_bare,

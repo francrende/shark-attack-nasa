@@ -115,7 +115,7 @@ El motor de recomendación está diseñado bajo una interfaz común (`Recommenda
 Para evitar el error agronómico de comparar cultivos de invierno contra cultivos de verano en una misma fecha de siembra, el motor opera sobre **ventanas de campaña explícitas**:
 - **Campaña Gruesa (`verano`):** `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda` (post-fina), `girasol`, `sorgo`.
 - **Campaña Fina (`invierno`):** `trigo`, `cebada`, `vicia_cobertura` (leguminosa fijadora de N), `avena_cobertura` (gramínea de cobertura contra erosión), `camelina`.
-- **Ambas campañas están soportadas con la misma lógica** (backend, ML y matriz de rotación). Lo que cambia según la fecha es **cuál está habilitada en la interfaz**: el frontend **bloquea el botón de la campaña que no corresponde a la fecha actual**, porque el modelo evalúa con los datos satelitales y climáticos del día de hoy ($t \approx$ hoy) y con la climatología de los 90 días siguientes. Cuando sea efectivamente época de invierno, se habilita `invierno` y se bloquea `verano`, sin ningún cambio de lógica.
+- **Ambas campañas están soportadas con la misma lógica** (backend, ML y matriz de rotación). Lo que cambia según la fecha es **cuál está habilitada en la interfaz**: el frontend **bloquea el botón de la campaña que no corresponde a la fecha actual**, porque el modelo evalúa con los datos satelitales y climáticos del día de hoy ($t \approx$ hoy) y con los escenarios históricos reales de los 90 días siguientes (ensemble de años análogos, ver §4.3 B). Cuando sea efectivamente época de invierno, se habilita `invierno` y se bloquea `verano`, sin ningún cambio de lógica.
 - **Regla de campaña vigente:** es la misma que se usa en el entrenamiento (`generate_dataset.py`): se mira el **mes central de la ventana futura** (hoy + 45 días). Si cae entre **abril y septiembre**, la campaña habilitada es `invierno`; si no, `verano`. En la práctica, `invierno` queda habilitada aproximadamente entre mediados de febrero y mediados de agosto. Frontend y ML deben usar exactamente esta regla.
 - **Alcance de la Recomendación (`secuencia_sugerida`):** El sistema recomienda el cultivo (o terna alternativa) para la **campaña habilitada en curso**, contrastándolo contra alternativas defensivas y contra la **estrategia testigo (repetir el cultivo anterior / monocultivo)** según el estado hídrico y edáfico actual.
 
@@ -139,7 +139,7 @@ Todas las features se calculan de forma determinística a partir de las respuest
   8. `indice_aridez_evaporativa`: Relación entre precipitación acumulada y demanda evaporativa (`PRECTOTCORR / EVPTRNS`) en los 90 días previos (`[t - 89, t]`) que explica cómo llegó el perfil hídrico al día $t$.
 
 - **B. Ventana Futura `[t + 1, t + 90]` (Riesgos Meteorológicos durante el Ciclo del Cultivo):**
-  *(En el dataset histórico `generate_dataset.py` se extraen de los 90 días posteriores a la fecha de decisión `[t + 1, t + 90]`; en inferencia online en vivo se estiman mediante la climatología histórica de esos próximos 90 días del calendario `[doy + 1 .. doy + 90]` en la coordenada).*
+  *(En el dataset histórico `generate_dataset.py` se extraen de los 90 días **realmente observados** después de la fecha de decisión `[t + 1, t + 90]`. En inferencia online el futuro no se conoce y **no se resume en un promedio climatológico**. Se usa un **ensemble de años análogos**: el backend (`BACK-6`) entrega, por cada año 2006–2025 con la ventana `[corte + 1, corte + 90]` completa (19 o 20), los valores reales de ese año de las tres features, juntos para conservar la relación entre ellas. El ML (`ML-5`, `predict_ensemble`) corre el modelo una vez por escenario y cultivo y devuelve la distribución del puntaje: el **promedio** es el score principal, el **P10** un "año malo", el **P90** un "año bueno", más la cantidad de años por debajo del umbral desfavorable y el peor año análogo. Es la misma lógica del "Ensemble Streamflow Prediction" hidrológico: no se pronostica, se usa lo que ya ocurrió en esa coordenada y en esas fechas).*
   5. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia torrencial (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en la ventana futura de 90 días (`[t + 1, t + 90]`) — indicador de riesgo de escorrentía y erosión durante el ciclo.
   6. `frecuencia_estres_termico`: Días con `T2M_MAX > 34°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, golpes de calor en el ciclo del cultivo).
   7. `frecuencia_riesgo_helada`: Días con `T2M_MIN < 2°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, riesgo de helada en el ciclo del cultivo).
@@ -183,7 +183,7 @@ $$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\te
 - **Fase Online (`POST /api/v1/simulate` en `< 1.5s`):**
   1. FastAPI recibe `coordenadas`, `campana`, `cultivo_anterior`, `objetivo_productor` y (opcionalmente) `simulacion_what_if`.
   2. Consulta en paralelo **NASA POWER API** (filtrando lags `-999.0`), **OpenTopoData SRTM API** (con fallback a la elevación de NASA POWER) e **ISRIC SoilGrids API**.
-  3. Calcula las 12 features $X$, evalúa las alertas de anomalías físicas en curso (sin forzar predicciones sin sustento) y ejecuta `modelo_agro.predict(X)` en memoria para obtener $S_{\text{hidroclimatico}}$.
+  3. Calcula las 8 features actuales y los escenarios históricos de la ventana futura (`BACK-6`). Evalúa las alertas de anomalías físicas en curso (sin forzar predicciones sin sustento) y ejecuta en memoria el ensemble `predict_ensemble` (`ML-5`): un único batch de `escenarios × cultivos`. Así obtiene $S_{\text{hidroclimatico}}$ (promedio) y su distribución (P10, P90 y años desfavorables). El riesgo se clasifica con el promedio y sube un nivel si el P10 cae en zona crítica.
   4. Cruza cada cultivo con la **Matriz de Rotación y Pendiente** para obtener $S_{\text{suelo}}$, aplica los pesos ($w_{\text{clima}}, w_{\text{suelo}}$) e incluye las notas de incertidumbre y validación agronómica local requeridas por el challenge.
 
 ---
@@ -205,7 +205,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   "objetivo_productor": "equilibrio", // opciones: "resiliencia_hidroclimatica", "conservacion_suelo", "equilibrio"
   "simulacion_what_if": {
     "override_humedad_radicular_pct": null, // opcional (0-100): si es null, usa el dato real de NASA POWER
-    "variacion_lluvia_esperada_pct": 0 // opcional (-50 a +50): ej. -25 para simular escenario seco, +25 para húmedo
+    "variacion_lluvia_esperada_pct": 0 // opcional (-50 a +50): "llueve X% más/menos" que lo observado (multiplica la lluvia: con anomalía -37% y -40 queda -62%). Ej. -25 seco, +25 húmedo
   }
 }
 ```
@@ -249,6 +249,21 @@ Formato estándar de comunicación entre el Frontend y el Backend.
       "hidroclimatico": 86.0,
       "suelo": 95.0
     },
+    "distribucion_hidroclimatica": { // ML-5: ensemble de años análogos (solo si hay escenarios_historicos)
+      "promedio": 86.0,
+      "p10": 71.5,
+      "p90": 94.0,
+      "anios_desfavorables": 1, // años con score < umbral_desfavorable
+      "anios_evaluados": 19,
+      "umbral_desfavorable": 50.0,
+      "peor_escenario": {
+        "anio": 2008,
+        "score": 44.0,
+        "frecuencia_tormentas_extremas": 0,
+        "frecuencia_estres_termico": 18,
+        "frecuencia_riesgo_helada": 0
+      }
+    },
     "perfil_mercado": "Bajo costo de implantación y alta estabilidad defensiva; grano comercializable como forraje o exportación.",
     "factores_clave_ml": [
       "Baja saturación hídrica en zona radicular detectada por NASA (34%)",
@@ -258,11 +273,12 @@ Formato estándar de comunicación entre el Frontend y el Backend.
     "explicacion": "Recomendación: Sembrar Sorgo (o Maíz Tardío precedido por Vicia). Detectamos vía satélite una reserva hídrica ajustada (34% de saturación radicular), un déficit de lluvias del 24% y una pendiente del 1.8% (SRTM). A diferencia del Maíz Temprano (riesgo crítico en floración) o repetir Soja (degradación de carbono y riesgo de erosión por suelo desnudo), el Sorgo ofrece un 86% de aptitud hidroclimática y un 95% de beneficio edáfico para proteger y recomponer la estructura del lote."
   },
   "ranking_cultivos": [
-    { "cultivo": "sorgo", "score_final": 90.5, "riesgo": "bajo" },
-    { "cultivo": "maiz_tardio", "score_final": 82.5, "riesgo": "medio" },
-    { "cultivo": "girasol", "score_final": 72.0, "riesgo": "bajo" },
-    { "cultivo": "maiz_temprano", "score_final": 64.0, "riesgo": "critico" },
-    { "cultivo": "soja_primera", "score_final": 31.0, "riesgo": "alto" }
+    // ML-5: score_hidroclimatico_p10, anios_desfavorables y anios_evaluados solo vienen si hay escenarios_historicos
+    { "cultivo": "sorgo", "score_final": 90.5, "riesgo": "bajo", "score_hidroclimatico_p10": 71.5, "anios_desfavorables": 1, "anios_evaluados": 19 },
+    { "cultivo": "maiz_tardio", "score_final": 82.5, "riesgo": "medio", "score_hidroclimatico_p10": 58.0, "anios_desfavorables": 2, "anios_evaluados": 19 },
+    { "cultivo": "girasol", "score_final": 72.0, "riesgo": "bajo", "score_hidroclimatico_p10": 66.0, "anios_desfavorables": 1, "anios_evaluados": 19 },
+    { "cultivo": "maiz_temprano", "score_final": 64.0, "riesgo": "critico", "score_hidroclimatico_p10": 22.0, "anios_desfavorables": 9, "anios_evaluados": 19 },
+    { "cultivo": "soja_primera", "score_final": 31.0, "riesgo": "alto", "score_hidroclimatico_p10": 30.5, "anios_desfavorables": 7, "anios_evaluados": 19 }
   ],
   "validacion_local_requerida": {
     "nota_resolucion_satelital": "Humedad satelital (NASA POWER/SMAP) estimada a escala regional (~9 km), topografía SRTM a 30 m y suelo a 250 m.",
@@ -271,9 +287,15 @@ Formato estándar de comunicación entre el Frontend y el Backend.
       "No reemplaza el pronóstico meteorológico estacional ni el análisis químico de laboratorio (Fósforo/Nitrógeno)"
     ],
     "recomendacion_experto": "Validar agua útil real con muestreo de barreno a 1 metro y consultar al ingeniero agrónomo local antes de definir la densidad de siembra."
-  }
+  },
+  // BACK-7: además vienen "cobertura_12_meses" y "comparacion_estrategias" (ML-3; ver Swagger en /docs)
+  "advertencias": [] // avisos de calidad de dato (fallback regional de SoilGrids/SRTM, propiedades faltantes)
 }
 ```
+
+> **Notas de implementación (BACK-7):**
+> - `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` muestran el **dato satelital real**, sin los topes del modelo ni el What-If. El What-If solo cambia los scores, el ranking, las anomalías y la explicación.
+> - **Errores:** `422` para un request inválido (campaña u objetivo desconocidos, `cultivo_anterior` fuera de los 11 cultivos o de `ninguno`/`barbecho`/`sin_cultivo`/`null`, rangos del What-If, campos extra, o **campaña que no corresponde a la fecha** según la regla de §4.1: el backend también la rechaza, además del bloqueo del frontend). `503` si un provider no tiene datos.
 
 ---
 
@@ -350,7 +372,7 @@ source .venv/bin/activate
 # 3. Instalar dependencias
 pip install -r requirements.txt
 
-# 4. Iniciar el servidor FastAPI (una vez creado main.py)
+# 4. Iniciar el servidor FastAPI
 uvicorn main:app --reload --port 8000
 ```
 - El backend responderá en `http://localhost:8000` (y la documentación interactiva Swagger UI en `http://localhost:8000/docs`).
