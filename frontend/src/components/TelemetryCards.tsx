@@ -7,6 +7,7 @@ import {
   Droplets,
   Flame,
   Layers,
+  Loader2,
   MapPin,
   Mountain,
   RefreshCw,
@@ -14,7 +15,6 @@ import {
 } from 'lucide-react'
 import { CULTIVOS_CATALOGO } from '../data/demoFields'
 import type {
-  Coordenadas,
   FieldCampaign,
   PerfilSuelo,
   PerfilSueloTelemetria,
@@ -25,12 +25,12 @@ import type {
 import {
   formatHumanDate,
   formatSignedAnomalyPct,
+  humanizeAgronomicWarnings,
 } from '../utils/formatters'
 
 interface TelemetryCardsProps {
-  ubicacion: Coordenadas
   loteLabel: string
-  superficieHa: number | null
+  isFieldAssigned?: boolean
   telemetria: TelemetriaNasa | TelemetriaNasaInfo | null
   perfilSuelo: PerfilSuelo | PerfilSueloTelemetria | null
   topografia?: TopografiaTelemetria | null
@@ -40,6 +40,7 @@ interface TelemetryCardsProps {
   errorMessage?: string | null
   onRetry?: () => void
   isWhatIfActive: boolean
+  isRetryingFieldData?: boolean
 }
 
 function formatSoilTexture(textureRaw: string): string {
@@ -142,9 +143,8 @@ function getOrganicMatterMeaning(moPct: number): string {
 }
 
 export function TelemetryCards({
-  ubicacion,
   loteLabel,
-  superficieHa,
+  isFieldAssigned = false,
   telemetria,
   perfilSuelo,
   topografia = null,
@@ -154,28 +154,20 @@ export function TelemetryCards({
   errorMessage = null,
   onRetry,
   isWhatIfActive,
+  isRetryingFieldData = false,
 }: TelemetryCardsProps) {
   const [showSoilDetail, setShowSoilDetail] = useState<boolean>(false)
 
   const headerNode = (
-    <div className="section-header-row">
-      <div>
-        <h2 className="section-title">Info general</h2>
-        <p className="telemetry-lote-subtitle">{loteLabel}</p>
-      </div>
-      <div
-        className="coords-pill"
-        title="Ubicación del lote (centroide analizado)"
+    <div className="section-header-row campaign-header-row">
+      <h2 className="section-title">Info general</h2>
+      <span
+        className={`campaign-field-tag ${!isFieldAssigned ? 'is-muted' : ''}`}
+        title={isFieldAssigned ? `Campo activo: ${loteLabel}` : loteLabel}
       >
-        <MapPin size={13} />
-        <span>Ubicación del lote:</span>
-        <code>
-          {ubicacion.lat.toFixed(3)}, {ubicacion.lon.toFixed(3)}
-        </code>
-        {superficieHa !== null && superficieHa > 0 && (
-          <span className="coords-ha">{Math.round(superficieHa)} ha</span>
-        )}
-      </div>
+        <MapPin size={12} aria-hidden="true" />
+        <span className="campaign-field-tag-name">{loteLabel}</span>
+      </span>
     </div>
   )
 
@@ -299,6 +291,7 @@ export function TelemetryCards({
       const rotationConditionText = perfilSuelo?.condicion_rotacion_previa
         ? formatRotationCondition(perfilSuelo.condicion_rotacion_previa)
         : null
+      const safeAdvertencias = humanizeAgronomicWarnings([advertencias])
 
       return (
         <section className="panel-section telemetry-section">
@@ -318,11 +311,11 @@ export function TelemetryCards({
             </div>
           </div>
 
-          {advertencias.length > 0 && (
+          {safeAdvertencias.length > 0 && (
             <div className="telemetry-warning-banner" role="status">
-              <AlertTriangle size={15} />
+              <AlertTriangle size={15} aria-hidden="true" />
               <div className="telemetry-warning-list">
-                {advertencias.map((adv, idx) => (
+                {safeAdvertencias.map((adv, idx) => (
                   <span key={`${idx}-${adv}`}>{adv}</span>
                 ))}
               </div>
@@ -427,6 +420,18 @@ export function TelemetryCards({
                   <Flame size={15} />
                   <span>Calor y salud del suelo</span>
                 </span>
+                {isRetryingFieldData && (
+                  <span
+                    className="telemetry-retrying-badge"
+                    title="Actualizando datos reales de suelo y topografía"
+                  >
+                    <Loader2
+                      size={14}
+                      className="telemetry-retrying-spinner"
+                      aria-label="Actualizando datos reales del lote"
+                    />
+                  </span>
+                )}
               </div>
 
               <div
@@ -547,7 +552,7 @@ export function TelemetryCards({
                 <div className="soil-chip">
                   <Mountain size={15} />
                   <span>
-                    <strong>Topografía SRTM:</strong>{' '}
+                    <strong>Topografía del terreno:</strong>{' '}
                     {Math.round(topografia.elevacion_m)} m s.n.m. · Pendiente{' '}
                     {topografia.pendiente_terreno_pct.toFixed(1)}%
                   </span>

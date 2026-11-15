@@ -560,6 +560,24 @@ export async function fetchFieldTelemetry(
   return (await response.json()) as TelemetryResponse
 }
 
+export class SimulateApiError extends Error {
+  status: number
+
+  constructor(status: number, message?: string) {
+    super(message || `Error HTTP ${status} al consultar /api/v1/simulate`)
+    this.name = 'SimulateApiError'
+    this.status = status
+  }
+}
+
+/**
+ * Cliente principal de simulación (`POST /api/v1/simulate`), con envío opcional
+ * de `field_id` en el body y header `Authorization: Bearer <token>`.
+ */
+export async function simulateCropRotation(
+  request: SimulateRequest,
+  token?: string | null,
+  signal?: AbortSignal
 /** Cuánto se espera a `/simulate` antes de cortar: Render Free tarda 30–60 s en despertar. */
 export const TIMEOUT_SIMULACION_MS = 75_000
 
@@ -608,6 +626,36 @@ export async function simulateCropRotation(
     return generateSimulatedResponse(request)
   }
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const { field_id, ...rest } = request
+  const bodyPayload: SimulateRequest = field_id
+    ? { field_id, ...rest }
+    : rest
+
+  const response = await fetch(BACKEND_API_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(bodyPayload),
+    signal,
+  })
+
+  if (!response.ok) {
+    let detail = `Error HTTP ${response.status} al consultar /api/v1/simulate`
+    try {
+      const payload = (await response.json()) as { detail?: string }
+      if (typeof payload?.detail === 'string' && payload.detail.trim()) {
+        detail = payload.detail
+      }
+    } catch {
+      // Conservar mensaje HTTP por defecto
+    }
+    throw new SimulateApiError(response.status, detail)
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_SIMULACION_MS)
   const cancelarDesdeAfuera = () => controller.abort()

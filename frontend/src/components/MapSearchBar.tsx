@@ -16,17 +16,15 @@ import {
 
 interface MapSearchBarProps {
   selectedProvinces: string[]
-  isDemo: boolean
-  isUserSettingsOpen: boolean
-  onUserAction: () => void
+  isMapSettingsOpen: boolean
+  onOpenMapSettings: () => void
   onSelectLocation: (result: MapSearchResult) => void
 }
 
 export function MapSearchBar({
   selectedProvinces,
-  isDemo,
-  isUserSettingsOpen,
-  onUserAction,
+  isMapSettingsOpen,
+  onOpenMapSettings,
   onSelectLocation,
 }: MapSearchBarProps) {
   const [query, setQuery] = useState('')
@@ -251,10 +249,10 @@ export function MapSearchBar({
       >
         <button
           type="button"
-          className={`map-search-menu-btn ${isUserSettingsOpen ? 'active' : ''}`}
-          onClick={onUserAction}
-          title={isDemo ? 'Iniciar sesión' : 'Ajustes de usuario'}
-          aria-label={isDemo ? 'Iniciar sesión' : 'Ajustes de usuario'}
+          className={`map-search-menu-btn ${isMapSettingsOpen ? 'active' : ''}`}
+          onClick={onOpenMapSettings}
+          title="Campos y expandir mapa"
+          aria-label="Campos y expandir mapa"
         >
           <MoreVertical size={16} aria-hidden="true" />
         </button>

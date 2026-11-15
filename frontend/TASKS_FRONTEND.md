@@ -66,10 +66,17 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-33** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
 | **FRONT-34** | Conexión de `Info general` a `GET /api/v1/telemetry` al Seleccionar Campo, Fallback de Suelo, Fix de Riesgo Térmico y Último Cultivo desde BD (`BACK-20`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `BACK-20` | `[x]` |
 | **FRONT-35** | Datos Propios de Suelo/Topografía por Campo (`UserField`), Materia Orgánica en `%` y Consulta Dinámica de NASA POWER con `field_id` (`BACK-21..23`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-34`, `BACK-21`, `BACK-22`, `BACK-23` | `[x]` |
-| **FRONT-36** | Panel de recomendación en lenguaje de productor: riesgo de año malo como frecuencia ("3 de cada 10 campañas"), rinde en qq/ha contra el normal de la zona, rango año malo / año bueno, detalle técnico desplegable y estados sin backend (último resultado real guardado, nunca datos de ejemplo) | `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `BACK-27` | `[x]` |
-| **FRONT-37** | Registrar siembra y vista de seguimiento de campaña: avance del período que define el rinde, evolución semanal del riesgo, qué pasó con el clima desde la siembra y rinde esperado actualizado | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/RegistrarSiembraForm.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx` (nuevo), `frontend/src/utils/lenguajeProductor.ts`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-36`, `BACK-29` | `[x]` |
-| **FRONT-38** | Cerrar la campaña en curso (fecha de cosecha, rinde cosechado en qq/ha y notas) y borrarla con confirmación | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/AccionesCampana.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-37`, `BACK-30` | `[x]` |
-| **FRONT-39** | *Información histórica* con datos reales (BACK-31): lluvia y agua en raíces por campaña con gráfico contra lo normal, cosechas del lote, rinde de la zona; sin datos inventados; el mapa colorea solo el lote seleccionado | `frontend/src/data/historicalData.ts`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/types/api.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `BACK-31` | `[x]` |
+| **FRONT-36** | Solapa Verde de Usuario en Panel Derecho (`Usuario` + `Idioma`) y Separación de `⋮` en Buscador (`Campos` + `Expandir mapa`) | `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/src/components/MapSearchBar.tsx`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-31`, `FRONT-33` | `[x]` |
+| **FRONT-37** | Encabezado de `Info general` sin Coordenadas ni Hectáreas (Solo Nombre del Campo sin Repetición) | `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-35` | `[x]` |
+| **FRONT-38** | Botones de Acción Principal en Verde Vivo Claro (`Planificar`, `Guardar campo`, `+ Nuevo campo`, `Iniciar sesión`, `Reproducir serie`) y Estados Deshabilitados Tenues | `frontend/src/index.css`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md`, `frontend/TASKS_FRONTEND.md` | `FRONT-36` | `[x]` |
+| **FRONT-39** | Login Acoplado a la Derecha, Modo Demo Exclusivo en Inicio de Sesión y Cuaderno Rayado Izquierdo con Marca y Lema | `frontend/src/components/AuthScreen.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-38` | `[x]` |
+| **FRONT-40** | Envío de `field_id` y `Authorization` en `POST /api/v1/simulate` + Manejo de `401` / `404` / `422` | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/components/AuthScreen.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-35` | `[x]` |
+| **FRONT-41** | Avisos Discretos de Dato Aproximado (`advertencias`, `suelo_advertencias`, `topo_advertencias`) sin Siglas Técnicas | `frontend/src/utils/formatters.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-40` | `[x]` |
+| **FRONT-42** | Polling de `reintento_en_curso` (`GET /api/v1/fields/{id}` cada 30 s), Spinner Discreto y Refresco + Aviso al Llegar Dato Real | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/App.tsx`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-41` | `[x]` |
+| **FRONT-43** | Panel de recomendación en lenguaje de productor: riesgo de año malo como frecuencia ("3 de cada 10 campañas"), rinde en qq/ha contra el normal de la zona, rango año malo / año bueno, detalle técnico desplegable y estados sin backend (último resultado real guardado, nunca datos de ejemplo) | `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `BACK-27` | `[x]` |
+| **FRONT-44** | Registrar siembra y vista de seguimiento de campaña: avance del período que define el rinde, evolución semanal del riesgo, qué pasó con el clima desde la siembra y rinde esperado actualizado | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/RegistrarSiembraForm.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx` (nuevo), `frontend/src/utils/lenguajeProductor.ts`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-36`, `BACK-29` | `[x]` |
+| **FRONT-45** | Cerrar la campaña en curso (fecha de cosecha, rinde cosechado en qq/ha y notas) y borrarla con confirmación | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/AccionesCampana.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-37`, `BACK-30` | `[x]` |
+| **FRONT-46** | *Información histórica* con datos reales (BACK-31): lluvia y agua en raíces por campaña con gráfico contra lo normal, cosechas del lote, rinde de la zona; sin datos inventados; el mapa colorea solo el lote seleccionado | `frontend/src/data/historicalData.ts`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/types/api.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `BACK-31` | `[x]` |
 
 ---
 
@@ -714,6 +721,162 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
+### `[x]` FRONT-36: Solapa Verde de Usuario en Panel Derecho (`Usuario` + `Idioma`) y Separación de `⋮` en Buscador (`Campos` + `Expandir mapa`)
+- **Objetivo:** Desacoplar los ajustes de cuenta/idioma de los ajustes geográficos de campos/mapa. Incorporar una nueva solapa con el ícono de usuario alineada a la derecha del panel derecho (como última solapa de `.top-nav-tabs`, resaltada en verde), y limitar el botón `⋮` del buscador (`MapSearchBar`) únicamente a `Campos` y `Expandir mapa` tanto para usuarios autenticados como en modo demo.
+- **Archivos Permitidos:**
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+  - `frontend/src/components/MapSearchBar.tsx`
+  - `frontend/src/components/FieldsSubheader.tsx`
+  - `frontend/src/components/UserSettingsModal.tsx`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Nueva solapa con estilo de carpeta alineada a la derecha del panel derecho:** Se ubica al extremo derecho de `.top-nav-tabs` (`margin-left: auto`, después de `Información histórica`), mostrando el ícono de `User`, con color verde destacado respecto de las demás solapas y marcándose como activa (`.active`) mientras el modal de usuario está abierto.
+  2. **Separación estricta 2 y 2 en `UserSettingsModal`:** Nunca se muestran las 4 pestañas juntas.
+     - Al abrir desde la **solapa de usuario**: el modal solo muestra las pestañas **`Usuario`** e **`Idioma`** (iniciando en `Usuario`).
+     - Al abrir desde los **tres puntitos (`⋮`) del buscador**: el modal solo muestra las pestañas **`Campos`** y **`Expandir mapa`** (iniciando en `Campos`).
+  3. **Comportamiento en Modo Demo vs. Usuario autenticado:**
+     - **Botón `⋮` del buscador:** Funciona igual en modo demo y en modo autenticado: abre `UserSettingsModal` con **`Campos`** y **`Expandir mapa`** (sin cerrar la sesión demo).
+     - **Solapa de Usuario:** En usuario autenticado abre `UserSettingsModal` con **`Usuario`** e **`Idioma`**; en **modo demo** lleva al usuario a iniciar sesión / registrarse (`handleLogout()` hacia `AuthScreen`).
+- **Especificación Técnica:**
+  1. En `frontend/src/components/UserSettingsModal.tsx`, agregar prop `scope: 'user' | 'map'` que filtre `ALL_TABS` a `['usuario', 'idioma']` o `['campos', 'expandir_mapa']` respectivamente y reinicie `activeTab` al primer tab del `scope` cada vez que `isOpen` o `scope` cambie. Permitir abrirse también cuando `authStatus === 'demo'` si `scope === 'map'`.
+  2. En `frontend/src/App.tsx`, reemplazar el estado booleano `isSettingsOpen` por `settingsScope: 'user' | 'map' | null` (o equivalente), agregar la solapa verde de usuario a la izquierda en `.top-nav-tabs` (con `aria-label="Cuenta de usuario"` / tooltip acorde al modo), conectar `onUserAction` / `onMapMenuAction` de `FieldsSubheader` -> `MapSearchBar` a `setSettingsScope('map')` para ambos modos (`demo` y `authenticated`).
+  3. En `frontend/src/components/MapSearchBar.tsx` y `frontend/src/components/FieldsSubheader.tsx`, actualizar `title`/`aria-label` del botón `⋮` para reflejar `"Campos y mapa"` (ya no `"Iniciar sesión"` en demo) y marcar `.active` solo cuando el modal esté abierto en `scope === 'map'`.
+  4. En `frontend/src/App.css`, definir los estilos de la solapa de usuario en verde (`--color-primary` / `--color-primary-light`) integrada a `.top-nav-tabs` y su estado `.active`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-37: Encabezado de `Info general` sin Coordenadas ni Hectáreas (Solo Nombre del Campo sin Repetición)
+- **Objetivo:** Limpiar el encabezado de la pestaña **Info general** eliminando por completo las coordenadas (`lat, lon`) y las hectáreas (`superficieHa`), y mostrando el nombre del campo (`loteLabel`) una sola vez sin duplicación visual.
+- **Archivos Permitidos:**
+  - `frontend/src/components/TelemetryCards.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Sin coordenadas ni hectáreas:** Quitar tanto el bloque `<code>lat, lon</code>` como el badge de `ha` (`superficieHa`) de `TelemetryCards.tsx` (y remover el texto `"Ubicación del lote:"`).
+  2. **Nombre del campo una sola vez:** Eliminar el subtítulo repetido (`p.telemetry-lote-subtitle`) debajo de `h2.section-title` (`Info general`) y mostrar el nombre del campo (`loteLabel`) en la pill del encabezado derecho con el ícono `MapPin`.
+- **Especificación Técnica:**
+  1. Actualizar `headerNode` en `frontend/src/components/TelemetryCards.tsx` para renderizar `h2.section-title` (`Info general`) a la izquierda y una pill a la derecha con `<MapPin size={13} />` + `{loteLabel}` (limpiando la prop `superficieHa` si no se utiliza en otra parte del componente o dejándola opcional sin renderizar).
+  2. Ajustar en `frontend/src/App.css` los estilos de la pill en el encabezado de `Info general` para que el nombre del campo se vea legible y equilibrado sin cortar innecesariamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-38: Botones de Acción Principal en Verde Vivo Claro (`Planificar`, `Guardar campo`, `+ Nuevo campo`, `Iniciar sesión`, `Reproducir serie`) y Estados Deshabilitados Tenues
+- **Objetivo:** Diferenciar visualmente los botones de acción principal pasándolos del terracota actual a un **verde vivo más claro** dentro de la gama de la paleta, y reducir notablemente la opacidad (con un toque de `grayscale`) en su estado `:disabled` para que nunca se confundan con botones habilitados.
+- **Archivos Permitidos:**
+  - `frontend/src/index.css`
+  - `frontend/src/App.css`
+  - `frontend/SKILLS_FRONTEND.md`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Solo botones de acción principal:** El cambio cromático y de `:disabled` se aplica específicamente a:
+     - **`Planificar`** (`.plan-submit-btn`)
+     - **`Guardar campo` / `Guardar cambios` en delimitación** (`.poly-action-btn.primary`)
+     - **`+` Añadir nuevo campo** (`.fields-new-icon-btn`, `.fields-new-btn`)
+     - **`Iniciar sesión` / `Crear cuenta`** (`.auth-submit-btn`)
+     - **`Reproducir serie`** (`.play-timeline-btn`)
+  2. **Verde vivo más claro dentro de los tonos del proyecto:** Definir tokens dedicados en `index.css` (derivados más vivos y claros que `#4B5B2D`, con buen contraste para texto claro y variante hover oscura) para aplicarlos en esos 5 botones principales sin teñir todos los botones secundarios ni los controles azules/terracota/rojos.
+  3. **Estado `:disabled` bien distinguible:** Reducir la opacidad de estos botones cuando están deshabilitados (ej. `opacity: 0.34`) y sumar `filter: grayscale(0.45)` para que el contraste frente al estado habilitado sea inmediato.
+  4. **Actualización documental:** Ajustar `SKILLS_FRONTEND.md` para reflejar esta excepción controlada de botones de acción principal en verde vivo.
+- **Especificación Técnica:**
+  1. Añadir tokens `--color-action-green` y `--color-action-green-hover` en `frontend/src/index.css`.
+  2. Actualizar en `frontend/src/App.css` las clases `.plan-submit-btn`, `.poly-action-btn.primary`, `.fields-new-icon-btn`, `.fields-new-btn`, `.auth-submit-btn` y `.play-timeline-btn` (fondo, `border: none`, `:hover:not(:disabled)`, `:focus-visible` y `:disabled` con baja opacidad + `grayscale`).
+  3. Actualizar `frontend/SKILLS_FRONTEND.md` con la regla de botones sin borde (`border: none`) y la excepción de `--color-action-green` para las acciones principales.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-39: Login Acoplado a la Derecha, Modo Demo Exclusivo en Inicio de Sesión y Cuaderno Rayado Izquierdo con Marca y Lema
+- **Objetivo:** Reorganizar `AuthScreen` en una grilla de dos columnas a pantalla completa con el formulario acoplado como panel derecho (sin tarjeta flotante centrada), restringir el acceso a modo demo únicamente a la pestaña de inicio de sesión (`mode === 'login'`), y mostrar en el sector izquierdo una hoja de cuaderno rayado con el logo, el nombre **Ereia** y el texto **"Soporte para el cultivo"** debajo.
+- **Archivos Permitidos:**
+  - `frontend/src/components/AuthScreen.tsx`
+  - `frontend/src/App.css`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Panel derecho fijo (no flotante):** el formulario de acceso/registro ocupa el panel derecho a altura completa (`min-height: 100vh` en desktop), acoplado al borde derecho.
+  2. **Modo demo solo en Login:** el divisor y el botón `Explorar en modo demo` (sin borde) solo se muestran cuando `mode === 'login'`, ocultándose en `Crear cuenta` (`mode === 'register'`).
+  3. **Sector izquierdo tipo cuaderno rayado:** fondo de hoja rayada cálida con margen lateral sutil, mostrando el logo `/ereia-icon.png`, el wordmark **Ereia** y debajo el lema **"Soporte para el cultivo"**.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-40: Envío de `field_id` y `Authorization` en `POST /api/v1/simulate` + Manejo de `401` / `404` / `422`
+- **Objetivo:** Aprovechar `field_id` (opcional) en `POST /api/v1/simulate` cuando se simula sobre un campo guardado (tanto en sesión autenticada como en modo demo), enviando `field_id`, las coordenadas del campo y el header `Authorization: Bearer <access_token>` para reutilizar suelo y topografía persistidos sin reconsultar APIs externas, y manejar explícitamente `401`, `404` y `422` (manteniendo intacta la simulación sobre puntos sueltos sin `field_id`).
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/apiClient.ts`
+  - `frontend/src/components/AuthScreen.tsx`
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Modo demo igual que usuarios autenticados:** cuando haya un campo guardado seleccionado (`selectedUserField`) y no se esté dibujando o consultando un punto suelto en el mapa, enviar `field_id: selectedUserField.id`, las coordenadas del campo y el header `Authorization: Bearer <token>` tanto en modo demo como en cuentas autenticadas. Si es un punto suelto en el mapa sin `field_id`, omitir `field_id`.
+  2. **Respuesta `401` (sesión inválida o expirada):** mostrar un aviso claro de sesión expirada/inválida, cerrar la sesión actual y redireccionar a `AuthScreen` (inicio de sesión).
+  3. **Respuestas `404` y `422` (campo ajeno/inexistente o coordenadas con desfase > 100 m):** NO caer silenciosamente al simulador local; mostrar en el panel el mensaje `"Ocurrió un error inesperado"` acompañado de un botón **`Reintentar`** que vuelva a disparar la simulación.
+- **Especificación Técnica:**
+  1. En `frontend/src/types/api.ts`, agregar `field_id?: string | null;` a `SimulateRequest`.
+  2. En `frontend/src/services/apiClient.ts`, crear una clase de error tipada (ej. `SimulateApiError` con `status: number`) y actualizar `simulateCropRotation(request: SimulateRequest, token?: string | null)` para incluir `Authorization: Bearer <token>` cuando exista token y enviar `field_id` en el JSON body si está definido. Ante `!response.ok`, lanzar `SimulateApiError` con el código HTTP (`401`, `404`, `422`, etc.) sin ocultar dichos errores bajo un fallback local silencioso cuando la respuesta del backend sea `401`/`404`/`422`.
+  3. En `frontend/src/App.tsx` y `frontend/src/components/RecommendationPanel.tsx`:
+     - Al planificar campaña sobre un campo guardado (`selectedUserField`), pasar `field_id: selectedUserField.id` y las coordenadas del campo (`lat`, `lon`), junto con `activeToken`. En punto suelto en el mapa, omitir `field_id`.
+     - Si `simulateCropRotation` falla con `401`: ejecutar cierre de sesión limpiando estado de sesión, pasar un aviso inicial a `AuthScreen` (ej. `"Su sesión expiró o dejó de ser válida. Inicie sesión nuevamente."`) y redirigir al inicio de sesión.
+     - Si falla con `404` o `422`: mostrar en `RecommendationPanel` un estado de error con el texto `"Ocurrió un error inesperado"` y el botón **`Reintentar`** (verde sin borde según `SKILLS_FRONTEND.md`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-41: Avisos Discretos de Dato Aproximado (`advertencias`, `suelo_advertencias`, `topo_advertencias`) sin Siglas Técnicas
+- **Objetivo:** Mostrar de forma visible pero discreta los avisos de dato aproximado provenientes de `advertencias` (`/simulate` y `/telemetry`), así como de `suelo_advertencias` y `topo_advertencias` (`UserField`), cerca de los bloques de suelo/topografía en `Info general` y `Planificación de campaña`, traduciendo siglas técnicas al lenguaje comprensible del productor según `SKILLS_FRONTEND.md`.
+- **Archivos Permitidos:**
+  - `frontend/src/utils/formatters.ts`
+  - `frontend/src/components/TelemetryCards.tsx`
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/App.css`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Estilo y ubicación:** mantener el banner de advertencia amarillo (`.telemetry-warning-banner`) tal como está diseñado actualmente en `Info general` (`TelemetryCards.tsx`), y replicar el mismo estilo discreto en `RecommendationPanel.tsx` si `/simulate` devuelve `advertencias`.
+  2. **Lenguaje sin siglas técnicas:** NO mostrar `"ISRIC"`, `"SRTM"`, `"SoilGrids"`, `"grilla_isric"` ni siglas técnicas crudas en la UI. Traducir y redactar los avisos en español formal (sin voseo) para que el productor comprenda qué dato aproximado está viendo (por ejemplo, perfil de suelo de referencia a X km o topografía aproximada de la zona) sin mencionar nombres de proveedores o siglas internas.
+- **Especificación Técnica:**
+  1. En `frontend/src/utils/formatters.ts`, crear un helper reutilizable `humanizeAgronomicWarnings(...)` (para evitar lógica duplicada entre `TelemetryCards` y `RecommendationPanel`) que:
+     - Combine y deduplique avisos de `suelo_advertencias`, `topo_advertencias` y `advertencias` de `/telemetry` o `/simulate`.
+     - Elimine o traduzca siglas y términos técnicos (`ISRIC`, `SoilGrids`, `SRTM`, `NASA POWER`, `grilla_isric`, `isric_soilgrids_v2`, `srtm_90m`, etc.) a redacción agronómica clara y breve para el productor (conservando distancias en km o magnitudes útiles cuando vengan en el texto).
+  2. En `frontend/src/components/TelemetryCards.tsx`, ubicar el banner amarillo `.telemetry-warning-banner` cerca del bloque de suelo/topografía cuando existan advertencias sanitizadas de suelo, topografía o telemetría (sin repetir textos equivalentes).
+  3. En `frontend/src/components/RecommendationPanel.tsx`, mostrar el mismo formato discreto de banner amarillo cuando `simulateData.advertencias` contenga avisos sanitizados.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-42: Polling de `reintento_en_curso` (`GET /api/v1/fields/{id}` cada 30 s), Spinner Discreto y Refresco + Aviso al Llegar Dato Real
+- **Objetivo:** Incorporar `reintento_en_curso` en el contrato `UserField`, agregar `getUserField` (`GET /api/v1/fields/{id}`) en `src/services/fieldsClient.ts`, consultar cada 30 s mientras el campo seleccionado tenga `reintento_en_curso = true`, detectar cambios en `suelo_fuente` o `topo_fuente`, actualizar la UI con un aviso claro al llegar el dato real y detener el polling cuando `reintento_en_curso` pase a `false` o cambie el campo seleccionado.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/fieldsClient.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/src/components/TelemetryCards.tsx`
+  - `frontend/src/App.css`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Indicador durante `reintento_en_curso = true`:** mostrar solo una ruedita de carga pequeña (spinner discreto con `aria-label` / `title` accesible, sin bloques extensos de texto) junto al bloque de suelo/topografía en `Info general`.
+  2. **Al cambiar `suelo_fuente` o `topo_fuente` (llegada de dato real):** mostrar una notificación clara y breve en español formal (ej. `"Llegó el dato real del suelo de su lote"` / `"Llegó el dato real de topografía de su lote"`, sin siglas técnicas) **y refrescar automáticamente** la UI (estado del campo seleccionado en `userFields`, telemetría en `Info general` y re-simulación si el usuario ya había planificado campaña).
+  3. **Corte del polling:** detener inmediatamente el intervalo de 30 s si `reintento_en_curso` pasa a `false`, si el usuario selecciona otro campo, cierra sesión o se desmonta el componente.
+- **Especificación Técnica:**
+  1. En `frontend/src/types/api.ts`, agregar `reintento_en_curso?: boolean;` al tipo `UserField`.
+  2. En `frontend/src/services/fieldsClient.ts`, implementar `getUserField(token: string, fieldId: string, signal?: AbortSignal): Promise<UserField>` llamando a `GET /api/v1/fields/${encodeURIComponent(fieldId)}` con `Authorization: Bearer ${token}`.
+  3. En `frontend/src/App.tsx`, mediante `useEffect` ligado a `selectedUserField?.id`, `selectedUserField?.reintento_en_curso` y `activeToken`:
+     - Si `reintento_en_curso === true`, programar `setInterval` cada `30_000` ms llamando a `getUserField` con `AbortController`.
+     - Comparar `suelo_fuente` y `topo_fuente` previos vs. los nuevos recibidos: si alguno cambió respecto a la instantánea anterior (ej. dejó de ser aproximado/grilla o cambió de fuente), mostrar un toast/aviso discreto de llegada de dato real y actualizar el campo en `userFields`, disparar refresco de `/api/v1/telemetry` y re-ejecutar `POST /api/v1/simulate` si `hasPlanned` está activo para ese campo.
+     - Limpiar intervalo y abortar requests pendientes al cambiar de campo o pasar `reintento_en_curso` a `false`.
+  4. En `frontend/src/components/TelemetryCards.tsx` + `frontend/src/App.css`, renderizar el spinner compacto (`Loader2` animado con `aria-label`) junto al bloque de suelo/topografía cuando `reintento_en_curso === true`, sin sobrecargar visualmente con párrafos de texto.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
 ### `[x]` FRONT-36: Panel de recomendación en lenguaje de productor (riesgo de año malo y rinde en qq/ha)
 - **Objetivo:** Mostrar lo que el modelo sabe de una forma que el productor argentino, su asesor o una empresa (aseguradora, acopio, financiera) entiendan sin explicación: **cuántas campañas de cada 10 salen mal, cuántos quintales se esperan contra lo normal de la zona y cuánto se cae en un año malo**. Hoy el panel muestra un anillo "/100" que se lee como nota de examen (53/100 parece malo, pero significa "un poco mejor que un año normal"), y no muestra ni el rango ni los años malos que la API ya devuelve.
 - **Archivos Permitidos:** `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/App.tsx` (solo el flujo de carga y error de la simulación), `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md`.

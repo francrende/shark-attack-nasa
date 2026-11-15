@@ -8,7 +8,6 @@ import {
   Mail,
   User,
 } from 'lucide-react'
-import { BrandBlock } from './BrandBlock'
 import {
   extractUserFromAuthResponse,
   fetchCurrentUser,
@@ -22,18 +21,23 @@ import type { UserProfile } from '../types/api'
 type AuthMode = 'login' | 'register'
 
 interface AuthScreenProps {
+  initialError?: string | null
   onAuthenticated: (user: UserProfile, token: string) => void
   onEnterDemo: () => void
 }
 
-export function AuthScreen({ onAuthenticated, onEnterDemo }: AuthScreenProps) {
+export function AuthScreen({
+  initialError = null,
+  onAuthenticated,
+  onEnterDemo,
+}: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('login')
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(initialError)
   const [infoMsg, setInfoMsg] = useState<string | null>(null)
 
   const handleSwitchMode = (nextMode: AuthMode) => {
@@ -108,9 +112,25 @@ export function AuthScreen({ onAuthenticated, onEnterDemo }: AuthScreenProps) {
 
   return (
     <div className="auth-shell">
-      <header className="top-navbar">
-        <BrandBlock />
-      </header>
+      <section
+        className="auth-notebook-pane"
+        aria-label="Presentación de Ereia"
+      >
+        <div className="auth-notebook-brand">
+          <div className="auth-notebook-logo-row">
+            <img
+              src="/ereia-icon.png"
+              alt="Logo de Ereia"
+              className="auth-notebook-logo"
+            />
+            <h1 className="auth-notebook-wordmark">
+              <span className="brand-wordmark-ere">Ere</span>
+              <span className="brand-wordmark-ia">ia</span>
+            </h1>
+          </div>
+          <p className="auth-notebook-tagline">Soporte para el cultivo</p>
+        </div>
+      </section>
 
       <main className="auth-main">
         <section className="auth-card" aria-labelledby="auth-heading">
@@ -254,19 +274,23 @@ export function AuthScreen({ onAuthenticated, onEnterDemo }: AuthScreenProps) {
             </button>
           </form>
 
-          <div className="auth-divider">
-            <span>o bien</span>
-          </div>
+          {mode === 'login' && (
+            <>
+              <div className="auth-divider">
+                <span>o bien</span>
+              </div>
 
-          <button
-            type="button"
-            className="auth-demo-btn"
-            onClick={onEnterDemo}
-            disabled={isSubmitting}
-          >
-            <Compass size={16} aria-hidden="true" />
-            <span>Explorar en modo demo</span>
-          </button>
+              <button
+                type="button"
+                className="auth-demo-btn"
+                onClick={onEnterDemo}
+                disabled={isSubmitting}
+              >
+                <Compass size={16} aria-hidden="true" />
+                <span>Explorar en modo demo</span>
+              </button>
+            </>
+          )}
         </section>
       </main>
     </div>

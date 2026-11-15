@@ -11,6 +11,8 @@
   --color-primary-lighter: #8AA15B;
   --color-primary-soft: #E8EFE0;
   --color-primary-border: rgba(75, 91, 45, 0.28);
+  --color-action-green: #508227;
+  --color-action-green-hover: #3F681D;
 
   /* 2. Fondo Principal (#A8BC82, variante más clara de #8AA15B) y Superficies */
   --color-bg: #A8BC82;
