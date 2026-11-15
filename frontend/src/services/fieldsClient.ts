@@ -97,6 +97,26 @@ export async function listUserFields(token: string): Promise<UserField[]> {
   return attachCachedPolygons(list)
 }
 
+export async function getUserField(
+  token: string,
+  fieldId: string,
+  signal?: AbortSignal
+): Promise<UserField> {
+  const field = await requestBackendJson<UserField>(
+    `/api/v1/fields/${encodeURIComponent(fieldId)}`,
+    {
+      method: 'GET',
+      signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    'No fue posible consultar el estado actualizado del campo.'
+  )
+
+  return attachCachedPolygons([field])[0]
+}
+
 export async function createUserField(
   token: string,
   payload: FieldCreateRequest

@@ -1,8 +1,11 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import {
+  CheckCircle2,
   Compass,
   History,
   Info,
+  User,
+  X,
 } from 'lucide-react'
 import './App.css'
 import { AuthScreen } from './components/AuthScreen'
@@ -15,7 +18,10 @@ import {
   WhatIfPanel,
 } from './components/SimulationControls'
 import { TelemetryCards } from './components/TelemetryCards'
-import { UserSettingsModal } from './components/UserSettingsModal'
+import {
+  UserSettingsModal,
+  type SettingsModalScope,
+} from './components/UserSettingsModal'
 
 const HistoricalPanel = lazy(() =>
   import('./components/HistoricalPanel').then((m) => ({
@@ -31,6 +37,7 @@ import {
   type HistoricalMetricId,
 } from './data/historicalData'
 import {
+  SimulateApiError,
   fetchFieldTelemetry,
   generateSimulatedResponse,
   simulateCropRotation,
@@ -44,6 +51,7 @@ import {
 import {
   createUserField,
   deleteUserField,
+  getUserField,
   listFieldCampaigns,
   listUserFields,
   loginDemoAccount,
@@ -67,6 +75,7 @@ import type {
   UserField,
   UserProfile,
 } from './types/api'
+import { humanizeAgronomicWarnings } from './utils/formatters'
 import {
   PAMPEAN_PROVINCE_IDS,
   calculateCentroid,
@@ -144,6 +153,7 @@ export function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>('checking')
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
   const [activeToken, setActiveToken] = useState<string | null>(null)
+  const [authNotice, setAuthNotice] = useState<string | null>(null)
 
   // Filtro previo de provincias (Región Pampeana)
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([])
@@ -199,7 +209,8 @@ export function App() {
 
   // Por regla de SKILLS_FRONTEND.md §3 y §4, la app inicia directamente en 'Planificación de campaña'
   const [activeTab, setActiveTab] = useState<NavTabId>('planificacion')
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
+  const [settingsScope, setSettingsScope] =
+    useState<SettingsModalScope | null>(null)
 
   // Estado GIS y gestión de campos del usuario desde backend (FRONT-21)
   const [userFields, setUserFields] = useState<UserField[]>([])
@@ -229,6 +240,8 @@ export function App() {
   })
   const [simulationResult, setSimulationResult] =
     useState<SimulateResponse | null>(null)
+  const [simulationError, setSimulationError] = useState<string | null>(null)
+  const [simulationRetryCount, setSimulationRetryCount] = useState<number>(0)
   const [isSimulating, setIsSimulating] = useState<boolean>(false)
   const [isHistoricalReady, setIsHistoricalReady] = useState<boolean>(false)
   const [hasPlanned, setHasPlanned] = useState<boolean>(false)
@@ -239,6 +252,7 @@ export function App() {
   const [isTelemetryLoading, setIsTelemetryLoading] = useState<boolean>(false)
   const [telemetryError, setTelemetryError] = useState<string | null>(null)
   const [telemetryRetryCount, setTelemetryRetryCount] = useState<number>(0)
+  const [fieldDataNotice, setFieldDataNotice] = useState<string | null>(null)
   const [latestFieldCampaign, setLatestFieldCampaign] =
     useState<FieldCampaign | null>(null)
 
@@ -253,6 +267,7 @@ export function App() {
   useEffect(() => {
     setHasPlanned(false)
     setSimulationResult(null)
+    setSimulationError(null)
 
     if (!campana || !cultivoAnterior) {
       setIsHistoricalReady(false)
@@ -283,32 +298,67 @@ export function App() {
     }
 
     let cancelled = false
+    const controller = new AbortController()
+    setSimulationError(null)
     setIsSimulating(true)
+
+    const activeSavedField =
+      !isDrawingNewField && editingPolygonField === null && selectedFieldId
+        ? (userFields.find(
+            (field) =>
+              field.id === selectedFieldId &&
+              isPointInProvinces(field.lat, field.lon, selectedProvinces)
+          ) ?? null)
+        : null
+
+    const requestCoords = activeSavedField
+      ? { lat: activeSavedField.lat, lon: activeSavedField.lon }
+      : selectedCoords
 
     const timer = window.setTimeout(async () => {
       try {
-        const result = await simulateCropRotation({
-          coordenadas: selectedCoords,
-          campana,
-          cultivo_anterior: cultivoAnterior,
-          objetivo_productor: objetivoProductor,
-          simulacion_what_if: whatIf,
-        })
+        const result = await simulateCropRotation(
+          {
+            ...(activeSavedField ? { field_id: activeSavedField.id } : {}),
+            coordenadas: requestCoords,
+            campana,
+            cultivo_anterior: cultivoAnterior,
+            objetivo_productor: objetivoProductor,
+            simulacion_what_if: whatIf,
+          },
+          activeToken,
+          controller.signal
+        )
         if (!cancelled) {
+          setSimulationError(null)
           setSimulationResult(result)
         }
-      } catch {
-        if (!cancelled) {
-          setSimulationResult(
-            generateSimulatedResponse({
-              coordenadas: selectedCoords,
-              campana,
-              cultivo_anterior: cultivoAnterior,
-              objetivo_productor: objetivoProductor,
-              simulacion_what_if: whatIf,
-            })
-          )
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return
+
+        if (err instanceof SimulateApiError) {
+          if (err.status === 401) {
+            handleLogout(
+              'Su sesión expiró o dejó de ser válida. Inicie sesión nuevamente.'
+            )
+            return
+          }
+          if (err.status === 404 || err.status === 422) {
+            setSimulationResult(null)
+            setSimulationError('Ocurrió un error inesperado')
+            return
+          }
         }
+
+        setSimulationResult(
+          generateSimulatedResponse({
+            coordenadas: requestCoords,
+            campana,
+            cultivo_anterior: cultivoAnterior,
+            objetivo_productor: objetivoProductor,
+            simulacion_what_if: whatIf,
+          })
+        )
       } finally {
         if (!cancelled) {
           setIsSimulating(false)
@@ -318,12 +368,28 @@ export function App() {
 
     return () => {
       cancelled = true
+      controller.abort()
       window.clearTimeout(timer)
     }
-  }, [hasPlanned, selectedCoords, campana, cultivoAnterior, objetivoProductor, whatIf])
+  }, [
+    hasPlanned,
+    selectedCoords,
+    selectedFieldId,
+    userFields,
+    selectedProvinces,
+    isDrawingNewField,
+    editingPolygonField,
+    activeToken,
+    campana,
+    cultivoAnterior,
+    objetivoProductor,
+    whatIf,
+    simulationRetryCount,
+  ])
 
   const handlePlan = () => {
     if (!isRotationReady) return
+    setSimulationError(null)
     setHasPlanned(true)
   }
 
@@ -499,6 +565,107 @@ export function App() {
     [visibleFields, selectedFieldId]
   )
 
+  // Polling cada 30 s mientras el campo seleccionado tenga reintento_en_curso = true (FRONT-42)
+  useEffect(() => {
+    const pollingFieldId = selectedUserField?.id
+    const isRetrying = selectedUserField?.reintento_en_curso === true
+
+    if (
+      (authStatus !== 'authenticated' && authStatus !== 'demo') ||
+      !activeToken ||
+      !pollingFieldId ||
+      !isRetrying ||
+      isDrawingNewField ||
+      editingPolygonField !== null
+    ) {
+      return
+    }
+
+    let cancelled = false
+    let activeController: AbortController | null = null
+    let prevSueloFuente = selectedUserField.suelo_fuente ?? null
+    let prevTopoFuente = selectedUserField.topo_fuente ?? null
+
+    const pollField = async () => {
+      if (cancelled) return
+      activeController?.abort()
+      const controller = new AbortController()
+      activeController = controller
+
+      try {
+        const freshField = await getUserField(
+          activeToken,
+          pollingFieldId,
+          controller.signal
+        )
+        if (cancelled || controller.signal.aborted) return
+
+        const nextSueloFuente = freshField.suelo_fuente ?? null
+        const nextTopoFuente = freshField.topo_fuente ?? null
+        const sueloChanged =
+          Boolean(nextSueloFuente) && nextSueloFuente !== prevSueloFuente
+        const topoChanged =
+          Boolean(nextTopoFuente) && nextTopoFuente !== prevTopoFuente
+
+        prevSueloFuente = nextSueloFuente
+        prevTopoFuente = nextTopoFuente
+
+        setUserFields((prev) =>
+          prev.map((field) => {
+            if (field.id !== pollingFieldId) return field
+            return {
+              ...freshField,
+              polygon:
+                Array.isArray(freshField.polygon) && freshField.polygon.length >= 3
+                  ? freshField.polygon
+                  : field.polygon,
+            }
+          })
+        )
+
+        if (sueloChanged || topoChanged) {
+          const message =
+            sueloChanged && topoChanged
+              ? 'Llegaron los datos reales de suelo y topografía de su lote.'
+              : sueloChanged
+                ? 'Llegó el dato real del suelo de su lote.'
+                : 'Llegó el dato real de topografía de su lote.'
+
+          setFieldDataNotice(message)
+          setTelemetryRetryCount((c) => c + 1)
+          setSimulationRetryCount((c) => c + 1)
+        }
+      } catch {
+        // Ignorar fallas transitorias en el polling en segundo plano; se reintenta al próximo ciclo
+      }
+    }
+
+    const intervalId = window.setInterval(pollField, 30_000)
+
+    return () => {
+      cancelled = true
+      activeController?.abort()
+      window.clearInterval(intervalId)
+    }
+  }, [
+    authStatus,
+    activeToken,
+    selectedUserField?.id,
+    selectedUserField?.reintento_en_curso,
+    isDrawingNewField,
+    editingPolygonField,
+  ])
+
+  useEffect(() => {
+    if (!fieldDataNotice) return
+    const timer = window.setTimeout(() => {
+      setFieldDataNotice(null)
+    }, 7000)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [fieldDataNotice])
+
   // Reconciliar el campo seleccionado con el filtro de provincias (carga de campos y al aplicar):
   // nunca autoselecciona un campo fuera de las provincias elegidas.
   useEffect(() => {
@@ -526,18 +693,8 @@ export function App() {
     if (selectedUserField) {
       return selectedUserField.nombre
     }
-    return 'Ubicación seleccionada en el mapa'
+    return 'Sin campo'
   }, [isDrawingNewField, selectedUserField, customPolygon.length])
-
-  const currentSuperficieHa = useMemo(() => {
-    if (isDrawingNewField && customPolygon.length >= 3) {
-      return calculatePolygonAreaHa(customPolygon)
-    }
-    if (selectedUserField && selectedUserField.hectareas !== null) {
-      return selectedUserField.hectareas
-    }
-    return null
-  }, [isDrawingNewField, selectedUserField, customPolygon])
 
   // Cargar campos del usuario (o usuario demo en BD) al iniciar sesión / entrar en demo
   useEffect(() => {
@@ -586,6 +743,7 @@ export function App() {
     setSelectedCoords({ lat: field.lat, lon: field.lon })
     setFieldFocusRequestId((prev) => prev + 1)
     setFieldsError(null)
+    setFieldDataNotice(null)
     setWhatIf({
       override_humedad_radicular_pct: null,
       variacion_lluvia_esperada_pct: 0,
@@ -612,7 +770,7 @@ export function App() {
 
   const handleStartEditingPolygon = (field: UserField) => {
     setMapSearchTarget(null)
-    setIsSettingsOpen(false)
+    setSettingsScope(null)
     setIsDrawingNewField(false)
     setEditingPolygonField(field)
     setSelectedFieldId(field.id)
@@ -802,6 +960,7 @@ export function App() {
     whatIf.variacion_lluvia_esperada_pct !== 0
 
   const handleAuthenticated = (user: UserProfile, token: string) => {
+    setAuthNotice(null)
     const finish = (profile: UserProfile) => {
       initProvincesFromProfile(profile)
       setCurrentUser(profile)
@@ -820,6 +979,7 @@ export function App() {
   }
 
   const handleEnterDemo = () => {
+    setAuthNotice(null)
     setCurrentUser(null)
     setActiveToken(null)
     // Demo: la selección vive solo en memoria y siempre arranca en el selector
@@ -906,7 +1066,7 @@ export function App() {
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = (notice?: unknown) => {
     clearStoredAuthToken()
     setCurrentUser(null)
     setActiveToken(null)
@@ -915,8 +1075,13 @@ export function App() {
     setSelectedProvinces([])
     setIsProvinceFilterApplied(false)
     setProvincesError(null)
-    setIsSettingsOpen(false)
+    setSettingsScope(null)
     setEditingPolygonField(null)
+    setSimulationError(null)
+    setSimulationResult(null)
+    setFieldDataNotice(null)
+    setHasPlanned(false)
+    setAuthNotice(typeof notice === 'string' ? notice : null)
     setAuthStatus('unauthenticated')
   }
 
@@ -939,6 +1104,7 @@ export function App() {
   if (authStatus === 'unauthenticated') {
     return (
       <AuthScreen
+        initialError={authNotice}
         onAuthenticated={handleAuthenticated}
         onEnterDemo={handleEnterDemo}
       />
@@ -982,15 +1148,10 @@ export function App() {
             isDrawing={isDrawingNewField || editingPolygonField !== null}
             editingField={editingPolygonField}
             customPolygon={customPolygon}
-            isDemo={authStatus === 'demo'}
-            isUserSettingsOpen={isSettingsOpen}
-            onUserAction={() => {
-              if (authStatus === 'demo') {
-                handleLogout()
-              } else {
-                setProvincesError(null)
-                setIsSettingsOpen(true)
-              }
+            isMapSettingsOpen={settingsScope === 'map'}
+            onOpenMapSettings={() => {
+              setProvincesError(null)
+              setSettingsScope('map')
             }}
             onSelectSearchLocation={handleSelectSearchLocation}
             onSelectField={handleSelectUserField}
@@ -1030,8 +1191,11 @@ export function App() {
           <nav className="top-nav-tabs" aria-label="Navegación del panel derecho">
             <button
               type="button"
-              className={`nav-tab-btn ${activeTab === 'planificacion' ? 'active' : ''}`}
-              onClick={() => setActiveTab('planificacion')}
+              className={`nav-tab-btn ${activeTab === 'planificacion' && settingsScope !== 'user' ? 'active' : ''}`}
+              onClick={() => {
+                setSettingsScope(null)
+                setActiveTab('planificacion')
+              }}
             >
               <Compass size={14} />
               <span>Planificación de campaña</span>
@@ -1039,8 +1203,11 @@ export function App() {
 
             <button
               type="button"
-              className={`nav-tab-btn ${activeTab === 'info_general' ? 'active' : ''}`}
-              onClick={() => setActiveTab('info_general')}
+              className={`nav-tab-btn ${activeTab === 'info_general' && settingsScope !== 'user' ? 'active' : ''}`}
+              onClick={() => {
+                setSettingsScope(null)
+                setActiveTab('info_general')
+              }}
             >
               <Info size={14} />
               <span>Info general</span>
@@ -1048,15 +1215,60 @@ export function App() {
 
             <button
               type="button"
-              className={`nav-tab-btn ${activeTab === 'historico' ? 'active' : ''}`}
-              onClick={() => setActiveTab('historico')}
+              className={`nav-tab-btn ${activeTab === 'historico' && settingsScope !== 'user' ? 'active' : ''}`}
+              onClick={() => {
+                setSettingsScope(null)
+                setActiveTab('historico')
+              }}
             >
               <History size={14} />
               <span>Información histórica</span>
             </button>
+
+            <button
+              type="button"
+              className={`nav-tab-btn nav-tab-user ${settingsScope === 'user' ? 'active' : ''}`}
+              onClick={() => {
+                if (authStatus === 'demo') {
+                  handleLogout()
+                } else {
+                  setProvincesError(null)
+                  setSettingsScope('user')
+                }
+              }}
+              aria-label={
+                authStatus === 'demo'
+                  ? 'Iniciar sesión o crear cuenta'
+                  : 'Cuenta de usuario e idioma'
+              }
+              title={
+                authStatus === 'demo'
+                  ? 'Iniciar sesión o crear cuenta'
+                  : 'Usuario e idioma'
+              }
+            >
+              <User size={15} aria-hidden="true" />
+            </button>
           </nav>
 
           <div className="right-folder-body">
+            {fieldDataNotice && (
+              <div className="field-data-notice" role="status" aria-live="polite">
+                <div className="field-data-notice-content">
+                  <CheckCircle2 size={15} aria-hidden="true" />
+                  <span>{fieldDataNotice}</span>
+                </div>
+                <button
+                  type="button"
+                  className="field-data-notice-close"
+                  onClick={() => setFieldDataNotice(null)}
+                  aria-label="Cerrar notificación"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </div>
+            )}
+
             {activeTab === 'planificacion' && (
               <>
                 <CampaignConfigPanel
@@ -1098,11 +1310,29 @@ export function App() {
                   </section>
                 )}
 
+                {hasPlanned && !isSimulating && simulationError && (
+                  <RecommendationPanel
+                    recomendacion={null}
+                    ranking={[]}
+                    errorMessage={simulationError}
+                    onRetry={() => setSimulationRetryCount((c) => c + 1)}
+                  />
+                )}
+
                 {hasPlanned && simulationResult && (
                   <>
                     <RecommendationPanel
                       recomendacion={simulationResult.recomendacion_principal}
                       ranking={simulationResult.ranking_cultivos}
+                      advertencias={humanizeAgronomicWarnings([
+                        simulationResult.advertencias,
+                        !isDrawingNewField && editingPolygonField === null
+                          ? selectedUserField?.suelo_advertencias
+                          : undefined,
+                        !isDrawingNewField && editingPolygonField === null
+                          ? selectedUserField?.topo_advertencias
+                          : undefined,
+                      ])}
                       isWhatIfActive={isWhatIfActive}
                     />
 
@@ -1121,13 +1351,8 @@ export function App() {
 
             {activeTab === 'info_general' && (
               <TelemetryCards
-                ubicacion={
-                  simulationResult?.ubicacion ??
-                  fieldTelemetry?.ubicacion ??
-                  selectedCoords
-                }
                 loteLabel={currentLoteLabel}
-                superficieHa={currentSuperficieHa}
+                isFieldAssigned={Boolean(selectedUserField)}
                 telemetria={
                   simulationResult?.telemetria_nasa ??
                   fieldTelemetry?.telemetria_nasa ??
@@ -1142,18 +1367,26 @@ export function App() {
                   fieldTelemetry?.topografia_srtm ??
                   getStoredTopoFromField(selectedUserField)
                 }
-                advertencias={
-                  simulationResult?.advertencias ??
-                  fieldTelemetry?.advertencias ?? [
-                    ...(selectedUserField?.suelo_advertencias ?? []),
-                    ...(selectedUserField?.topo_advertencias ?? []),
-                  ]
-                }
+                advertencias={humanizeAgronomicWarnings([
+                  !isDrawingNewField && editingPolygonField === null
+                    ? selectedUserField?.suelo_advertencias
+                    : undefined,
+                  !isDrawingNewField && editingPolygonField === null
+                    ? selectedUserField?.topo_advertencias
+                    : undefined,
+                  fieldTelemetry?.advertencias,
+                  simulationResult?.advertencias,
+                ])}
                 latestCampaign={latestFieldCampaign}
                 isLoading={isTelemetryLoading && !simulationResult}
                 errorMessage={!simulationResult ? telemetryError : null}
                 onRetry={() => setTelemetryRetryCount((c) => c + 1)}
                 isWhatIfActive={isWhatIfActive}
+                isRetryingFieldData={
+                  selectedUserField?.reintento_en_curso === true &&
+                  !isDrawingNewField &&
+                  editingPolygonField === null
+                }
               />
             )}
 
@@ -1182,14 +1415,19 @@ export function App() {
       </main>
 
       <UserSettingsModal
-        isOpen={isSettingsOpen && authStatus === 'authenticated'}
+        isOpen={
+          settingsScope !== null &&
+          (settingsScope === 'map' || authStatus === 'authenticated')
+        }
+        scope={settingsScope ?? 'user'}
+        isDemo={authStatus === 'demo'}
         user={currentUser}
         accessToken={activeToken}
         fields={visibleFields}
         selectedProvinces={selectedProvinces}
         isSavingProvinces={isSavingProvinces}
         provincesError={provincesError}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={() => setSettingsScope(null)}
         onUserUpdated={(updatedUser) => setCurrentUser(updatedUser)}
         onSaveProvinces={handleApplyProvinces}
         onRenameField={handleRenameField}

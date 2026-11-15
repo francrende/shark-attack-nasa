@@ -25,9 +25,8 @@ interface FieldsSubheaderProps {
   isDrawing: boolean
   editingField?: UserField | null
   customPolygon: [number, number][]
-  isDemo: boolean
-  isUserSettingsOpen?: boolean
-  onUserAction: () => void
+  isMapSettingsOpen?: boolean
+  onOpenMapSettings: () => void
   onSelectSearchLocation: (result: MapSearchResult) => void
   onSelectField: (field: UserField) => void
   onStartDrawing: () => void
@@ -47,9 +46,8 @@ export function FieldsSubheader({
   isDrawing,
   editingField = null,
   customPolygon,
-  isDemo,
-  isUserSettingsOpen = false,
-  onUserAction,
+  isMapSettingsOpen = false,
+  onOpenMapSettings,
   onSelectSearchLocation,
   onSelectField,
   onStartDrawing,
@@ -305,9 +303,8 @@ export function FieldsSubheader({
     >
       <MapSearchBar
         selectedProvinces={selectedProvinces}
-        isDemo={isDemo}
-        isUserSettingsOpen={isUserSettingsOpen}
-        onUserAction={onUserAction}
+        isMapSettingsOpen={isMapSettingsOpen}
+        onOpenMapSettings={onOpenMapSettings}
         onSelectLocation={onSelectSearchLocation}
       />
 

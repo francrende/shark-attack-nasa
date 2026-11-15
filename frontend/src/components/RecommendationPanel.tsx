@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Info,
   Lock,
+  RefreshCw,
   ShieldAlert,
 } from 'lucide-react'
 import { CULTIVOS_CATALOGO } from '../data/demoFields'
@@ -16,11 +17,15 @@ import type {
   RecomendacionPrincipal,
   RiesgoNivel,
 } from '../types/api'
+import { humanizeAgronomicWarnings } from '../utils/formatters'
 
 interface RecommendationPanelProps {
-  recomendacion: RecomendacionPrincipal
+  recomendacion: RecomendacionPrincipal | null
   ranking: RankingCultivoItem[]
+  advertencias?: readonly string[]
   isWhatIfActive?: boolean
+  errorMessage?: string | null
+  onRetry?: () => void
 }
 
 function getCultivoDisplayName(idOrRaw: string): string {
@@ -49,11 +54,50 @@ function getRiskLabelAndClass(riesgo: RiesgoNivel): {
 export function RecommendationPanel({
   recomendacion,
   ranking,
+  advertencias = [],
   isWhatIfActive = false,
+  errorMessage = null,
+  onRetry,
 }: RecommendationPanelProps) {
   const [expandedCropId, setExpandedCropId] = useState<string | null>(null)
   const [moreOpenCropId, setMoreOpenCropId] = useState<string | null>(null)
   const [showAllCrops, setShowAllCrops] = useState<boolean>(false)
+
+  if (errorMessage || !recomendacion) {
+    return (
+      <section
+        className="panel-section recommendation-section"
+        aria-live="polite"
+      >
+        <div className="section-header-row">
+          <div>
+            <h2 className="section-title">Estrategia de rotación</h2>
+          </div>
+        </div>
+        <div className="telemetry-error-box" role="alert">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <div className="telemetry-error-content">
+            <strong>Ocurrió un error inesperado</strong>
+            <p>
+              {errorMessage && errorMessage !== 'Ocurrió un error inesperado'
+                ? errorMessage
+                : 'No fue posible completar la simulación para el campo seleccionado.'}
+            </p>
+          </div>
+          {onRetry && (
+            <button
+              type="button"
+              className="recommendation-retry-btn"
+              onClick={onRetry}
+            >
+              <RefreshCw size={13} aria-hidden="true" />
+              <span>Reintentar</span>
+            </button>
+          )}
+        </div>
+      </section>
+    )
+  }
 
   // Parámetros del anillo SVG del Puntaje general
   const radius = 34
@@ -72,6 +116,7 @@ export function RecommendationPanel({
 
   // Anti-clutter: mostrar Top 3 por defecto
   const visibleRanking = showAllCrops ? sembrables : sembrables.slice(0, 3)
+  const safeAdvertencias = humanizeAgronomicWarnings([advertencias])
 
   const handleToggleCrop = (cultivoId: string) => {
     setExpandedCropId((prev) => (prev === cultivoId ? null : cultivoId))
@@ -93,6 +138,17 @@ export function RecommendationPanel({
           <span className="what-if-active-pill">Escenario simulado</span>
         )}
       </div>
+
+      {safeAdvertencias.length > 0 && (
+        <div className="telemetry-warning-banner" role="status">
+          <AlertTriangle size={15} aria-hidden="true" />
+          <div className="telemetry-warning-list">
+            {safeAdvertencias.map((adv, idx) => (
+              <span key={`${idx}-${adv}`}>{adv}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* LISTADO ÚNICO INTERACTIVO: AL TOCAR CUALQUIER CULTIVO SE EXPANDE SU CARD COMPLETA */}
       <div className="ranking-box">

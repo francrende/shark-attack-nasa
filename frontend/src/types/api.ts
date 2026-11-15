@@ -52,6 +52,7 @@ export interface SimulacionWhatIf {
 }
 
 export interface SimulateRequest {
+  field_id?: string | null
   coordenadas: Coordenadas
   campana: Campana
   cultivo_anterior: CultivoAnterior
@@ -291,6 +292,7 @@ export interface UserField {
   topo_localidad_fallback?: string | null
   topo_distancia_fuente_km?: number | null
   reintentar_srtm?: boolean
+  reintento_en_curso?: boolean
 }
 
 export interface FieldCreateRequest {

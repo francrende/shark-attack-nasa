@@ -72,7 +72,8 @@ Never hardcode hex values in components or CSS rules. Always use the CSS variabl
 ### 3.1. Clarity over completeness (progressive disclosure)
 - **Max 3–4 key metrics per card.** Extra detail goes behind "Ver detalle" / "Ver fundamentos".
 - **Lead with the conclusion, then the evidence.** Show the recommended crop name before the bars that justify it.
-- **Avoid making all buttons and selections green:** Reserve `--color-primary` (`#4B5B2D`) for section headings (`Newsreader`) and the recommended crop hero; use terracotta, earth brown, and hydrological blue for buttons and selected states according to context.
+- **Avoid making secondary buttons green:** Reserve `--color-primary` (`#4B5B2D`) for section headings (`Newsreader`) and the recommended crop hero, and `--color-action-green` (`#508227`) exclusively for primary CTA buttons (`Planificar`, `Guardar campo`, `Nuevo campo (+)`, `Iniciar sesión`, `Reproducir serie`, with low opacity + grayscale when `:disabled`); use terracotta, earth brown, and hydrological blue for secondary buttons and selected states according to context.
+- **No borders on filled/action buttons:** Buttons must use `border: none` (relying on fill color, subtle shadow, and hover/focus-visible states rather than visible outlines/borders).
 - Prefer **visual gauges + a short human sentence** over raw numbers alone:
   - ✅ "Agua en las raíces: 34% — Reserva ajustada"
   - ❌ "GWETROOT: 0.34"

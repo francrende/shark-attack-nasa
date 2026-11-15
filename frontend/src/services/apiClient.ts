@@ -555,25 +555,59 @@ export async function fetchFieldTelemetry(
   return (await response.json()) as TelemetryResponse
 }
 
+export class SimulateApiError extends Error {
+  status: number
+
+  constructor(status: number, message?: string) {
+    super(message || `Error HTTP ${status} al consultar /api/v1/simulate`)
+    this.name = 'SimulateApiError'
+    this.status = status
+  }
+}
+
 /**
- * Cliente principal de simulación. Usa el motor simulado en Frontend por defecto
- * mientras el equipo de Backend termina su rama, o consulta `POST /api/v1/simulate`.
+ * Cliente principal de simulación (`POST /api/v1/simulate`), con envío opcional
+ * de `field_id` en el body y header `Authorization: Bearer <token>`.
  */
 export async function simulateCropRotation(
-  request: SimulateRequest
+  request: SimulateRequest,
+  token?: string | null,
+  signal?: AbortSignal
 ): Promise<SimulateResponse> {
   if (USE_SIMULATED_MODE) {
     return generateSimulatedResponse(request)
   }
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const { field_id, ...rest } = request
+  const bodyPayload: SimulateRequest = field_id
+    ? { field_id, ...rest }
+    : rest
+
   const response = await fetch(BACKEND_API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
+    headers,
+    body: JSON.stringify(bodyPayload),
+    signal,
   })
 
   if (!response.ok) {
-    throw new Error(`Error HTTP ${response.status} al consultar /api/v1/simulate`)
+    let detail = `Error HTTP ${response.status} al consultar /api/v1/simulate`
+    try {
+      const payload = (await response.json()) as { detail?: string }
+      if (typeof payload?.detail === 'string' && payload.detail.trim()) {
+        detail = payload.detail
+      }
+    } catch {
+      // Conservar mensaje HTTP por defecto
+    }
+    throw new SimulateApiError(response.status, detail)
   }
 
   return (await response.json()) as SimulateResponse

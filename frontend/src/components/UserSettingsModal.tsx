@@ -30,9 +30,17 @@ import {
 } from '../utils/geo'
 
 type SettingsTabId = 'usuario' | 'campos' | 'expandir_mapa' | 'idioma'
+export type SettingsModalScope = 'user' | 'map'
+
+const SCOPE_TABS: Record<SettingsModalScope, SettingsTabId[]> = {
+  user: ['usuario', 'idioma'],
+  map: ['campos', 'expandir_mapa'],
+}
 
 interface UserSettingsModalProps {
   isOpen: boolean
+  scope?: SettingsModalScope
+  isDemo?: boolean
   user: UserProfile | null
   accessToken: string | null
   fields: UserField[]
@@ -78,12 +86,14 @@ function RegionExpansionPanel({
   initialSelected,
   fields,
   isSaving,
+  isDemo = false,
   errorMsg,
   onSave,
 }: {
   initialSelected: string[]
   fields: UserField[]
   isSaving: boolean
+  isDemo?: boolean
   errorMsg: string | null
   onSave: (provinceIds: string[]) => Promise<void>
 }) {
@@ -137,7 +147,7 @@ function RegionExpansionPanel({
 
   const handleSaveClick = () => {
     if (!canSave) return
-    if (affectedFields.length > 0) {
+    if (affectedFields.length > 0 && !isDemo) {
       setShowDeleteConfirm(true)
       return
     }
@@ -226,17 +236,21 @@ function RegionExpansionPanel({
 
           <div
             className={`settings-region-notice ${
-              affectedFields.length > 0 ? 'warning' : ''
+              !isDemo && affectedFields.length > 0 ? 'warning' : ''
             }`}
-            role={affectedFields.length > 0 ? 'status' : undefined}
+            role={!isDemo && affectedFields.length > 0 ? 'status' : undefined}
           >
             <AlertTriangle size={14} aria-hidden="true" />
             <span>
-              {affectedFields.length > 0
-                ? affectedFields.length === 1
-                  ? `Al guardar, se eliminará el campo "${affectedFields[0].nombre}" ubicado en la provincia desmarcada.`
-                  : `Al guardar, se eliminarán ${affectedFields.length} campos ubicados en las provincias desmarcadas.`
-                : 'Quitar una provincia eliminará también los campos registrados en ella.'}
+              {isDemo
+                ? affectedFields.length > 0
+                  ? 'En modo demo, los campos de provincias desmarcadas quedarán ocultos durante esta sesión.'
+                  : 'En modo demo, los cambios de región se aplican solo durante esta sesión.'
+                : affectedFields.length > 0
+                  ? affectedFields.length === 1
+                    ? `Al guardar, se eliminará el campo "${affectedFields[0].nombre}" ubicado en la provincia desmarcada.`
+                    : `Al guardar, se eliminarán ${affectedFields.length} campos ubicados en las provincias desmarcadas.`
+                  : 'Quitar una provincia eliminará también los campos registrados en ella.'}
             </span>
           </div>
 
@@ -362,6 +376,8 @@ function RegionExpansionPanel({
 
 export function UserSettingsModal({
   isOpen,
+  scope = 'user',
+  isDemo = false,
   user,
   accessToken,
   fields,
@@ -376,7 +392,9 @@ export function UserSettingsModal({
   onDeleteField,
   onLogout,
 }: UserSettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTabId>('usuario')
+  const allowedTabIds = SCOPE_TABS[scope]
+  const visibleTabs = ALL_TABS.filter((tab) => allowedTabIds.includes(tab.id))
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(allowedTabIds[0])
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -430,6 +448,7 @@ export function UserSettingsModal({
 
   useEffect(() => {
     if (!isOpen) return
+    setActiveTab(SCOPE_TABS[scope][0])
     setNombre(user?.nombre ?? '')
     setEmail(user?.email ?? '')
     setPassword('')
@@ -443,7 +462,7 @@ export function UserSettingsModal({
     setBusyFieldId(null)
     setFieldsError(null)
     setFieldsSuccess(null)
-  }, [isOpen, user])
+  }, [isOpen, scope, user])
 
   useEffect(() => {
     if (!isOpen) return
@@ -623,7 +642,11 @@ export function UserSettingsModal({
       className="settings-glass-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label="Ajustes de usuario"
+      aria-label={
+        scope === 'user'
+          ? 'Cuenta de usuario e idioma'
+          : 'Campos y expandir mapa'
+      }
       onClick={onClose}
     >
       <div
@@ -636,7 +659,7 @@ export function UserSettingsModal({
             role="tablist"
             aria-label="Secciones de ajustes"
           >
-            {ALL_TABS.map((tab) => {
+            {visibleTabs.map((tab) => {
               const Icon = tab.icon
               const isActive = tab.id === activeTab
               return (
@@ -1011,6 +1034,7 @@ export function UserSettingsModal({
               initialSelected={selectedProvinces}
               fields={fields}
               isSaving={isSavingProvinces}
+              isDemo={isDemo}
               errorMsg={provincesError}
               onSave={async (provinceIds) => {
                 const ok = await onSaveProvinces(provinceIds)
