@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { Loader2, MapPin, MoreVertical, Search, X } from 'lucide-react'
 import {
+  isCoordinateOutsideArgentina,
   parseCoordinateQuery,
   searchMapLocations,
   type MapSearchResult,
@@ -70,6 +71,18 @@ export function MapSearchBar({
       if (!trimmed) return
 
       cancelInFlight()
+
+      if (isCoordinateOutsideArgentina(trimmed)) {
+        lastFetchedQueryRef.current = trimmed
+        setResults([])
+        setHasSearched(true)
+        setIsSearching(false)
+        setSearchError('Las coordenadas están fuera de Argentina.')
+        setIsDropdownOpen(true)
+        setActiveIndex(-1)
+        return
+      }
+
       const controller = new AbortController()
       abortRef.current = controller
 
@@ -134,9 +147,21 @@ export function MapSearchBar({
       return () => window.clearTimeout(timer)
     }
 
+    if (isCoordinateOutsideArgentina(trimmed)) {
+      const timer = window.setTimeout(() => {
+        setResults([])
+        setHasSearched(true)
+        setSearchError('Las coordenadas están fuera de Argentina.')
+        setIsDropdownOpen(true)
+        setActiveIndex(-1)
+        lastFetchedQueryRef.current = trimmed
+      }, 120)
+      return () => window.clearTimeout(timer)
+    }
+
     const timer = window.setTimeout(() => {
       void runSearch(trimmed, false)
-    }, 450)
+    }, 320)
 
     return () => window.clearTimeout(timer)
   }, [query, runSearch, selectedProvinces])
@@ -167,7 +192,6 @@ export function MapSearchBar({
     }
 
     if (
-      isDropdownOpen &&
       trimmed === lastFetchedQueryRef.current &&
       results.length > 0
     ) {
@@ -242,13 +266,14 @@ export function MapSearchBar({
             const nextVal = event.target.value
             setQuery(nextVal)
             setSearchError(null)
-            if (!nextVal.trim()) {
+            if (nextVal.trim().length < 3) {
               cancelInFlight()
               lastFetchedQueryRef.current = ''
               setResults([])
               setHasSearched(false)
               setIsSearching(false)
               setIsDropdownOpen(false)
+              setActiveIndex(-1)
             }
           }}
           onFocus={() => {
@@ -257,8 +282,8 @@ export function MapSearchBar({
             }
           }}
           onKeyDown={handleInputKeyDown}
-          placeholder="Buscar ubicación..."
-          aria-label="Buscar localidad o coordenadas en el mapa"
+          placeholder="Buscar en Argentina..."
+          aria-label="Buscar localidad o coordenadas en Argentina"
           aria-expanded={showDropdown}
           aria-autocomplete="list"
         />
@@ -310,7 +335,7 @@ export function MapSearchBar({
             hasSearched &&
             results.length === 0 && (
               <div className="map-search-status">
-                No se encontraron ubicaciones.
+                No se encontraron ubicaciones en Argentina.
               </div>
             )}
 

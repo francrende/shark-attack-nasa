@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -74,6 +76,8 @@ ESPACIO_HIST = "nasa_hist"
 ESPACIO_RECIENTE = "nasa_reciente"
 TTL_RECIENTE_S = 6 * 3600.0
 RUTA_PRECALCULO = Path(__file__).parent / "data" / "climatologia_pampa.json"
+
+logger = logging.getLogger(__name__)
 
 MSG_NASA_CAIDA = (
     "NASA POWER no está respondiendo en este momento, así que no podemos leer la humedad "
@@ -313,6 +317,31 @@ def dict_a_referencia(datos: Any) -> ReferenciaHistorica | None:
 
 _precalculo: dict[str, Any] | None = None  # clave de celda -> entrada (carga perezosa)
 
+# BACK-26: lector del clima histórico por celda en Supabase (``provider_cache``, espacio
+# ``nasa_hist``). Lo enchufa ``main.py``; sin lector (tests, sin secret key) se salta ese paso.
+LectorHist = Callable[[str], Any]
+TIMEOUT_LECTOR_HIST_S = 2.0
+_lector_hist: LectorHist | None = None
+
+
+def configurar_lector_hist(lector: LectorHist | None) -> None:
+    """Enchufa (o quita, con ``None``) la lectura bajo demanda desde Supabase."""
+    global _lector_hist
+    _lector_hist = lector
+
+
+async def _leer_hist_supabase(clave: str) -> ReferenciaHistorica | None:
+    """La celda desde Supabase, o ``None`` si no hay lector, no está, es de otra versión,
+    tarda más de ``TIMEOUT_LECTOR_HIST_S`` o falla. Nunca lanza."""
+    if _lector_hist is None:
+        return None
+    try:
+        datos = await asyncio.wait_for(asyncio.to_thread(_lector_hist, clave), TIMEOUT_LECTOR_HIST_S)
+    except Exception as exc:  # noqa: BLE001 - se sigue con el JSON del repo
+        logger.warning("nasa_hist: Supabase no respondió para %s (%s); uso el JSON", clave, exc)
+        return None
+    return dict_a_referencia(datos) if datos is not None else None
+
 
 def cargar_climatologia_precalculada(ruta: Path = RUTA_PRECALCULO) -> dict[str, Any]:
     """Lee una sola vez el JSON precalculado de la región pampeana (vacío si no existe)."""
@@ -332,7 +361,11 @@ def reiniciar_estado(precalculo: dict[str, Any] | None = None) -> None:
 
 
 async def obtener_referencia_historica(lat: float, lon: float, client: httpx.AsyncClient) -> ReferenciaHistorica:
-    """Caché por celda -> JSON precalculado -> cálculo en vivo (1981–2025)."""
+    """Memoria -> Supabase (BACK-26, esa celda) -> JSON precalculado -> cálculo en vivo (1981–2025).
+
+    Lo que sale de Supabase, del JSON o del cálculo queda en la caché. Al escribir, la capa
+    de Supabase sube lo que no tenía (JSON o cálculo en vivo) y no reescribe lo que ya leyó.
+    """
     cache = obtener_cache()
     clave = clave_celda_power(lat, lon)
 
@@ -340,8 +373,10 @@ async def obtener_referencia_historica(lat: float, lon: float, client: httpx.Asy
     if ref is not None:
         return ref
 
-    entrada_pre = cargar_climatologia_precalculada().get(clave)
-    ref = dict_a_referencia(entrada_pre) if entrada_pre is not None else None
+    ref = await _leer_hist_supabase(clave)
+    if ref is None:
+        entrada_pre = cargar_climatologia_precalculada().get(clave)
+        ref = dict_a_referencia(entrada_pre) if entrada_pre is not None else None
     if ref is None:
         serie = await fetch_daily_range(lat, lon, ANALOGOS_START, HIST_END, HIST_PARAMETROS, client=client)
         ref = calcular_referencia(serie)
@@ -401,15 +436,34 @@ async def build_telemetria_nasa(
     except NasaPowerUnavailable as exc:
         raise NasaPowerUnavailable(f"{MSG_NASA_CAIDA} (detalle: {exc})") from exc
 
+    return armar_telemetria(reciente, referencia)
+
+
+def indicadores_telemetria(
+    reciente: NasaPowerDailySeries, referencia: ReferenciaHistorica | None
+) -> dict[str, Any]:
+    """BACK-24: los indicadores del bloque ``telemetria_nasa``, en un solo lugar (función pura).
+
+    Los usan ``/simulate`` (``armar_telemetria``) y ``/telemetry`` (Info general). Sin
+    ``referencia``, la anomalía de lluvia y el riesgo térmico quedan en ``None``.
+    """
     corte = fecha_de_corte(reciente)
     ventana = ventana_90d_rellena(reciente, corte)
+    return {
+        "fecha_ultimo_dato_valido": corte,
+        "indice_humedad_radicular_pct": round(reciente.series["GWETROOT"][corte] * 100.0, 1),
+        "indice_humedad_superficial_pct": round(reciente.series["GWETTOP"][corte] * 100.0, 1),
+        "tendencia_humedad_15d_pct": tendencia_humedad_15d_pct(ventana),
+        "anomalia_lluvia_90d_pct": (
+            None if referencia is None else anomalia_lluvia_90d_pct(ventana, referencia.clim_por_doy, corte)
+        ),
+        "frecuencia_tormentas_extremas_90d": tormentas_extremas_90d(ventana),
+        "riesgo_termico_verano": (
+            None if referencia is None else clasificar_riesgo_termico(referencia.dias_calor_verano_promedio)
+        ),
+    }
 
-    return TelemetriaNasa(
-        fecha_ultimo_dato_valido=corte,
-        indice_humedad_radicular_pct=round(reciente.series["GWETROOT"][corte] * 100.0, 1),
-        indice_humedad_superficial_pct=round(reciente.series["GWETTOP"][corte] * 100.0, 1),
-        tendencia_humedad_15d_pct=tendencia_humedad_15d_pct(ventana),
-        anomalia_lluvia_90d_pct=anomalia_lluvia_90d_pct(ventana, referencia.clim_por_doy, corte),
-        frecuencia_tormentas_extremas_90d=tormentas_extremas_90d(ventana),
-        riesgo_termico_verano=clasificar_riesgo_termico(referencia.dias_calor_verano_promedio),
-    )
+
+def armar_telemetria(reciente: NasaPowerDailySeries, referencia: ReferenciaHistorica) -> TelemetriaNasa:
+    """Bloque ``telemetria_nasa`` completo del contrato §5 (necesita la referencia histórica)."""
+    return TelemetriaNasa(**indicadores_telemetria(reciente, referencia))

@@ -37,6 +37,11 @@ PROPIEDADES = ["clay", "sand", "silt", "soc", "phh2o"]
 PROFUNDIDADES: dict[str, int] = {"0-5cm": 5, "5-15cm": 10, "15-30cm": 15}  # espesor en cm
 D_FACTOR_DEFAULT = 10.0
 TIMEOUT_S = 8.0
+# BACK-32: cola de reintentos (nadie espera la respuesta): timeout largo y sin tocar el corte.
+TIMEOUT_SEGUNDO_PLANO_S = 60.0
+ESPERA_CUPO_PASO_S = 2.0
+ESPERA_CUPO_MAX_S = 70.0
+_dormir = asyncio.sleep  # inyectable en tests
 OFFSET_VECINO_GRADOS = 0.0045  # ~500 m en latitud
 RADIO_FALLBACK_KM = 100.0
 # BACK-19: con puntos cada 100 km, el peor caso dentro de las provincias es ~111 km (puntas finas).
@@ -369,11 +374,18 @@ Estado = Literal["ok", "null", "error"]
 
 
 async def _consultar(
-    client: httpx.AsyncClient, lat: float, lon: float, timeout_s: float = TIMEOUT_S
+    client: httpx.AsyncClient,
+    lat: float,
+    lon: float,
+    timeout_s: float = TIMEOUT_S,
+    *,
+    registrar_corte: bool = True,
 ) -> tuple[Estado, dict[str, float | None] | None, str]:
     """Una llamada a SoilGrids. Devuelve (estado, valores, detalle).
 
-    ``timeout_s`` solo se cambia en la generación offline de la grilla (BACK-19).
+    ``timeout_s`` y ``registrar_corte=False`` son para el trabajo en segundo plano (grilla
+    offline de BACK-19 y cola de reintentos de BACK-32): no abren ni cierran el corte, que
+    queda en manos del tráfico en vivo.
     """
     params: list[tuple[str, str | float]] = [("lat", lat), ("lon", lon)]
     params += [("property", p) for p in PROPIEDADES]
@@ -382,12 +394,14 @@ async def _consultar(
     try:
         resp = await client.get(BASE_URL, params=params, timeout=timeout_s)
     except httpx.TimeoutException:
-        _corte.registrar_falla()
+        if registrar_corte:
+            _corte.registrar_falla()
         return "error", None, "timeout"
     except httpx.TransportError as exc:
         return "error", None, f"error de red: {exc}"
     if resp.status_code == 429:
-        _corte.registrar_falla()
+        if registrar_corte:
+            _corte.registrar_falla()
         return "error", None, "HTTP 429 (límite de ISRIC)"
     if resp.status_code != 200:
         return "error", None, f"HTTP {resp.status_code}"
@@ -395,13 +409,62 @@ async def _consultar(
         valores = _parsear(resp.json())
     except ValueError as exc:
         return "error", None, f"respuesta inválida: {exc}"
-    _corte.registrar_exito()
+    if registrar_corte:
+        _corte.registrar_exito()
     if valores["clay"] is None:
         return "null", None, "píxel sin dato"
     return "ok", valores, ""
 
 
-async def _cascada(client: httpx.AsyncClient, lat: float, lon: float, clave: str) -> PerfilSueloSatelital:
+async def _esperar_cupo() -> bool:
+    """BACK-32: en segundo plano, espera cupo del limitador compartido en lugar de rendirse."""
+    esperado = 0.0
+    while _limitador.reservar_hasta(1) == 0:
+        if esperado >= ESPERA_CUPO_MAX_S:
+            return False
+        await _dormir(ESPERA_CUPO_PASO_S)
+        esperado += ESPERA_CUPO_PASO_S
+    return True
+
+
+async def _cascada_segundo_plano(
+    client: httpx.AsyncClient, lat: float, lon: float, clave: str
+) -> PerfilSueloSatelital:
+    """BACK-32: ignora el corte (lo maneja el tráfico en vivo), espera cupo y tolera a ISRIC lento."""
+    cache = obtener_cache()
+    if not await _esperar_cupo():
+        return _fallback_regional(lat, lon, "sin cupo de ISRIC en segundo plano", transitorio=True)
+    estado, valores, detalle = await _consultar(client, lat, lon, TIMEOUT_SEGUNDO_PLANO_S, registrar_corte=False)
+    if estado == "ok":
+        perfil = _armar_perfil(valores, "isric_soilgrids_v2", 0.0)  # type: ignore[arg-type]
+        cache.set(ESPACIO_SUELO, clave, perfil_a_dict(perfil))
+        return perfil
+    if estado == "error":
+        return _fallback_regional(lat, lon, detalle, transitorio=True)
+
+    estados = []
+    for vlat, vlon in _vecinos(lat, lon):  # de a uno, esperando cupo
+        if not await _esperar_cupo():
+            break
+        v_estado, v_valores, _ = await _consultar(client, vlat, vlon, TIMEOUT_SEGUNDO_PLANO_S, registrar_corte=False)
+        estados.append(v_estado)
+        if v_estado == "ok":
+            perfil = _armar_perfil(
+                v_valores, "isric_soilgrids_v2_vecino", _haversine_km(lat, lon, vlat, vlon)  # type: ignore[arg-type]
+            )
+            cache.set(ESPACIO_SUELO, clave, perfil_a_dict(perfil))
+            return perfil
+    if len(estados) == 4 and all(e == "null" for e in estados):
+        cache.set(ESPACIO_SUELO, clave, _SIN_DATO)
+        return _fallback_regional(lat, lon, "píxel y vecinos sin dato", transitorio=False)
+    return _fallback_regional(lat, lon, "píxel sin dato y vecinos incompletos", transitorio=True)
+
+
+async def _cascada(
+    client: httpx.AsyncClient, lat: float, lon: float, clave: str, segundo_plano: bool = False
+) -> PerfilSueloSatelital:
+    if segundo_plano:
+        return await _cascada_segundo_plano(client, lat, lon, clave)
     cache = obtener_cache()
 
     if not _corte.permite_llamada():
@@ -441,7 +504,7 @@ async def _cascada(client: httpx.AsyncClient, lat: float, lon: float, clave: str
 
 
 async def fetch_perfil_suelo(
-    lat: float, lon: float, *, client: httpx.AsyncClient | None = None
+    lat: float, lon: float, *, client: httpx.AsyncClient | None = None, segundo_plano: bool = False
 ) -> PerfilSueloSatelital:
     """Perfil edáfico 0–30 cm del punto.
 
@@ -467,5 +530,5 @@ async def fetch_perfil_suelo(
 
     if client is None:
         async with httpx.AsyncClient() as propio:
-            return await _cascada(propio, lat, lon, clave)
-    return await _cascada(client, lat, lon, clave)
+            return await _cascada(propio, lat, lon, clave, segundo_plano)
+    return await _cascada(client, lat, lon, clave, segundo_plano)

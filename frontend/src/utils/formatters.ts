@@ -149,4 +149,12 @@ export function humanizeAgronomicWarnings(
   }
 
   return result
+/** kg/ha → quintales por hectárea (1 qq = 100 kg). */
+export function kgHaAQq(kg: number): number {
+  return kg / 100
+}
+
+/** 3400 → "34 qq/ha" (unidad de uso en Argentina, redondeada a entero). */
+export function formatQq(kg: number): string {
+  return `${Math.round(kgHaAQq(kg))} qq/ha`
 }

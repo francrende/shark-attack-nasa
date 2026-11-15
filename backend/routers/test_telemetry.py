@@ -16,6 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from main import app  # noqa: E402
 from providers.nasa_power import NasaPowerDailySeries, NasaPowerUnavailable  # noqa: E402
+from providers.nasa_telemetry import ReferenciaHistorica  # noqa: E402
 from providers.soilgrids import PerfilSueloSatelital, SoilGridsUnavailable  # noqa: E402
 from providers.srtm import SrtmUnavailable, TopografiaSrtm  # noqa: E402
 from routers.telemetry import get_field_store, get_hoy, get_telemetry_fetcher  # noqa: E402
@@ -89,6 +90,37 @@ def _serie_reciente_dummy() -> NasaPowerDailySeries:
     )
 
 
+# BACK-24: los indicadores se calculan con la función única (``indicadores_telemetria``) a
+# partir de la ventana reciente y la referencia histórica. Estos datos sintéticos dan los
+# mismos valores que antes devolvía el fake de la telemetría "ligera" (46 %, 35 %, "alto").
+REF_OK = ReferenciaHistorica(clim_por_doy={d: 200.0 for d in range(1, 367)}, dias_calor_verano_promedio=30.0)
+
+
+def _serie_reciente(gwetroot: float, gwettop: float) -> NasaPowerDailySeries:
+    serie = _serie_reciente_dummy()
+    dias = sorted(serie.series["GWETROOT"])
+    return NasaPowerDailySeries(
+        lat=serie.lat,
+        lon=serie.lon,
+        start=serie.start,
+        end=serie.end,
+        series={
+            "GWETROOT": {d: gwetroot for d in dias},
+            "GWETTOP": {d: gwettop for d in dias},
+            "PRECTOTCORR": dict(serie.series["PRECTOTCORR"]),
+        },
+        elevacion_m=serie.elevacion_m,
+    )
+
+
+async def _fake_reciente_ok(*_args, **_kwargs):
+    return _serie_reciente(0.46, 0.35)
+
+
+async def _fake_ref_ok(*_args, **_kwargs):
+    return REF_OK
+
+
 class TelemetryRouterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         app.dependency_overrides.clear()
@@ -113,9 +145,10 @@ class TelemetryRouterTests(unittest.IsolatedAsyncioTestCase):
             return TOPO_OK
 
         with (
-            patch("services.telemetry_service.obtener_telemetria_nasa_ligera", side_effect=_fake_telemetria),
-            patch("services.telemetry_service.fetch_perfil_suelo", side_effect=_fake_suelo),
-            patch("services.telemetry_service.fetch_topografia", side_effect=_fake_topo),
+            patch("services.datos_lote.obtener_ventana_reciente", side_effect=_fake_reciente_ok),
+            patch("services.datos_lote.obtener_referencia_historica", side_effect=_fake_ref_ok),
+            patch("services.datos_lote.fetch_perfil_suelo", side_effect=_fake_suelo),
+            patch("services.datos_lote.fetch_topografia", side_effect=_fake_topo),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -148,9 +181,10 @@ class TelemetryRouterTests(unittest.IsolatedAsyncioTestCase):
             return TOPO_OK
 
         with (
-            patch("services.telemetry_service.obtener_telemetria_nasa_ligera", side_effect=_fake_telemetria),
-            patch("services.telemetry_service.fetch_perfil_suelo", side_effect=_fake_suelo),
-            patch("services.telemetry_service.fetch_topografia", side_effect=_fake_topo),
+            patch("services.datos_lote.obtener_ventana_reciente", side_effect=_fake_reciente_ok),
+            patch("services.datos_lote.obtener_referencia_historica", side_effect=_fake_ref_ok),
+            patch("services.datos_lote.fetch_perfil_suelo", side_effect=_fake_suelo),
+            patch("services.datos_lote.fetch_topografia", side_effect=_fake_topo),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -184,10 +218,10 @@ class TelemetryRouterTests(unittest.IsolatedAsyncioTestCase):
             raise NasaPowerUnavailable("timeout histórico")
 
         with (
-            patch("services.telemetry_service.obtener_ventana_reciente", side_effect=_fake_reciente),
-            patch("services.telemetry_service._obtener_referencia_climatica_rapida", side_effect=_fake_clim),
-            patch("services.telemetry_service.fetch_perfil_suelo", side_effect=_fake_suelo),
-            patch("services.telemetry_service.fetch_topografia", side_effect=_fake_topo),
+            patch("services.datos_lote.obtener_ventana_reciente", side_effect=_fake_reciente),
+            patch("services.datos_lote.obtener_referencia_historica", side_effect=_fake_clim),
+            patch("services.datos_lote.fetch_perfil_suelo", side_effect=_fake_suelo),
+            patch("services.datos_lote.fetch_topografia", side_effect=_fake_topo),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -218,9 +252,10 @@ class TelemetryRouterTests(unittest.IsolatedAsyncioTestCase):
             raise SrtmUnavailable("srtm caído")
 
         with (
-            patch("services.telemetry_service.obtener_telemetria_nasa_ligera", side_effect=_nasa_fail),
-            patch("services.telemetry_service.fetch_perfil_suelo", side_effect=_suelo_fail),
-            patch("services.telemetry_service.fetch_topografia", side_effect=_topo_fail),
+            patch("services.datos_lote.obtener_ventana_reciente", side_effect=_nasa_fail),
+            patch("services.datos_lote.obtener_referencia_historica", side_effect=_nasa_fail),
+            patch("services.datos_lote.fetch_perfil_suelo", side_effect=_suelo_fail),
+            patch("services.datos_lote.fetch_topografia", side_effect=_topo_fail),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -296,9 +331,10 @@ class TelemetryRouterTests(unittest.IsolatedAsyncioTestCase):
 
         app.dependency_overrides[get_field_store] = lambda: _FakeStore()
         with (
-            patch("services.telemetry_service.obtener_telemetria_nasa_ligera", side_effect=_fake_telemetria),
-            patch("services.telemetry_service.fetch_perfil_suelo", side_effect=_no_debe_llamarse),
-            patch("services.telemetry_service.fetch_topografia", side_effect=_no_debe_llamarse),
+            patch("services.datos_lote.obtener_ventana_reciente", side_effect=_fake_reciente_ok),
+            patch("services.datos_lote.obtener_referencia_historica", side_effect=_fake_ref_ok),
+            patch("services.datos_lote.fetch_perfil_suelo", side_effect=_no_debe_llamarse),
+            patch("services.datos_lote.fetch_topografia", side_effect=_no_debe_llamarse),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -356,9 +392,10 @@ class TelemetryRouterTests(unittest.IsolatedAsyncioTestCase):
 
         app.dependency_overrides[get_field_store] = lambda: _FakeStore()
         with (
-            patch("services.telemetry_service.obtener_telemetria_nasa_ligera", side_effect=_fake_telemetria),
-            patch("services.telemetry_service.fetch_perfil_suelo", side_effect=_fake_suelo),
-            patch("services.telemetry_service.fetch_topografia", side_effect=_no_topo),
+            patch("services.datos_lote.obtener_ventana_reciente", side_effect=_fake_reciente_ok),
+            patch("services.datos_lote.obtener_referencia_historica", side_effect=_fake_ref_ok),
+            patch("services.datos_lote.fetch_perfil_suelo", side_effect=_fake_suelo),
+            patch("services.datos_lote.fetch_topografia", side_effect=_no_topo),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),

@@ -52,13 +52,22 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-14` | Persistencia y endpoint `PATCH /api/v1/auth/me/provinces` para filtro inicial de provincias pampeanas (`FRONT-33`) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/sql/schema.sql` | `BACK-2`, `BACK-3` | `[x]` |
 | `BACK-15` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado (`FRONT-30`) *(antes BACK-8)* | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
 | `BACK-16` | Deploy en Render (creación): Web Service Free desde `main`, versiones fijas, `/health` con `HEAD` | `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md` | `BACK-13` | `[x]` |
-| `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[~]` |
+| `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[x]` |
 | `BACK-18` | Capa de caché persistente en Supabase (`provider_cache`): precarga al arrancar, escritura en segundo plano | `backend/sql/schema.sql`, `backend/providers/cache_supabase.py`, `backend/providers/test_cache_supabase.py`, `backend/config.py`, `backend/.env.example`, `backend/main.py`, `backend/conftest.py` | `BACK-10`, tabla `provider_cache` (la crea la desarrolladora) | `[x]` |
-| `BACK-19` | Grilla de suelo ISRIC cada 100 km en Supabase como respaldo antes de GeoINTA | `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/test_soilgrids.py`, `backend/main.py` | `BACK-18` | `[~]` |
+| `BACK-19` | Grilla de suelo ISRIC cada 100 km en Supabase como respaldo antes de GeoINTA | `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/test_soilgrids.py`, `backend/main.py` | `BACK-18` | `[x]` |
 | `BACK-20` | Endpoint `GET /api/v1/telemetry` para telemetría inmediata de lote (`Info general`, `FRONT-34`) | `backend/schemas.py`, `backend/services/telemetry_service.py`, `backend/routers/telemetry.py`, `backend/main.py`, `backend/routers/test_telemetry.py` | `BACK-8`, `BACK-9`, `BACK-11` | `[x]` |
 | `BACK-21` | Columnas propias de suelo, `materia_organica_g_kg` y topografía en `public.fields` + esquemas | `backend/sql/schema.sql`, `backend/schemas.py`, `backend/services/field_enrichment_service.py`, `backend/TASKS_BACKEND.md` | `BACK-6` | `[x]` |
 | `BACK-22` | Poblado automático de suelo, materia orgánica y topografía en `POST`/`PATCH /api/v1/fields` | `backend/routers/fields.py`, `backend/services/field_enrichment_service.py`, `backend/routers/test_fields_enrichment.py`, `backend/TASKS_BACKEND.md` | `BACK-21`, `BACK-9`, `BACK-11` | `[x]` |
 | `BACK-23` | Integración de `GET /api/v1/telemetry` con datos propios de `public.fields` (`field_id`) y reintento automático | `backend/routers/telemetry.py`, `backend/services/telemetry_service.py`, `backend/services/field_enrichment_service.py`, `backend/schemas.py`, `backend/routers/test_telemetry.py`, `backend/TASKS_BACKEND.md` | `BACK-20`, `BACK-22` | `[x]` |
+| `BACK-24` | Servicio único de datos del lote para `/telemetry` y `/simulate` (política de la sección 4.5) y `field_id` en `/simulate` | `backend/services/datos_lote.py`, `backend/services/telemetry_service.py`, `backend/services/simulation_service.py`, `backend/providers/features.py`, `backend/routers/simulate.py`, `backend/routers/telemetry.py`, `backend/schemas.py`, tests | `BACK-26`, `BACK-22`, `BACK-23` | `[~]` |
+| `BACK-25` | Reintento en segundo plano de ISRIC/SRTM para campos con dato aproximado (cada 5 min, hasta 1 h) y estado visible para el frontend | `backend/services/reintentos_campos.py`, `backend/services/test_reintentos_campos.py`, `backend/routers/fields.py`, `backend/schemas.py`, `backend/main.py` | `BACK-22`, `BACK-18` | `[~]` |
+| `BACK-26` | Clima histórico por celda en Supabase, leído bajo demanda, con `climatologia_pampa.json` como respaldo | `backend/providers/nasa_telemetry.py`, `backend/providers/cache_supabase.py`, `backend/providers/generar_precache.py`, `backend/main.py`, tests | `BACK-18` | `[x]` |
+| `BACK-27` | Campos nuevos en `POST /api/v1/simulate`: probabilidad de año malo, rinde en kg/ha, departamento de referencia y fase ENSO (contrato §5) | `backend/schemas.py`, `backend/services/simulation_service.py`, `backend/routers/test_simulate.py`, `CONTEXT.md`, `backend/TASKS_BACKEND.md` | `ML-16`, `ML-17` | `[x]` |
+| `BACK-28` | `field_id` opcional en `/simulate` (suelo y topografía guardados en `public.fields`) y departamento MAGyP guardado en cada campo | `backend/sql/schema.sql`, `backend/schemas.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/services/field_enrichment_service.py`, `backend/routers/test_simulate.py`, `backend/routers/test_fields_enrichment.py`, `backend/TASKS_BACKEND.md` | `BACK-27`, `BACK-22`, `ML-17` | `[x]` |
+| `BACK-29` | Endpoint `GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento`: seguimiento semanal de una campaña sembrada | `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/services/seguimiento_service.py` (nuevo), `backend/routers/test_seguimiento.py` (nuevo), `CONTEXT.md`, `backend/TASKS_BACKEND.md` | `ML-18`, `BACK-28` | `[x]` |
+| `BACK-30` | Cerrar y borrar campañas: validación de fecha de cosecha (no anterior a la siembra ni futura) en `POST`/`PATCH` y tests del CRUD | `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/routers/test_campaigns.py` (nuevo), `backend/TASKS_BACKEND.md` | `BACK-29` | `[x]` |
+| `BACK-31` | Endpoint `GET /api/v1/historial`: lluvia y agua en raíces por campaña agrícola desde 2006/07 (NASA POWER mensual + diario), rinde de la zona (MAGyP) y cosechas guardadas del lote | `backend/providers/nasa_power.py`, `backend/providers/cache_supabase.py`, `backend/ml/rinde.py`, `backend/services/historial_service.py` (nuevo), `backend/routers/historial.py` (nuevo), `backend/schemas.py`, `backend/main.py`, `backend/routers/test_historial.py` (nuevo) | `BACK-28`, `ML-17` | `[x]` |
+| `BACK-32` | Modo segundo plano en SoilGrids/SRTM para la cola de reintentos: timeout largo, espera de cupo y sin tocar el corte automático | `backend/providers/soilgrids.py`, `backend/providers/srtm.py`, `backend/services/reintentos_campos.py`, tests | `BACK-25` | `[~]` |
 
 ---
 
@@ -751,7 +760,21 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **El build no encuentra Python 3.14.5:** usar la versión 3.14.x más reciente que ofrezca Render. El modelo depende de la versión de scikit-learn, no de la de Python.
   - **`Out of memory` o reinicios en Metrics:** subir a Starter (misma RAM, pero sin dormir) o a Standard (2 GB).
 
-### `[~]` BACK-17: Deploy en Render — conexión con el frontend y keep-alive
+### `[x]` BACK-17: Deploy en Render — conexión con el frontend y keep-alive
+> **Verificación (15/11/2026):**
+> - **Frontend en Vercel:** `https://shark-attack-nasa.vercel.app`. El bundle publicado apunta a `https://shark-attack-nasa.onrender.com`, así que `VITE_API_URL` se aplicó en el build.
+> - **CORS:** `CORS_ORIGINS` en Render incluye la URL de Vercel. El preflight `OPTIONS /api/v1/simulate` con ese `Origin` da 200 con `access-control-allow-origin: https://shark-attack-nasa.vercel.app`.
+> - **Keep-alive:** ping configurado por la desarrolladora.
+> - **De punta a punta desde Vercel** (Network → Fetch/XHR), todo contra Render y sin errores de CORS:
+>   - `auth/me`, `fields`, `campaigns` y `telemetry`: 200.
+>   - `POST /simulate`: 200 en 655 ms.
+>   - `POST /fields`: **201**.
+> - **Supabase:** *Site URL* = `https://shark-attack-nasa.vercel.app`.
+> - **Observación:**
+>   - `POST /fields` tardó 9,9 s porque BACK-22 espera el enriquecimiento de suelo y topografía, y ISRIC hoy agota su timeout de 8 s.
+>   - Es compatible con BACK-19: `suelo_fuente = 'grilla_isric'` es texto libre, y como queda `reintentar_soilgrids = true`, BACK-23 vuelve a intentar.
+>   - Mejora posible, a cargo de quien tiene BACK-22: responder el alta antes y enriquecer en segundo plano.
+>
 - **Objetivo:** Que el frontend publicado en Vercel use el backend de Render para el login, los campos y `/simulate`, sin errores de CORS, y que el servicio no se duerma.
 - **Bloqueante:** el frontend todavía no está en Vercel (15/11/2026). Hasta entonces se puede probar desde `localhost:5173` apuntando a Render (paso 1).
 - **Archivos Permitidos:** `backend/TASKS_BACKEND.md`. El resto son variables en los dashboards. **No se toca `frontend/*`:** el frontend ya lee `VITE_API_URL` en `authClient.ts`, `fieldsClient.ts` y `apiClient.ts`. Lo que necesite el track de frontend se le pasa como prompt.
@@ -868,7 +891,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     3. **Manual Deploy → Restart** en Render.
     4. El mismo punto responde sin consultar a ISRIC (el log no muestra la llamada) y `/health` da `cache_persistente: true`.
 
-### `[~]` BACK-19: Grilla de suelo ISRIC cada 100 km (respaldo en Supabase)
+### `[x]` BACK-19: Grilla de suelo ISRIC cada 100 km (respaldo en Supabase)
+> **Verificación en Render (15/11/2026, `main` en `45ec49d`):**
+> - **Health:** `/health` da `cache_filas_precargadas: 87` y `grilla_suelo_puntos: 83`.
+> - **`/simulate` en verano, ISRIC sin responder a tiempo** (antes los dos daban `503`):
+>   - (−29,0, −60,0): **200**, perfil `franco_arcilloso` con carbono 12,8 g/kg del punto de grilla a 46 km, con `ADV_GRILLA`.
+>   - (−28,05, −59,0), extremo norte de Santa Fe: **200**, con el punto de grilla a 106 km. Entra gracias al radio de 120 km.
+>
 > **Implementación (15/11/2026):**
 > - **`soilgrids.py`:**
 >   - Se agregan `registrar_grilla`, `_punto_grilla_mas_cercano` y `_perfil_de_grilla`, la `Fuente` `"grilla_isric"` y `ADV_GRILLA`.
@@ -890,7 +919,6 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 > - **Generación (15/11/2026):** `generar_precache grilla` guardó **83/84 puntos** en `provider_cache` (`suelo_grilla`), sin escrituras fallidas. 3 puntos salieron de un vecino a 500 m.
 >   - El que falta es (−30,677, −62,535), en la laguna Mar Chiquita (Córdoba). Ni el punto ni sus vecinos tienen dato y es determinístico: reintentar no sirve.
 >   - Sin ese punto la cobertura no cambia: el peor caso sigue en 111,4 km, por debajo del radio de 120 km.
-> - **Falta:** merge a `main`, deploy y el DoD en Render (`grilla_suelo_puntos: 83` en `/health`, y (−29,0, −60,0) sin `503`).
 - **Objetivo:** Que ningún punto de las provincias habilitadas termine en `503` cuando ISRIC no responde. Para eso se usa el perfil real de ISRIC del punto de una grilla precargada más cercano, que trae textura y carbono, no solo arcilla.
 - **Archivos Permitidos:**
   - `backend/providers/soilgrids.py`: la cascada.
@@ -1002,6 +1030,409 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   3. Ampliar `backend/routers/test_telemetry.py` cubriendo reutilización desde `fields`, reintento con actualización y compatibilidad sin `field_id`.
 - **Definition of Done (Comando de Verificación):**
   - `.\backend\.venv\Scripts\python.exe -m unittest backend.routers.test_telemetry -v` en verde.
+
+---
+
+### 4.5. Flujo de datos por campo (`BACK-24` a `BACK-26`)
+
+> **Política acordada con la desarrolladora (15/11/2026):**
+> - **Datos fijos** (suelo, materia orgánica, pendiente y elevación): se guardan en el campo al crearlo (BACK-22) y de ahí se leen al volver a elegirlo (BACK-23) y al simular (BACK-24).
+> - **Clima histórico:** también es fijo, pero se guarda **por celda de NASA POWER** (unos 55 × 60 km, con el mismo dato para todos los puntos de la celda), en Supabase (BACK-26), no copiado en cada campo.
+> - **Datos que cambian a diario** (humedad radicular y superficial, lluvia de 90 días, tendencia): siempre en vivo desde NASA POWER, con la caché de 6 h en memoria.
+> - **Campo nuevo:** primero las APIs, esperando hasta 8 s.
+>   - Si ISRIC falla, se usa el punto de la grilla (BACK-19), con aviso del punto y de su distancia en km.
+>   - La topografía **no** usa grilla: la pendiente y la elevación a decenas de km no representan el lote. Mantiene su respaldo (elevación de NASA y pendiente GeoINTA), también con aviso.
+> - **Lo que falló se reintenta en segundo plano** (BACK-25). El frontend consulta el campo cada 30 s mientras tenga datos pendientes, y actualiza la UI cuando llega el dato real.
+> - **Coordinación:** BACK-24 y BACK-25 modifican archivos de BACK-22 y BACK-23, que son de otra persona del equipo. Avisarle antes de mergear.
+
+### `[~]` BACK-24: Servicio único de datos del lote (`/telemetry` y `/simulate`) con `field_id` en `/simulate`
+> **Implementación (15/11/2026):**
+> - **`services/datos_lote.py` (nuevo):** `obtener_datos_lote` y `DatosLote`, con la política de la sección 4.5, en modo estricto y tolerante.
+>   - Suelo y topografía salen del campo si son reales. Si no, del provider, guardando lo obtenido en el campo. Si el provider falla, se usa el aproximado guardado.
+>   - Clima histórico con `obtener_referencia_historica`; NASA reciente siempre en vivo.
+> - **`nasa_telemetry.py`:** `indicadores_telemetria` (función pura, tolera la falta del histórico) y `armar_telemetria`. Las usan `build_telemetria_nasa`, `/simulate` y `/telemetry`.
+> - **`features.construir_insumos_ml`:** delega en el servicio único y gana `campo` y `persistir_campo`; el armado de features no cambió.
+> - **`telemetry_service.py`:** se reescribió sobre el servicio, con el mismo contrato. Se borraron `obtener_telemetria_nasa_ligera` y `_obtener_referencia_climatica_rapida` (la búsqueda ligera 2006–2025, sin calendarios).
+> - **`/simulate` con `field_id`:**
+>   - `schemas.SimulateRequest.field_id`. El router lee el campo con el token (RLS) en un thread, reutilizando el `FieldStore` de `routers/telemetry.py`.
+>   - Sin token `401`, campo inexistente `404`, coordenadas a más de 0,001° del campo `422` (antes de consultar providers). Se usan las coordenadas del campo.
+> - **Extra:** `HEAD /health` sale del OpenAPI (`include_in_schema=False`). Antes generaba un `operation_id` duplicado (aviso de FastAPI desde BACK-16).
+> - **Tests:** suite completa **316 en verde**.
+>   - **Regresión del ensemble:** `routers/data/simulate_golden_back24.json` se generó con el código **anterior** a la refactorización. Después, `/simulate` da la respuesta idéntica, y también con `field_id` y los mismos datos en el campo (sin llamar a ISRIC ni a SRTM).
+>   - 9 tests de política en `services/test_datos_lote.py` y 6 de `field_id` en `test_simulate.py`.
+>   - En `test_telemetry.py` se cambiaron solo los parches, que ahora apuntan al servicio único; las aserciones son las mismas.
+> - **En vivo, local** (−33,40, −62,80):
+>   - `/telemetry` y `/simulate` coinciden en fecha, humedad radicular y superficial, tendencia, **anomalía (−46,41)** y tormentas.
+>   - `riesgo_termico_verano` difiere (medio contra bajo) **por diseño de ML-12**: en verano, `/simulate` usa los años análogos de la fase ENSO y `/telemetry` el promedio histórico. Ya pasaba antes de BACK-24. Si se quiere que Info general muestre lo mismo, es una decisión aparte con el track de ML.
+> - **Render (15/11/2026, `main` en `add9f18`):**
+>   - El OpenAPI publica `SimulateRequest.field_id`.
+>   - `field_id` sin token da **401**, y con token inválido también **401**.
+>   - `/simulate` sin `field_id` da 200 (1,4 s) y `/telemetry` 200 (0,37 s).
+>   - `HEAD /health` da 200 y `/health` muestra la grilla (83 puntos).
+>   - En los dos endpoints, los seis indicadores coinciden; el riesgo térmico difiere en verano por ML-12.
+> - **Falta:** el DoD con un campo real y su `field_id` (requiere que el frontend lo mande; el prompt va junto con BACK-25) y avisar a quien tiene BACK-20 a BACK-23.
+- **Objetivo:** Que `GET /api/v1/telemetry` y `POST /api/v1/simulate` obtengan los datos del lote con **un solo servicio** que aplique la política de la sección 4.5:
+  - Datos fijos desde el campo, si son reales; si no, desde los providers, guardando en el campo lo que se consiga.
+  - Clima histórico de la celda, con una sola búsqueda.
+  - Datos diarios de NASA siempre en vivo.
+  - Indicadores calculados una sola vez.
+
+  `/simulate` acepta `field_id` y aplica la misma política que `/telemetry`.
+- **Situación previa (15/11/2026):**
+  - **`/simulate`** usa `construir_insumos_ml` → `build_telemetria_nasa`. Pide suelo y topografía a los providers, sin mirar el campo.
+  - **`/telemetry`** (BACK-20/23) usa `obtener_telemetria_nasa_ligera`, que tiene su propia búsqueda del histórico (2006–2025, sin guardar y sin calendarios) y recalcula los indicadores aparte.
+  - **Consecuencia:** la regla "usar lo del campo" y el cálculo de los indicadores están duplicados.
+- **Archivos Permitidos:**
+  - `backend/services/datos_lote.py` y `backend/services/test_datos_lote.py` (nuevos).
+  - `backend/services/telemetry_service.py`, `backend/services/simulation_service.py` y `backend/providers/features.py`.
+  - `backend/routers/simulate.py`, `backend/routers/telemetry.py` y `backend/schemas.py`.
+  - `backend/routers/test_simulate.py` y `backend/routers/test_telemetry.py`.
+  - ⚠️ `telemetry_service.py`, `routers/telemetry.py` y `field_enrichment_service.py` son de BACK-20 a BACK-23, de otra persona del equipo: **avisarle antes de mergear**.
+- **Decisiones Acordadas con la Desarrolladora (15/11/2026):**
+  - **Política única** para los dos endpoints (sección 4.5).
+  - **Garantías para el ensemble de años análogos** (tormentas, calor, heladas y lluvia del período crítico):
+    - El servicio único usa la búsqueda **completa** del histórico (`obtener_referencia_historica`, 1981–2025, con `calendario_eventos` y `calendario_lluvia`). La búsqueda ligera de `/telemetry` (2006–2025, sin calendarios) **se elimina**.
+    - **Modo tolerante solo en `/telemetry`:** si falta el histórico, devuelve las métricas recientes con un aviso. `/simulate` sigue dando `503` sin histórico: nunca predice sin años análogos.
+    - **Test de regresión:** para el mismo punto, la misma fecha y las mismas respuestas mockeadas de los providers, `/simulate` da **exactamente** el mismo ranking, `score_final`, P10, P90, `anios_desfavorables` y `anios_evaluados` por cultivo, antes y después de la refactorización. También da lo mismo con y sin `field_id` cuando el campo tiene esos mismos datos.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **`services/datos_lote.py`:**
+    - `async obtener_datos_lote(lat, lon, *, campo=None, persistir_campo=None, client=None, today=None, exigir_historico: bool) -> DatosLote`.
+    - `DatosLote` lleva la ventana reciente, la fecha de corte, la referencia histórica (o `None` si es tolerante y falló), `TelemetriaNasa`, el perfil de suelo, la topografía, el ONI, las advertencias y los `cambios_campo` persistidos.
+    - Suelo y topografía se resuelven por separado, con la regla de BACK-23:
+      - Columnas reales del campo (`reintentar_* = false`): se usan sin llamar a los providers.
+      - Si no: se llama al provider. Si da dato real, se persiste en el campo. Si falla, se usa el aproximado guardado en el campo, o el respaldo de la cascada si no hay ninguno.
+  - **`/telemetry`:** arma su respuesta (Info general) desde `DatosLote`, sin cambiar el contrato. El cálculo de los indicadores pasa a ser el de BACK-8 (`build_telemetria_nasa` y sus funciones puras), así que **Info general y la simulación muestran los mismos números** para el mismo lote.
+  - **`/simulate`:**
+    - `construir_insumos_ml` arma las features y los años análogos **desde `DatosLote`**, con las mismas funciones puras de `features.py` que el entrenamiento.
+    - `SimulateRequest` gana `field_id: UUID | None = None`.
+    - Con `field_id`: Bearer obligatorio (`401` sin él), `404` si el campo no existe o es de otro usuario, y `422` si `coordenadas` difiere del campo en más de unos 100 m.
+    - Sin `field_id`: igual que hoy, compatibilidad total con §5.
+  - **Reintento en segundo plano:** cuando el servicio único deja un dato pendiente en un campo, avisa a la cola de BACK-25 (si existe). No reintenta él mismo.
+- **Especificación Técnica:**
+  1. `datos_lote.py` con `obtener_datos_lote` y `DatosLote`. Providers, lector y escritor del campo inyectables.
+  2. `features.py`: `construir_insumos_ml` delega en `obtener_datos_lote`, con la firma pública compatible.
+  3. `telemetry_service.py`: `obtener_telemetria_campo` delega en `obtener_datos_lote(..., exigir_historico=False)`. Se borran `obtener_telemetria_nasa_ligera` y `_obtener_referencia_climatica_rapida`.
+  4. `schemas.py`, `routers/simulate.py` y `simulation_service.py`: `field_id`, la autenticación opcional y la lectura y persistencia del campo, reutilizando el `FieldStore` de `routers/telemetry.py`.
+  5. Tests:
+     - El test de regresión del ensemble (arriba).
+     - Con el campo con datos reales: 0 llamadas a ISRIC y SRTM.
+     - Con el campo con dato de grilla: si ISRIC responde, se usa y se persiste; si falla, se usa el guardado con su advertencia.
+     - `/telemetry` sin histórico: 200 con aviso. `/simulate` sin histórico: 503.
+     - `401`, `404` y `422` por coordenadas.
+     - Los tests existentes de `test_telemetry.py` y `test_simulate.py` siguen en verde.
+- **Definition of Done:**
+  - `cd backend && python -m pytest -q` en verde, incluido el test de regresión del ensemble.
+  - En Render:
+    - `GET /telemetry?field_id=…` y `POST /simulate` con ese `field_id` muestran el mismo `anomalia_lluvia_90d_pct` y el mismo `riesgo_termico_verano`.
+    - Con un campo con dato real, no se consulta a ISRIC.
+
+### `[~]` BACK-25: Reintento en segundo plano de ISRIC/SRTM por campo
+> **Implementación (15/11/2026):**
+> - **`services/reintentos_campos.py` (nuevo):** `ColaReintentos` (encolar, `en_curso`, ciclo, worker con `asyncio.Task`), `cargar_pendientes`, `iniciar_reintentos` y `detener_reintentos`. La primera ronda llega a los 5 minutos, porque el alta ya intentó.
+> - **`routers/fields.py`:**
+>   - Encola después del `insert` y del `update` con cambio de ubicación.
+>   - Todas las respuestas llevan `reintento_en_curso`.
+>   - El módulo de la cola se importa siempre como `services.reintentos_campos`, igual que en `main.py`, para que haya una sola cola global (con `backend.services…` serían dos).
+> - **`services/datos_lote.py`:** al resolver un campo, lo encola si sigue con algún dato aproximado y lo saca si ya tiene todo real. Volver a encolarlo no reinicia el contador de 12.
+> - **`main.py`:** inicia y detiene la cola en el `lifespan`. Usa la misma bandera que la caché persistente (`CACHE_PERSISTENTE` y la secret key), así que en los tests nunca toca la base real.
+> - **Cambio respecto de la especificación:** `public.fields` no tiene `updated_at`, así que al arrancar se retoman los campos **creados** en las últimas 24 h. Un campo movido hace más de 24 h queda para el reintento de BACK-23.
+> - **Tests:** 12 nuevos (11 de la cola y del router, más 1 del servicio único). La suite completa da **328 en verde**.
+> - **En vivo, local con Supabase:** la cola arrancó y retomó **16 campos pendientes** de las últimas 24 h (6 con suelo y topografía pendientes, 10 solo con suelo), y se detuvo al apagar. No se corrió una ronda local, para no escribir en los campos reales desde la máquina de desarrollo.
+> - **Falta:** el deploy y el DoD en Render (campo nuevo con dato aproximado → `reintento_en_curso = true` → dato real dentro de la hora).
+- **Objetivo:** Que un campo creado con dato aproximado (grilla, GeoINTA o `no_disponible`) pase solo al dato real cuando ISRIC o SRTM vuelvan a responder, sin que el usuario tenga que volver a elegirlo, y que el frontend sepa que hay datos pendientes y cuándo llegaron.
+- **Archivos Permitidos:**
+  - `backend/services/reintentos_campos.py` y `backend/services/test_reintentos_campos.py` (nuevos).
+  - `backend/routers/fields.py`
+  - `backend/schemas.py`
+  - `backend/main.py`
+- **Decisiones Acordadas con la Desarrolladora (15/11/2026):**
+  - **Frecuencia:** cada **5 minutos**, alineado con el corte automático, hasta **12 intentos (1 h)**. Si después sigue fallando, queda el reintento perezoso de BACK-23 al volver a elegir el campo.
+  - **Al arrancar el servidor** se retoman los campos pendientes.
+  - **Aviso al frontend por consulta periódica:** `GET /fields/{id}` cada 30 s mientras haya un reintento en curso. Sin Realtime.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Cola en memoria con un solo worker** (`asyncio.Task` creada en el `lifespan`):
+    - Procesa los campos de a uno y respeta el limitador y el corte de ISRIC/SRTM.
+    - Si el corte está activo, ese intento se cuenta y se pasa al siguiente ciclo.
+  - **Encolado:** `create_field` y `update_field` encolan el campo si quedó con `reintentar_soilgrids` o `reintentar_srtm` en `true`.
+  - **Al arrancar:** se encolan los campos pendientes, de cualquier usuario, creados o modificados en las últimas 24 h. Más viejos quedan para BACK-23.
+  - **Escritura:** se actualiza la fila de `fields` con el cliente de **secret key** (saltea RLS), filtrando por `id`.
+    - Solo se escriben datos reales (`reintentar_* = false`), con los mismos mappers de BACK-22.
+    - Suelo y topografía se actualizan por separado: si llega solo uno, se guarda ese y el otro sigue pendiente.
+  - **Estado visible:** `FieldResponse` gana `reintento_en_curso: bool`, calculado desde la cola; `false` si el campo no está encolado.
+    - El frontend consulta mientras esté en `true` y lo compara con `suelo_fuente` y `topo_fuente` para avisar.
+  - **Render reinicia o redeploya:** la cola se pierde, pero se reconstruye al arrancar (punto anterior). Los intentos ya hechos no se recuerdan, así que se reinicia el contador de 12.
+- **Especificación Técnica:**
+  1. `reintentos_campos.py`:
+     - `ColaReintentos` con `encolar(field_id, lat, lon)`, `en_curso(field_id)`, `iniciar()` y `detener()`.
+     - Ciclo cada 300 s; por cada campo, `fetch_perfil_suelo` y/o `fetch_topografia` y persistencia si hay dato real.
+     - Reloj, intervalo, providers y cliente de Supabase inyectables para los tests.
+  2. `fields.py`: encolar después de `insert`/`update`; completar `reintento_en_curso` en las respuestas.
+  3. `main.py`: crear la cola en el `lifespan`, cargar los pendientes de las últimas 24 h y detenerla al apagar.
+  4. Tests, sin red y con reloj falso:
+     - Encola solo si hay pendientes.
+     - Persiste solo dato real.
+     - Suelo y topografía por separado.
+     - Corta a los 12 intentos.
+     - El corte activo cuenta el intento sin llamar.
+     - `reintento_en_curso` refleja la cola.
+     - El arranque toma solo las últimas 24 h.
+- **Definition of Done:**
+  - `cd backend && python -m pytest -q` en verde.
+  - En Render:
+    1. Crear un campo con ISRIC lento: queda con `suelo_fuente = 'grilla_isric'` y `reintento_en_curso = true`.
+    2. Cuando ISRIC responde (dentro de la hora), pasa solo a `isric_soilgrids_v2` y `reintento_en_curso = false`.
+
+### `[x]` BACK-26: Clima histórico por celda en Supabase
+> **Implementación (15/11/2026):**
+> - **`nasa_telemetry.py`:** `configurar_lector_hist` y `_leer_hist_supabase` (timeout de 2 s, nunca lanza). El orden queda memoria → Supabase → JSON → NASA en vivo.
+> - **`cache_supabase.py`:**
+>   - `ESPACIOS_PRECARGA` excluye `nasa_hist`.
+>   - Métodos nuevos: `leer` (bajo demanda, queda en memoria), `claves` y `escribir_directo` (lotes de 10).
+>   - `set` no vuelve a subir un valor idéntico al que ya leyó.
+> - **`main.py`:** se quitó el filtro de BACK-18 y se enchufa el lector, que se quita al apagar.
+> - **`generar_precache.py`:** subcomando `subir-clima [--forzar]`, reanudable.
+> - **Tests:** 10 nuevos, incluido el de **paridad del ensemble**. En 3 celdas reales del JSON (Pergamino, norte de Santa Fe y Balcarce), la ida y vuelta por `jsonb` da la misma `ReferenciaHistorica` y los mismos `escenarios_por_cultivo` para 5 cultivos, en dos fechas y dos fases ENSO. La suite completa da **300 en verde**.
+> - **Carga:** `subir-clima` subió las 299 celdas (`telemetria-v4`). En la tabla hay 300 filas `nasa_hist`: la de más es (−37,5, −65,625), del oeste de La Pampa, que Render calculó en vivo y guardó.
+> - **En vivo, local con Supabase:**
+>   - La celda (−34,5, −61,875) se leyó de Supabase en 546 ms la primera vez y en 0,3 ms desde memoria la segunda.
+>   - Trae los calendarios 1981–2025 idénticos al JSON, y **el JSON no se cargó en memoria**.
+>   - La precarga quedó en 99 filas, sin `nasa_hist`.
+> - **Render (15/11/2026, `main` en `4e79f1e`):**
+>   - `/health` da `cache_filas_precargadas: 99` (sin `nasa_hist`, que antes de BACK-26 se habría precargado) y `grilla_suelo_puntos: 83`.
+>   - `/simulate` en (−35,20, −61,30): 200 con 12 años análogos. Tardó 9,0 s en frío (incluye el timeout de ISRIC) y 0,44 s la segunda vez.
+>   - Desde afuera no se ve si la celda salió de Supabase o del JSON (los dos dan lo mismo, por el test de paridad). El camino de Supabase quedó verificado en local contra la misma base.
+- **Objetivo:** Que el clima histórico de cada celda de NASA POWER (climatología de lluvia, días de calor y calendarios de eventos y de lluvia 1981–2025) viva en Supabase, se lea **solo cuando se consulta esa celda** y mantenga `climatologia_pampa.json` como respaldo si Supabase no responde.
+- **Archivos Permitidos:**
+  - `backend/providers/nasa_telemetry.py`
+  - `backend/providers/cache_supabase.py`
+  - `backend/providers/generar_precache.py`
+  - `backend/main.py`
+  - `backend/providers/test_nasa_telemetry.py` y `backend/providers/test_cache_supabase.py`
+- **Decisiones Acordadas con la Desarrolladora (15/11/2026):**
+  - **Ubicación:** Supabase (`provider_cache`, espacio `nasa_hist`), con el JSON del repo como respaldo.
+  - **Lectura bajo demanda por celda:** no se baja todo al arrancar.
+- **Garantía para el ensemble de años análogos:** la celda leída de Supabase tiene que dar exactamente los mismos `calendario_eventos`, `calendario_lluvia`, climatología y días de calor que la leída del JSON, y los mismos años análogos por cultivo (`escenarios_por_cultivo`). Se cubre con un test de paridad sobre celdas reales del JSON, pasadas por la serialización `jsonb`.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Orden de lectura** en `obtener_referencia_historica`: memoria → Supabase (esa celda) → `climatologia_pampa.json` → NASA en vivo.
+    - Lo leído de Supabase o del JSON queda en memoria.
+    - Lo calculado en vivo se escribe en Supabase (ya ocurre con BACK-18).
+  - **`nasa_hist` sale de la precarga de BACK-18:** 299 × ~53 KB = 15,8 MB al arrancar. Se lee con `CacheSupabase.leer(espacio, clave)` en un thread, con **timeout de 2 s**; si falla o tarda, se pasa al JSON.
+  - **Carga inicial:** `python -m providers.generar_precache subir-clima` sube las 299 celdas del JSON a `provider_cache`. Es reanudable y lo corre la desarrolladora con su `.env`.
+  - **Filtro de escritura:** se quita el de BACK-18 (`_no_esta_en_el_precalculo`), porque ahora las celdas pampeanas sí van a la base.
+  - **Versionado:** se mantiene `version_calculo`. Una fila vieja en Supabase se trata como no encontrada, se pasa al JSON y, si el JSON está vigente, se pisa la fila.
+- **Especificación Técnica:**
+  1. `cache_supabase.py`:
+     - `ESPACIOS_PRECARGA` (sin `nasa_hist`) y `ESPACIOS_PERSISTIDOS` (con `nasa_hist`).
+     - `leer(espacio, clave, timeout_s=2.0) -> Any | None`, que nunca lanza excepción.
+  2. `nasa_telemetry.py`: el orden de lectura nuevo, con el lector de Supabase inyectable (`configurar_lector_hist`) para no acoplar el provider a Supabase.
+  3. `main.py`: enchufar el lector y quitar el filtro.
+  4. `generar_precache.py`: subcomando `subir-clima`.
+  5. Tests:
+     - Lectura desde Supabase sin tocar el JSON.
+     - Supabase con timeout o error → JSON.
+     - Versión vieja → JSON y reescritura.
+     - Precarga sin `nasa_hist`.
+- **Definition of Done:**
+  - `cd backend && python -m pytest -q` en verde.
+  - `python -m providers.generar_precache subir-clima`: 299 filas `nasa_hist` en `provider_cache`.
+  - En Render:
+    - `/health` sigue arrancando rápido, sin bajar `nasa_hist`.
+    - Un `/simulate` en una celda pampeana lee esa celda de Supabase.
+    - Con `SUPABASE_SECRET_KEY` inválida, sigue funcionando desde el JSON.
+
+### 4.6. Riesgo de año malo, rinde en kg/ha, seguimiento, campañas e historial (`BACK-27` a `BACK-31`)
+
+### `[x]` BACK-27: Campos nuevos en `POST /api/v1/simulate`
+- **Objetivo:** Exponer en el contrato lo que agregan ML-16 y ML-17 (probabilidad de año malo y rinde en kg/ha), junto con el departamento de referencia y la fase ENSO, para que el front pueda explicar contra qué se compara.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/services/simulation_service.py`, `backend/routers/test_simulate.py`, `CONTEXT.md`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **Todos los campos nuevos son opcionales** (`None` por defecto). Los clientes actuales no se rompen y las respuestas viejas guardadas en `campaigns.simulacion_json` siguen siendo válidas.
+  2. **El What-If recalcula la probabilidad y los kg/ha**, porque cambian los puntajes. `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` siguen mostrando el dato real (regla de BACK-13).
+  3. **Unidades en la API:** kg/ha y probabilidades entre 0 y 1. La conversión a qq/ha y a "3 de cada 10" la hace el front (FRONT-36).
+- **Especificación Técnica:**
+  1. `schemas.py`:
+     - `RindeKgHaOut {esperado, anio_malo, anio_bueno, normal: float | None, motivo_sin_dato: str | None}`.
+     - `DepartamentoReferenciaOut {codigo, nombre, provincia, distancia_km}`.
+     - `FaseEnsoOut {fase: Literal["nina", "neutro", "nino"], oni: float, anios_analogos_desde: int}` (1981 desde ML-13).
+     - `DistribucionHidroclimatica` y `RankingCultivoItem`: agregar los campos de ML-16 (`predictor.CAMPOS_DISTRIBUCION_PREDICTIVA`), todos opcionales:
+       - `prob_anio_malo: float | None` (0–1). Es `None` cuando el cultivo no le gana a la frecuencia habitual fuera de muestra (hoy trigo, cebada, girasol y sorgo) y en coberturas.
+       - `prob_anio_malo_tipica: float | None` (0–1): frecuencia habitual de años malos del cultivo.
+       - `anticipa_diferencias: bool | None`: si el sistema anticipa diferencias entre años para ese cultivo.
+       - `puntaje_anio_malo` y `puntaje_anio_bueno: float | None`: el rango real (cuantiles 10 y 90 con el error del modelo). **No** confundir con `p10`/`p90` del ensemble, que solo miden la variación del clima entre años análogos.
+     - `RankingCultivoItem` y `RecomendacionPrincipal`: agregar `rinde_kg_ha: RindeKgHaOut | None` (ML-17).
+     - `SimulateResponse`: agregar `departamento_referencia: DepartamentoReferenciaOut | None` y `fase_enso: FaseEnsoOut | None`.
+  2. `simulation_service.py`: pasar los campos que devuelve el predictor. `fase_enso` se calcula con `providers/enso.fase_enso(oni_actual)`, el mismo ONI que ya se usa para los años análogos.
+  3. `test_simulate.py`:
+     - Los campos nuevos aparecen para un cultivo MAGyP y son `None` para las coberturas.
+     - Con el What-If seco, `prob_anio_malo` no baja en un cultivo con `anticipa_diferencias = true`.
+     - En trigo, `prob_anio_malo` es `None` y `prob_anio_malo_tipica` no.
+     - Una respuesta sin los campos nuevos sigue validando contra `SimulateResponse`.
+  4. `CONTEXT.md` §5: agregar los campos nuevos al ejemplo de respuesta y a las notas de implementación.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q routers/test_simulate.py`
+- **Resultado de la Verificación (2026-11-15):**
+  - `schemas.py`: `RindeKgHaOut`, `CamposDistribucionPredictiva` (base de `DistribucionHidroclimatica` e `ItemRanking`), `DepartamentoReferenciaOut`, `FaseEnsoOut`; `RecomendacionPrincipal.rinde_kg_ha`; `SimulateResponse.departamento_referencia` y `fase_enso`. Todo opcional. Los campos de la distribución predictiva son los de ML-16 (`prob_anio_malo` es `None` en los cultivos que no anticipan).
+  - `simulation_service.py`: `fase_enso` desde el ONI de los insumos (`anios_analogos_desde` = `ANALOGOS_START`).
+  - `routers/test_simulate.py`: 6 tests nuevos (campos en ranking y recomendación, What-If seco, trigo sin probabilidad, fuera de cobertura, fase ENSO, respuesta vieja sin campos nuevos). `pytest -q`: 317 en verde.
+  - `CONTEXT.md` §5: ejemplo de respuesta con los campos nuevos.
+
+---
+
+### `[x]` BACK-28: `field_id` en `/simulate` y departamento MAGyP guardado en cada campo
+- **Nota del merge con main (2026-11-15):** esta tarea se desarrolló en paralelo con el `BACK-24` de la rama `dolfi` (servicio único de datos del lote). Se decidió con el desarrollador **quedarse con el `BACK-24` de main** para el `field_id` (estricto: 401 sin sesión, 404 si el campo no es del usuario, 422 si las coordenadas no coinciden) y conservar de esta tarea solo el **departamento MAGyP guardado** (columnas `departamento_*`, cálculo al crear o mover el campo, y cálculo y guardado en la primera simulación de campos viejos, ahora dentro de `_cargar_campo`). Se quitaron `_leer_campo`, las advertencias de campo no encontrado y `perfil_guardado`/`topografia_guardada` de `construir_insumos_ml`. El departamento guardado ahora informa la distancia real del lote al centroide.
+- **Objetivo:** Implementar la sugerencia de `TASKS_ML.md` (leer de `public.fields` solo las variables de largo plazo) y guardar el departamento MAGyP del campo una sola vez. Así `Info general` y la simulación usan el mismo suelo y la misma topografía, `/simulate` no vuelve a consultar ISRIC ni SRTM, y el seguimiento (BACK-29) tiene el departamento a mano.
+- **Archivos Permitidos:** `backend/sql/schema.sql`, `backend/schemas.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/services/field_enrichment_service.py`, `backend/routers/test_simulate.py`, `backend/routers/test_fields_enrichment.py`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **`field_id` es opcional y necesita Bearer token.** Sin token, o con un campo que no es del usuario, se ignora y `/simulate` funciona como hoy (coordenadas), con una `advertencia`. No falla, para no romper el modo demo.
+  2. **De `public.fields` solo se leen las variables de largo plazo:** suelo (`arcilla_pct`, `arena_pct`, `carbono_organico_g_kg`, `ph`, `textura_predominante`) y topografía (`elevacion_m`, `pendiente_terreno_pct`), y solo si `reintentar_soilgrids = false` o `reintentar_srtm = false` según corresponda. La telemetría, el ONI y los años análogos se siguen calculando en vivo.
+  3. **Departamento:** se calcula con `ml.departamentos.departamento_mas_cercano` (ML-17) en `POST` y `PATCH` (cuando cambian `lat`, `lon` o `polygon`) y se guarda en el campo. Los campos existentes sin departamento lo calculan la primera vez que se usan.
+- **Especificación Técnica:**
+  1. `schema.sql`: `alter table public.fields add column if not exists departamento_codigo text, departamento_nombre text, departamento_provincia text, departamento_distancia_km double precision`. Lo ejecuta la desarrolladora en Supabase.
+  2. `schemas.py`: `SimulateRequest.field_id: UUID | None = None` (sigue con `extra="forbid"`) y los campos `departamento_*` en `FieldResponse`.
+  3. `field_enrichment_service.py`: poblar `departamento_*` junto con el suelo y la topografía.
+  4. `routers/simulate.py` + `simulation_service.py`:
+     - Dependencia opcional de usuario (el mismo patrón que `routers/telemetry.py`, BACK-23).
+     - Leer el campo y armar los insumos con el suelo y la topografía guardados.
+     - Pasar `departamento_codigo` al predictor.
+  5. Tests:
+     - Con `field_id` y flags en `false` no se llama a ISRIC ni a SRTM.
+     - Sin token se usa el flujo actual.
+     - Un `field_id` ajeno se ignora con advertencia.
+     - El `POST` de un campo guarda el departamento.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q routers/test_simulate.py routers/test_fields_enrichment.py`
+- **Resultado de la Verificación (2026-11-15):**
+  - `schema.sql`: columnas `departamento_codigo`, `departamento_nombre`, `departamento_provincia`, `departamento_distancia_km` en `public.fields`. **Pendiente: ejecutar los `alter table` en el SQL Editor de Supabase** (sin eso, el `POST` de un campo falla al insertar las columnas nuevas).
+  - `field_enrichment_service.py`: `departamento_a_columnas_field` (lo agrega `enriquecer_datos_campo`), `columnas_field_a_perfil_suelo` y `columnas_field_a_topografia` (solo si el dato guardado es definitivo, con las mismas reglas de BACK-23).
+  - `providers/features.construir_insumos_ml(..., perfil_guardado, topografia_guardada)`: no consulta SoilGrids ni SRTM si se los pasa.
+  - `routers/simulate.py`: Bearer opcional y `get_field_store` (el mismo de `/telemetry`, una sola dependencia para sobreescribir). `_leer_campo` nunca falla: sin token, con un campo ajeno o con Supabase caído sigue por coordenadas con una advertencia. Campos viejos sin departamento: se calcula y se guarda en la primera simulación.
+  - `simulation_service.simular(..., campo, advertencias_extra)` y `armar_respuesta(..., departamento_codigo)`.
+  - Tests: 6 en `test_simulate.py` y 1 en `test_fields_enrichment.py` (más asserts de departamento). `pytest -q`: 324 en verde.
+  - **Límite confirmado del centroide:** desde la ciudad de Marcos Juárez (-32,70, -62,10) el centroide más cercano es Belgrano (Santa Fe, 38 km), porque el del departamento Marcos Juárez queda en -33,03. Con el departamento guardado en el campo el error es el mismo, solo que se calcula una vez. Resolverlo bien requiere los polígonos del IGN.
+
+---
+
+### `[x]` BACK-29: Endpoint de seguimiento de una campaña sembrada
+- **Objetivo:** `GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento`. Para una campaña ya sembrada, devuelve cómo cambió el riesgo de año malo y el rinde esperado semana a semana (ML-18) y qué pasó con el clima desde la siembra.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/services/seguimiento_service.py` (nuevo), `backend/providers/nasa_telemetry.py`, `backend/routers/test_seguimiento.py` (nuevo), `CONTEXT.md`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **`campaigns.fecha_inicio` es la fecha de siembra.** No hace falta cambiar el esquema.
+  2. **Se calcula cuando el usuario lo pide, no con un proceso programado.** Render Free duerme a los 15 minutos y tiene 512 MB. El resultado se guarda en `campaigns.simulacion_json["seguimiento"]` con `fecha_ultimo_dato`. Si NASA POWER no tiene un dato nuevo desde el último cálculo, se devuelve lo guardado sin recalcular.
+  3. **Requiere autenticación.** La campaña tiene que ser del usuario (RLS).
+- **Especificación Técnica:**
+  1. Validaciones (`422` con mensaje claro):
+     - El cultivo no está entre los 8 con rinde MAGyP: "Para cultivos de servicio no hay seguimiento de rinde."
+     - `fecha_inicio` es posterior a hoy: "La siembra todavía no ocurrió."
+     - El campo está fuera de cobertura de departamentos.
+  2. `seguimiento_service.py`:
+     - Pedir a NASA POWER, una sola vez, la serie diaria `[fecha_siembra − 89, hoy]` (hasta unos 250 días). Así cubre el estado del suelo al sembrar y todo el período crítico observado, sin depender de la ventana de 90 días de `nasa_reciente`. Se guarda en caché con clave de celda y rango, con el mismo TTL de 6 h.
+     - Armar los calendarios de la campaña actual con `providers/features.calendario_eventos` y `calendario_lluvia`.
+     - Calcular el ONI a la fecha de siembra con `providers/enso`.
+     - Llamar a `predict_seguimiento` (ML-18) con el departamento del campo (BACK-28).
+  3. `schemas.py`: `SeguimientoResponse`:
+     - De la campaña: `campana_id`, `cultivo`, `fecha_siembra`.
+     - Del período crítico: `etapa`, `inicio_periodo_critico`, `fin_periodo_critico`, `dias_observados`, `dias_periodo_critico`.
+     - Datos: `fecha_ultimo_dato`, `serie` (lista de `PuntoSeguimientoOut`), `observado` (`ClimaObservadoOut`).
+     - Referencias: `prob_anio_malo_tipica`, `rinde_normal_kg_ha`, `fase_enso_siembra`, `departamento_referencia`, `advertencias`.
+     - Advertencias fijas: atraso de 3 a 7 días de NASA POWER; clima regional, que no ve tormentas locales, plagas ni manejo.
+  4. `routers/campaigns.py`: nueva ruta. Ante falla de un servicio externo, `503` con `{"detail", "fuente"}`, igual que `/simulate`.
+  5. `test_seguimiento.py` (con dependencias falsas, sin red):
+     - Etapas `previa`, `en_curso` y `terminado`.
+     - Validaciones 422.
+     - Si no hay dato nuevo, se reutiliza lo guardado.
+     - 503 con `fuente`.
+     - Campaña ajena → 404.
+  6. `CONTEXT.md` §5: contrato del endpoint nuevo.
+- **Criterio de Aceptación:** latencia menor a 3 s con caché fría en local; menor a 300 ms cuando se reutiliza lo guardado.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q routers/test_seguimiento.py`
+- **Resultado de la Verificación (2026-11-15):**
+  - `services/seguimiento_service.py`: `construir_insumos_seguimiento` (una consulta a NASA POWER desde el 1/1 del año de `siembra − 110 días` hasta hoy, en caché 6 h; estado del suelo al último día válido antes de la siembra; calendarios observados solo hasta el último día con lluvia y temperaturas válidas, sin inventar días con −999), `calcular_seguimiento`, `armar_respuesta`, `resultado_guardado_vigente`. Suelo y topografía guardados del campo si están completos (BACK-28).
+  - `routers/campaigns.py`: `GET /{campaign_id}/seguimiento` con `CampaignStore` (Supabase con RLS), `get_constructor_seguimiento` y `get_hoy` sobreescribibles; guarda en `campaigns.simulacion_json["seguimiento"]` sin pisar el resto del JSON.
+  - `schemas.py`: `SeguimientoResponse`, `PuntoSeguimientoOut`, `ClimaObservadoOut`, `FaseEnsoSiembraOut`.
+  - **Cambios respecto de la especificación:**
+    - Se recalcula **como mucho una vez por día** (o nunca más si el período crítico terminó), en lugar de "si NASA POWER no tiene un dato nuevo": saber si hay dato nuevo obliga a consultar NASA igual.
+    - Un campo **fuera de cobertura no da 422**: se devuelve el riesgo sin rinde en kg/ha y una advertencia, porque la probabilidad sigue siendo útil.
+    - `nasa_telemetry.py` no hizo falta tocarlo.
+  - `routers/test_seguimiento.py`: 8 tests (contrato y guardado, reutilización en el día, etapas, 422, 404, 503, calendarios indexados desde el 1/1). `pytest -q`: en verde.
+  - En vivo (Pergamino, maíz temprano sembrado el 20/09/2026, consulta del 15/11): 2,0 s con caché fría; último dato 12/11, 9 días observados del período crítico, 2,4 mm de lluvia contra 24,4 mm normales; probabilidad 0,24 (típica 0,28), 80 qq/ha esperados contra 77 normales.
+
+### `[x]` BACK-30: Cerrar y borrar campañas
+- **Objetivo:** Que el productor pueda cerrar la campaña al cosechar (fecha de fin, rinde cosechado y notas) o borrarla si la cargó por error. El `PATCH` y el `DELETE` ya existían (BACK-2/5) pero no validaban las fechas.
+- **Archivos:** `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/routers/test_campaigns.py` (nuevo), `backend/TASKS_BACKEND.md`.
+- **Decisiones (2026-11-15, pedido del desarrollador):**
+  - `fecha_inicio` es la siembra y `fecha_fin` la cosecha. La cosecha no puede ser anterior a la siembra (`CampaignCreate` con `model_validator`, y en el `PATCH` contra la fila guardada) ni futura (un día de tolerancia por el huso horario: el servidor está en UTC).
+  - Al cerrar se conserva `simulacion_json` (el seguimiento guardado). El borrado elimina la fila completa, seguimiento incluido.
+  - El rinde cosechado se guarda en kg/ha (`rinde_kg_ha`, ya existente). Es el primer dato de rinde **de lote**: la base para escalar el rinde del departamento al del lote y para ML-19.
+- **Resultado de la Verificación (2026-11-15):** `routers/test_campaigns.py` con 7 tests (cierre con rinde y seguimiento conservado, cosecha anterior a la siembra, cosecha futura, rinde negativo, alta con cosecha anterior, borrado y 404 al repetir, hoy como cosecha). `pytest -q`: 346 en verde.
+
+### `[x]` BACK-31: Historial real del lote por campaña (`GET /api/v1/historial`)
+- **Objetivo:** Reemplazar los datos inventados de la pestaña *Información histórica* (FRONT-39) por datos reales: lluvia en mm y estado del suelo campaña por campaña, rinde de la zona y las cosechas guardadas del lote.
+- **Decisiones acordadas con el desarrollador (2026-11-15):**
+  - **Campaña agrícola** (julio a junio, "2022/23"), **desde 2006/07** (el período de los rindes MAGyP del modelo).
+  - **Estado del suelo = agua en raíces** (`GWETROOT`): promedio de la campaña y el **mes más seco**, contra lo normal de ese mes.
+  - **Rinde de la zona por campaña (MAGyP)** del departamento, contra su rinde normal (la tendencia de ML-17).
+  - Se **quitan** las métricas inventadas (temperatura, evaporación, materia orgánica por año).
+- **Implementación:**
+  - `providers/nasa_power.fetch_monthly_range`: endpoint mensual de NASA POWER (`PRECTOTCORR_SUM`, `GWETROOT`), descarta el mes 13.
+  - `services/historial_service.py`: mensual 2006 → año−2 (caché persistente `nasa_mensual`) + diario desde el 1/1 del año pasado hasta hoy (caché 6 h), porque NASA publica los meses de un año recién cuando terminó. Un mes de lluvia cuenta como completo con dato en ≥ 80% de **sus días calendario** (el mes en curso nunca); el agua en raíces se promedia con ≥ 10 días (así se ve el bache del mes en curso). Lo normal es el promedio de las campañas completas. La campaña en curso se compara solo con los meses completos contra lo normal de esos mismos meses (`lluvia_comparada_hasta`).
+  - `ml/rinde.rinde_zona_por_campana`: rinde MAGyP observado del departamento (mismo filtro que el label) contra la tendencia.
+  - Cosechas del lote: campañas guardadas agrupadas por campaña agrícola de la siembra (`calendario_siembra.anio_campana`: el doble cultivo trigo → soja 2da queda en la misma campaña).
+  - `routers/historial.py`: Bearer y `field_id` opcionales (sin sesión: clima y zona, con advertencia); 503 con `fuente`.
+- **Resultado de la Verificación (2026-11-15):** `routers/test_historial.py` con 10 tests; `pytest -q`: 355 en verde. En vivo (Tandil): 20 campañas completas, lluvia normal 899 mm; 2008/09 569 mm (−37%), 2014/15 1.083 mm (+20%); 2026/27 en curso −5% de julio a octubre y noviembre con 52% de agua en raíces contra 65% normal.
+- **Límite:** el agua en raíces de NASA (MERRA-2) es muy suavizada a escala mensual: en Tandil el promedio por campaña varía entre 62% y 69%. Lo más informativo es el mes más seco contra su normal.
+
+### 4.7. Cola de reintentos más efectiva (`BACK-32`)
+
+> **Numeración:** se especificó como BACK-27 en la rama `dolfi` el mismo día en que `main` incorporó BACK-27 a BACK-31 de otra persona; al mergear se renumeró a BACK-32.
+
+### `[~]` BACK-32: Modo segundo plano de SoilGrids/SRTM para la cola de reintentos
+> **Implementación (15/11/2026):**
+> - **`soilgrids.py`:** `segundo_plano` en `fetch_perfil_suelo` y `_cascada_segundo_plano`, con timeout de 60 s, espera de cupo (`_esperar_cupo`, con `_dormir` inyectable) y vecinos de a uno. `_consultar` gana `registrar_corte`.
+> - **`srtm.py`:** `segundo_plano` en `fetch_topografia`, `_resolver` y `_cascada`, con timeout de 30 s y sin tocar el corte.
+> - **`reintentos_campos.py`:** los providers por defecto son `suelo_segundo_plano` y `topografia_segundo_plano`.
+> - **Tests:** 7 nuevos. La suite completa da **335 en verde**, y los tests en vivo existentes no cambiaron.
+> - **En vivo, contra ISRIC real:** (−29,0, −60,0) respondió con dato real en **16,5 s** y (−31,9, −63,4) en **25,6 s**. Con el timeout en vivo de 8 s, los dos habrían caído al respaldo. El corte quedó cerrado.
+> - **Falta:** el deploy y el DoD en Render (más de un campo resuelto por ronda).
+- **Objetivo:** Que la cola de BACK-25 resuelva varios campos por ronda cuando ISRIC está lento, en lugar de uno solo.
+- **Origen (15/11/2026, Render):**
+  - Entre las 21:14 y las 21:21 UTC la cola pasó solo **1 de 14** campos pendientes a dato real (`61de2725`).
+  - **Por qué:** el worker usa el timeout de las consultas en vivo (8 s) y ISRIC tarda entre 5 y 19 s. El primer timeout activa el corte automático de 5 minutos, y el resto de la ronda cae al respaldo sin consultar.
+  - **Consecuencia:** a lo sumo 1 campo por ronda, así que con 12 rondas varios campos terminan la hora sin dato real.
+- **Archivos Permitidos:** `backend/providers/soilgrids.py`, `backend/providers/srtm.py`, `backend/services/reintentos_campos.py`, `backend/providers/test_soilgrids.py`, `backend/providers/test_srtm.py` y `backend/services/test_reintentos_campos.py`.
+- **Decisiones Acordadas con la Desarrolladora (15/11/2026):**
+  - En segundo plano nadie espera la respuesta, así que el worker usa un **timeout largo** (ISRIC 60 s, como el generador de la grilla) y **no activa el corte automático**.
+  - Las consultas en vivo (alta de campo, `/telemetry` y `/simulate`) no cambian: 8 s y corte de 5 min.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Parámetro nuevo** `segundo_plano: bool = False` en `fetch_perfil_suelo` y `fetch_topografia`. Con `True`:
+    - Se ignora el corte automático: el worker prueba aunque el tráfico en vivo lo haya abierto.
+    - Un timeout o un 429 **no** abren el corte, y un éxito **no** lo cierra. El estado del corte lo maneja solo el tráfico en vivo.
+    - Timeout: **60 s** en ISRIC y **30 s** en OpenTopoData (responde en menos de 1 s, pero mantiene el margen).
+    - **Límite de 5 llamadas por minuto de ISRIC:** el limitador es compartido. En segundo plano, si no hay cupo, se **espera** (de a 2 s, hasta 70 s) en lugar de ir al respaldo. Los vecinos (píxel sin dato) se consultan de a uno, esperando cupo.
+    - OpenTopoData mantiene su espera mínima de 1 s entre llamadas y el tope diario.
+  - **`reintentos_campos.py`:** los providers por defecto se llaman con `segundo_plano=True`.
+  - **Duración de una ronda:** con 13 campos y ISRIC a unos 15 s, una ronda dura unos 3–4 minutos. El intervalo de 5 minutos se cuenta **después** de terminar la ronda (ya es así).
+- **Especificación Técnica:**
+  1. `soilgrids.py`:
+     - `TIMEOUT_SEGUNDO_PLANO_S = 60.0`
+     - `_consultar(..., timeout_s, registrar_corte=True)`
+     - `_esperar_cupo(cantidad)`
+     - `_cascada(..., segundo_plano)`
+     - `fetch_perfil_suelo(..., segundo_plano=False)`
+  2. `srtm.py`:
+     - `TIMEOUT_SEGUNDO_PLANO_S = 30.0`
+     - `_cascada(..., segundo_plano)`, `_resolver(...)` y `fetch_topografia(..., segundo_plano=False)`
+  3. `reintentos_campos.py`: los proveedores por defecto llaman con `segundo_plano=True`.
+  4. Tests:
+     - Con el corte activo, el modo segundo plano igual consulta.
+     - Un timeout en segundo plano no abre el corte.
+     - Se usa el timeout largo.
+     - Sin cupo, espera y después consulta.
+     - El modo en vivo no cambia (los tests existentes siguen en verde).
+     - La cola llama a los providers con `segundo_plano=True`.
+- **Definition of Done:**
+  - `cd backend && python -m pytest -q` en verde.
+  - En Render, con ISRIC lento, una ronda de la cola resuelve **más de un** campo pendiente (se compara la foto de `fields` antes y después de una ronda).
 
 ---
 

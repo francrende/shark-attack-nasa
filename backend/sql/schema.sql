@@ -79,6 +79,11 @@ create table if not exists public.fields (
   topo_localidad_fallback text,
   topo_distancia_fuente_km double precision,
   reintentar_srtm boolean not null default true,
+  -- BACK-28: departamento MAGyP de referencia para el rinde en kg/ha (ML-17); null fuera de cobertura
+  departamento_codigo text,
+  departamento_nombre text,
+  departamento_provincia text,
+  departamento_distancia_km double precision,
   created_at timestamptz not null default now()
 );
 
@@ -103,6 +108,10 @@ alter table public.fields add column if not exists topo_advertencias jsonb not n
 alter table public.fields add column if not exists topo_localidad_fallback text;
 alter table public.fields add column if not exists topo_distancia_fuente_km double precision;
 alter table public.fields add column if not exists reintentar_srtm boolean not null default true;
+alter table public.fields add column if not exists departamento_codigo text;
+alter table public.fields add column if not exists departamento_nombre text;
+alter table public.fields add column if not exists departamento_provincia text;
+alter table public.fields add column if not exists departamento_distancia_km double precision;
 
 create index if not exists idx_fields_user_id on public.fields (user_id);
 

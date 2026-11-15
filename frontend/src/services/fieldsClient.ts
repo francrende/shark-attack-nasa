@@ -1,5 +1,8 @@
 import type {
+  CampaignCreateRequest,
+  CampaignUpdateRequest,
   FieldCampaign,
+  SeguimientoResponse,
   FieldCreateRequest,
   FieldUpdateRequest,
   UserField,
@@ -185,4 +188,100 @@ export async function listFieldCampaigns(
     'No fue posible obtener el historial de cultivos del campo.'
   )
   return Array.isArray(data) ? data : []
+}
+
+export async function createCampaign(
+  token: string,
+  fieldId: string,
+  data: CampaignCreateRequest
+): Promise<FieldCampaign> {
+  return requestBackendJson<FieldCampaign>(
+    `/api/v1/fields/${fieldId}/campaigns`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    },
+    'No fue posible registrar la siembra.'
+  )
+}
+
+const SEGUIMIENTO_API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '')
+
+/** Error tipado del seguimiento: mismo criterio que `/simulate` (FRONT-36). */
+export class SeguimientoError extends Error {
+  readonly tipo: 'servicio_externo' | 'invalido' | 'sin_conexion'
+  readonly fuente: string | null
+
+  constructor(tipo: SeguimientoError['tipo'], mensaje: string, fuente: string | null = null) {
+    super(mensaje)
+    this.name = 'SeguimientoError'
+    this.tipo = tipo
+    this.fuente = fuente
+  }
+}
+
+/** `GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento` (BACK-29). */
+export async function fetchSeguimiento(
+  token: string,
+  fieldId: string,
+  campaignId: string,
+  signal?: AbortSignal
+): Promise<SeguimientoResponse> {
+  let response: Response
+  try {
+    response = await fetch(
+      `${SEGUIMIENTO_API_BASE}/api/v1/fields/${fieldId}/campaigns/${campaignId}/seguimiento`,
+      { method: 'GET', headers: { Authorization: `Bearer ${token}` }, signal }
+    )
+  } catch (err) {
+    if (signal?.aborted) throw err
+    throw new SeguimientoError('sin_conexion', 'No pudimos conectarnos con el servidor.')
+  }
+  if (!response.ok) {
+    const cuerpo = (await response.json().catch(() => ({}))) as { detail?: unknown; fuente?: unknown }
+    const detalle = typeof cuerpo.detail === 'string' ? cuerpo.detail : null
+    if (response.status === 503) {
+      throw new SeguimientoError(
+        'servicio_externo',
+        detalle ?? 'Servicio externo no disponible.',
+        typeof cuerpo.fuente === 'string' ? cuerpo.fuente : null
+      )
+    }
+    if (response.status === 422 || response.status === 404) {
+      throw new SeguimientoError('invalido', detalle ?? 'No se puede seguir esta campaña.')
+    }
+    throw new SeguimientoError('sin_conexion', detalle ?? `Error HTTP ${response.status} del servidor.`)
+  }
+  return (await response.json()) as SeguimientoResponse
+}
+
+/** Cierra o edita una campaña (BACK-30): fecha de cosecha, rinde cosechado y notas. */
+export async function updateCampaign(
+  token: string,
+  fieldId: string,
+  campaignId: string,
+  data: CampaignUpdateRequest
+): Promise<FieldCampaign> {
+  return requestBackendJson<FieldCampaign>(
+    `/api/v1/fields/${fieldId}/campaigns/${campaignId}`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    },
+    'No fue posible cerrar la campaña.'
+  )
+}
+
+/** Borra una campaña y su seguimiento guardado (BACK-30). */
+export async function deleteCampaign(token: string, fieldId: string, campaignId: string): Promise<void> {
+  await requestBackendJson<null>(
+    `/api/v1/fields/${fieldId}/campaigns/${campaignId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+    'No fue posible borrar la campaña.'
+  )
 }

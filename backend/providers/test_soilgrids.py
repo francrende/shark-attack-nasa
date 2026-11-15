@@ -568,3 +568,72 @@ def test_puntos_grilla_dentro_de_las_provincias():
     assert 75 <= len(puntos) <= 95
     assert all(-41.5 < la < -27.5 and -68.5 < lo < -56.5 for la, lo in puntos)
     assert min(haversine_km(*NORTE_SANTA_FE, la, lo) for la, lo in puntos) < 71
+
+
+# ---------- BACK-32: modo segundo plano (cola de reintentos) ----------
+
+
+def _run_fondo(handler, lat_lon=PERGAMINO):
+    llamadas = []
+
+    def wrapped(req):
+        llamadas.append(req)
+        return handler(req)
+
+    async def _go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(wrapped)) as client:
+            return await fetch_perfil_suelo(*lat_lon, client=client, segundo_plano=True)
+
+    return asyncio.run(_go()), llamadas
+
+
+def _timeout_live(req):
+    raise httpx.ReadTimeout("timeout", request=req)
+
+
+def test_segundo_plano_consulta_aunque_el_corte_este_activo():
+    _run(_timeout_live)  # el tráfico en vivo abre el corte
+    perfil, llamadas = _run_fondo(lambda req: httpx.Response(200, json=_payload(PERGAMINO_RAW)))
+    assert perfil.fuente == "isric_soilgrids_v2" and len(llamadas) == 1
+    # el éxito en segundo plano no cierra el corte: el tráfico en vivo sigue sin llamar
+    perfil_vivo, llamadas_vivo = _run(lambda req: httpx.Response(200, json=_payload(PERGAMINO_RAW)), (-34.5, -60.9))
+    assert llamadas_vivo == [] and perfil_vivo.reintentar_soilgrids is True
+
+
+def test_segundo_plano_timeout_no_abre_el_corte_y_usa_timeout_largo():
+    timeouts = []
+
+    def handler(req):
+        timeouts.append(req.extensions["timeout"]["read"])
+        raise httpx.ReadTimeout("timeout", request=req)
+
+    perfil, _ = _run_fondo(handler)
+    assert perfil.reintentar_soilgrids is True
+    assert timeouts == [soilgrids.TIMEOUT_SEGUNDO_PLANO_S]
+    _, llamadas_vivo = _run(lambda req: httpx.Response(200, json=_payload(PERGAMINO_RAW)), (-34.5, -60.9))
+    assert len(llamadas_vivo) == 1  # el corte sigue cerrado
+
+
+def test_segundo_plano_sin_cupo_espera_y_despues_consulta(_estado_limpio, monkeypatch):
+    reloj = _estado_limpio
+    esperas = []
+
+    async def dormir(s):
+        esperas.append(s)
+        reloj.t += s
+
+    monkeypatch.setattr(soilgrids, "_dormir", dormir)
+    assert soilgrids._limitador.reservar_hasta(5) == 5  # cupo agotado por el tráfico en vivo
+    perfil, llamadas = _run_fondo(lambda req: httpx.Response(200, json=_payload(PERGAMINO_RAW)))
+    assert perfil.fuente == "isric_soilgrids_v2" and len(llamadas) == 1
+    assert sum(esperas) >= 60  # esperó a que se liberara la ventana de 60 s
+
+
+def test_segundo_plano_vecinos_de_a_uno():
+    def handler(req):
+        es_punto = (float(req.url.params["lat"]), float(req.url.params["lon"])) == PERGAMINO
+        return httpx.Response(200, json=_payload(NULOS if es_punto else PERGAMINO_RAW))
+
+    perfil, llamadas = _run_fondo(handler)
+    assert perfil.fuente == "isric_soilgrids_v2_vecino"
+    assert len(llamadas) == 2  # el punto y el primer vecino con dato

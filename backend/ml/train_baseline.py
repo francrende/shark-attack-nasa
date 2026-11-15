@@ -28,7 +28,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import joblib
@@ -40,7 +40,9 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import roc_auc_score
 
+from ml.calibracion import UMBRAL_ANIO_MALO, calibrar, resumen_ensemble
 from ml.escenarios import pesos_analogos
+from ml.rinde import rinde_normal_kg_ha
 from ml.fao_labels import CROP_CATALOG, compute_fao_hydroclimatic_score
 from ml.generate_dataset import (
     DATA_DIR,
@@ -61,6 +63,7 @@ SEED = 42
 MODEL_PATH = ML_DIR / "modelo_agro.joblib"
 METRICS_PATH = DATA_DIR / "training_metrics.json"
 MODEL_VERSION = "ml10-magyp"
+BUNDLE_VERSION = "2.2.0"  # ML-16: calibracion_anio_malo; ML-18: seguimiento
 
 FEATURE_COLUMNS = FEATURE_COLUMNS_V2
 NUMERIC_FEATURES = NUMERIC_FEATURES_V2
@@ -81,7 +84,6 @@ GRID: list[dict[str, Any]] = [
 MEJORA_PROD_VS_NORMAL = 0.05
 MEJORA_PROD_VS_FAO = 0.10
 MEJORA_WHATIF_VS_NORMAL = 0.15
-UMBRAL_ANIO_MALO = 35.0
 MAX_LATENCY_MS = 15.0
 
 # Caso de sequía de CONTEXT §5 (chequeo informativo)
@@ -157,6 +159,247 @@ def promedio_por_fila(exp: pd.DataFrame, pred: np.ndarray, n: int) -> np.ndarray
 
 def predict_clipped(model: Any, X: np.ndarray) -> np.ndarray:
     return np.clip(model.predict(X), 0.0, 100.0)
+
+
+def resumen_produccion(model: Any, df: pd.DataFrame, escenarios: pd.DataFrame) -> pd.DataFrame:
+    """Promedio y P10 del ensemble de producción (misma fase ENSO) para cada fila real de ``df``."""
+    exp = expandir_ensemble(df, escenarios, ponderar_oni=True)
+    X = np.column_stack([exp[NUMERIC_FEATURES].to_numpy(float), exp["cultivo_id"].to_numpy(float)])
+    promedio, p10 = resumen_ensemble(exp["_rid"].to_numpy(), predict_clipped(model, X), exp["_peso"].to_numpy(float), len(df))
+    return pd.DataFrame({
+        "anio_campana": df["anio_campana"].to_numpy(int),
+        "departamento_id": df["departamento_id"].to_numpy(str),
+        "cultivo_candidato": df["cultivo_candidato"].to_numpy(str),
+        "promedio": promedio,
+        "p10": p10,
+        "puntaje_real": df[TARGET_COLUMN].to_numpy(float),
+        "peso": df["sample_weight"].to_numpy(float),
+    })
+
+
+def predicciones_fuera_de_muestra(
+    model: Any, params: dict[str, Any], n_iter: int, tv: pd.DataFrame, test: pd.DataFrame, escenarios: pd.DataFrame
+) -> pd.DataFrame:
+    """Ensemble de producción fuera de muestra en las 19 campañas (ML-16).
+
+    Test (2022–2024) con el modelo final. Cada campaña de train + val con un modelo entrenado
+    sin esa campaña (mismos hiperparámetros e iteraciones). El modelo final vio train + val, así
+    que sus predicciones ahí serían demasiado confiadas para calibrar una probabilidad.
+    """
+    partes = [resumen_produccion(model, test, escenarios)]
+    reales = (tv["origen_muestra"] == ORIGEN_MAGYP).to_numpy()
+    for anio in sorted(tv["anio_campana"].unique()):
+        t0 = time.perf_counter()
+        fuera = (tv["anio_campana"] == anio).to_numpy()
+        X_tr, y_tr, w_tr = to_xyw(tv[~fuera])
+        modelo_pliegue = nuevo_modelo(params, n_iter).fit(X_tr, y_tr, sample_weight=w_tr)
+        partes.append(resumen_produccion(modelo_pliegue, tv[fuera & reales].reset_index(drop=True), escenarios))
+        print(f"  - campaña {anio}/{(anio + 1) % 100:02d} fuera de muestra ({time.perf_counter() - t0:.0f}s)")
+    return pd.concat(partes, ignore_index=True)
+
+
+def mae_kg_ha_por_cultivo(df: pd.DataFrame, pred: np.ndarray) -> dict[str, Any]:
+    """ML-17: error en kg/ha del rinde estimado contra decir "rinde normal" (la tendencia).
+
+    Con ``rinde = normal × (1 + (puntaje − 50) / 100)``, el error en kg/ha es
+    ``normal × |predicho − real| / 100`` (y el de la tendencia sola, ``normal × |50 − real| / 100``).
+    """
+    normal = np.array([
+        rinde_normal_kg_ha(c, d, int(a)) or np.nan
+        for c, d, a in df[["cultivo_candidato", "departamento_id", "anio_campana"]].itertuples(index=False)
+    ])
+    y = df[TARGET_COLUMN].to_numpy(float)
+    w = df["sample_weight"].to_numpy(float)
+    ok = np.isfinite(normal)
+    out: dict[str, Any] = {}
+    for crop in sorted(df["cultivo_candidato"].unique()):
+        m = ok & (df["cultivo_candidato"] == crop).to_numpy()
+        modelo = float(np.average(normal[m] * np.abs(pred[m] - y[m]) / 100.0, weights=w[m]))
+        tendencia = float(np.average(normal[m] * np.abs(50.0 - y[m]) / 100.0, weights=w[m]))
+        out[crop] = {
+            "modelo": round(modelo), "tendencia": round(tendencia), "mejora": round(1.0 - modelo / tendencia, 4),
+            "rinde_normal_medio": round(float(np.average(normal[m], weights=w[m]))),
+        }
+    return out
+
+
+NIVELES_AVANCE: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
+def _casos_seguimiento(df: pd.DataFrame) -> pd.DataFrame:
+    """Un caso por departamento × campaña × cultivo, con sus estáticos, label y peso total."""
+    reales = df[df["origen_muestra"] == ORIGEN_MAGYP]
+    return (
+        reales.groupby(["departamento_id", "anio_campana", "cultivo_candidato"], as_index=False)
+        .agg(
+            pendiente_terreno_pct=("pendiente_terreno_pct", "first"),
+            elevacion_m=("elevacion_m", "first"),
+            textura_arcilla_pct=("textura_arcilla_pct", "first"),
+            cultivo_id=("cultivo_id", "first"),
+            puntaje_real=(TARGET_COLUMN, "first"),
+            peso=("sample_weight", "sum"),
+        )
+    )
+
+
+def filas_seguimiento(casos: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Filas del modelo para el seguimiento retrospectivo de cada caso en cada nivel de avance.
+
+    Para cada caso: siembra en el inicio del calendario, estado del suelo y ONI de ese día, y en
+    cada nivel la ventana mezclada (días observados de esa campaña + resto de cada año análogo de
+    la misma fase ENSO, ``ml/escenarios.escenarios_en_curso``), igual que producción.
+    Devuelve ``(X, caso, nivel, peso_analogo, anio_campana_del_caso)``.
+    """
+    from ml import calendario_siembra as cal
+    from ml.escenarios import escenarios_en_curso, inicio_periodo_critico_real
+    from ml.generate_dataset import features_actuales_en, leer_serie_celda, referencia_historica
+    from providers.cache import clave_celda_power
+
+    centroides = json.loads((DATA_DIR / "departamentos_pampa.json").read_text(encoding="utf-8"))
+    refs: dict[str, Any] = {}
+    X: list[list[float]] = []
+    idx_caso: list[int] = []
+    idx_nivel: list[int] = []
+    pesos: list[float] = []
+    cache_pesos: dict[Any, dict[int, float]] = {}
+    t0 = time.perf_counter()
+    for i, caso in enumerate(casos.itertuples(index=False)):
+        dep = centroides.get(caso.departamento_id)
+        if dep is None:
+            continue
+        clave = clave_celda_power(dep["lat"], dep["lon"])
+        if clave not in refs:
+            serie = leer_serie_celda(clave)
+            refs[clave] = None if serie is None else (serie, referencia_historica(serie))
+        if refs[clave] is None:
+            continue
+        serie, ref = refs[clave]
+        anio = int(caso.anio_campana)
+        siembra = cal.inicio_siembra(caso.cultivo_candidato, anio)
+        estaticos = {
+            "pendiente_terreno_pct": float(caso.pendiente_terreno_pct),
+            "elevacion_m": float(caso.elevacion_m),
+            "textura_arcilla_pct": float(caso.textura_arcilla_pct),
+        }
+        actuales = features_actuales_en(serie, ref, siembra, estaticos)
+        if actuales is None:
+            continue
+        inicio = inicio_periodo_critico_real(caso.cultivo_candidato, siembra)
+        for k, nivel in enumerate(NIVELES_AVANCE):
+            d = int(round(nivel * cal.DIAS_PERIODO_CRITICO))
+            escenarios, _ = escenarios_en_curso(
+                ref.calendario_eventos, ref.calendario_lluvia, ref.calendario_eventos, ref.calendario_lluvia,
+                caso.cultivo_candidato, siembra, inicio + timedelta(days=d - 1), actuales["oni_actual"],
+                anio_campana=anio, cache_pesos=cache_pesos,
+            )
+            for esc in escenarios:
+                vec = {**actuales, **esc, "dias_hasta_siembra": 0.0}
+                X.append([float(vec[f]) for f in NUMERIC_FEATURES] + [float(caso.cultivo_id)])
+                idx_caso.append(i)
+                idx_nivel.append(k)
+                pesos.append(float(esc["peso"]))
+        if (i + 1) % 3000 == 0:
+            print(f"  - {i + 1}/{len(casos)} casos ({time.perf_counter() - t0:.0f}s)", flush=True)
+    anio_caso = casos["anio_campana"].to_numpy(int)
+    caso_arr = np.asarray(idx_caso)
+    return np.asarray(X, dtype=float), caso_arr, np.asarray(idx_nivel), np.asarray(pesos), anio_caso[caso_arr]
+
+
+def seguimiento_retrospectivo(
+    model: Any, params: dict[str, Any], n_iter: int, tv: pd.DataFrame, test: pd.DataFrame
+) -> dict[str, Any]:
+    """ML-18: distribución predictiva por nivel de avance del período crítico (fuera de muestra).
+
+    Mismo esquema que ML-16: test con el modelo final y cada campaña de train + val con un modelo
+    que no la vio. Con el clima observado el error se achica, así que cada nivel guarda su propia
+    grilla de residuos (``calibrar``) y el rango se angosta a medida que avanza la campaña.
+    """
+    casos = pd.concat([_casos_seguimiento(tv), _casos_seguimiento(test)], ignore_index=True)
+    print(f"  {len(casos)} casos (departamento × campaña × cultivo), {len(NIVELES_AVANCE)} niveles de avance")
+    X, caso, nivel, peso, anio = filas_seguimiento(casos)
+    pred = np.empty(len(X))
+    anios_test = set(int(a) for a in test["anio_campana"].unique())
+    for a in sorted(set(int(x) for x in anio)):
+        m = anio == a
+        if a in anios_test:
+            modelo = model
+        else:
+            fuera = (tv["anio_campana"] == a).to_numpy()
+            X_tr, y_tr, w_tr = to_xyw(tv[~fuera])
+            modelo = nuevo_modelo(params, n_iter).fit(X_tr, y_tr, sample_weight=w_tr)
+        pred[m] = predict_clipped(modelo, X[m])
+    clave = caso * len(NIVELES_AVANCE) + nivel
+    n_claves = len(casos) * len(NIVELES_AVANCE)
+    suma_w = np.bincount(clave, weights=peso, minlength=n_claves)
+    promedio = np.bincount(clave, weights=pred * peso, minlength=n_claves) / np.where(suma_w > 0, suma_w, 1.0)
+
+    por_nivel: dict[str, Any] = {}
+    resumen: dict[str, Any] = {}
+    for k, nv in enumerate(NIVELES_AVANCE):
+        con_dato = suma_w[k :: len(NIVELES_AVANCE)] > 0
+        df = casos.loc[con_dato, ["anio_campana", "cultivo_candidato", "puntaje_real", "peso"]].assign(
+            promedio=promedio[k :: len(NIVELES_AVANCE)][con_dato]
+        )
+        bloque = calibrar(df)
+        met = bloque["metricas"]
+        malo = (df["puntaje_real"] < UMBRAL_ANIO_MALO).to_numpy()
+        w = df["peso"].to_numpy(float)
+        sequia = met["por_campana"].get(str(CAMPANA_SEQUIA_SEGUIMIENTO), {})
+        resumen[f"{nv:.2f}"] = {
+            "casos": int(con_dato.sum()),
+            "mae": round(float(np.average(np.abs(df["puntaje_real"] - df["promedio"]), weights=w)), 3),
+            "auc_anios_malos": round(float(roc_auc_score(malo, -df["promedio"], sample_weight=w)), 3),
+            "brier": met["brier"],
+            "brier_skill": met["brier_skill"],
+            "brier_skill_sin_sequia": met["brier_skill_sin_sequia"],
+            "cobertura_anio_malo": met["cobertura_anio_malo"],
+            "cobertura_anio_bueno": met["cobertura_anio_bueno"],
+            "ancho_rango_medio": round(float(np.mean([
+                np.interp(0.9, bloque["niveles"], g) - np.interp(0.1, bloque["niveles"], g)
+                for g in bloque["cuantiles_residuo"].values()
+            ])), 1),
+            "sequia_2022_prob_media": sequia.get("prob_media"),
+            "sequia_2022_prob_tipica": sequia.get("prob_tipica_media"),
+            "cultivos_que_anticipan": sorted(c for c, v in bloque["prob_valida_por_cultivo"].items() if v),
+        }
+        por_nivel[f"{nv:.2f}"] = bloque
+        r = resumen[f"{nv:.2f}"]
+        print(f"  - avance {nv:>4.0%}: MAE {r['mae']:.2f} | AUC {r['auc_anios_malos']:.3f} | Brier skill {r['brier_skill']:+.1%} "
+              f"| rango ±{r['ancho_rango_medio'] / 2:.0f} pts | 2022/23 prob {r['sequia_2022_prob_media']} vs {r['sequia_2022_prob_tipica']} "
+              f"| anticipan: {len(r['cultivos_que_anticipan'])}")
+    detecta = next(
+        (nv for nv, r in resumen.items()
+         if r["sequia_2022_prob_media"] and r["sequia_2022_prob_media"] >= 2 * (r["sequia_2022_prob_tipica"] or 1)),
+        None,
+    )
+    briers = [resumen[f"{nv:.2f}"]["brier"] for nv in NIVELES_AVANCE]
+    return {
+        "niveles": [f"{nv:.2f}" for nv in NIVELES_AVANCE],
+        "por_nivel": por_nivel,
+        "resumen": resumen,
+        "sequia_2022_detectada_desde_avance": detecta,
+        "criterio_brier_final_menor_que_inicial": bool(briers[-1] < briers[0]),
+        "generado_en": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+CAMPANA_SEQUIA_SEGUIMIENTO = 2022
+
+
+def calibrar_bundle(model: Any, params: dict[str, Any], n_iter: int, tv: pd.DataFrame, test: pd.DataFrame, escenarios: pd.DataFrame) -> dict[str, Any]:
+    oos = predicciones_fuera_de_muestra(model, params, n_iter, tv, test, escenarios)
+    cal = calibrar(oos)
+    m = cal["metricas"]
+    print(f"  => Brier {m['brier']} contra {m['brier_tipica']} de la probabilidad típica (skill {m['brier_skill']:+.1%}; "
+          f"sin 2022/23 {m['brier_skill_sin_sequia']:+.1%}); tope de probabilidad {cal['tope_prob']:.2f}")
+    print(f"     cobertura del rango: {m['cobertura_anio_malo']:.1%} debajo del año malo, {m['cobertura_anio_bueno']:.1%} "
+          f"arriba del año bueno (P10 del ensemble solo: {m['cobertura_p10_ensemble']:.1%} debajo)")
+    for t in m["diagrama"]:
+        print(f"     prob {t['desde']:.2f}–{t['hasta']:.2f}: predicha {t['prob_media']:.2f} | real {t['frecuencia_real']:.2f} ({t['filas']} filas)")
+    for c, v in m["por_cultivo"].items():
+        print(f"     {c:<14} skill {v['brier_skill']:+.1%} → {'anticipa' if cal['prob_valida_por_cultivo'][c] else 'solo frecuencia habitual'}"
+              f" | cobertura {v['cobertura_anio_malo']:.0%}/{v['cobertura_anio_bueno']:.0%}")
+    return cal
 
 
 # ---------------------------------------------------------------------------
@@ -382,9 +625,21 @@ def chequeos(model: Any, catalog: dict[str, Any], test: pd.DataFrame) -> dict[st
 # ---------------------------------------------------------------------------
 
 
+def guardar_bundle(bundle: dict[str, Any], catalog: dict[str, Any]) -> None:
+    """Escribe el bundle y ``training_metrics.json`` (el mismo contenido sin el modelo)."""
+    joblib.dump(bundle, MODEL_PATH, compress=3)
+    report = {k: v for k, v in bundle.items() if k != "model"}
+    report["crops_catalog"] = {"by_name": catalog["by_name"], "by_id": {str(k): v for k, v in catalog["by_id"].items()}}
+    report["model_file_size_kb"] = round(MODEL_PATH.stat().st_size / 1024, 1)
+    METRICS_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  - {MODEL_PATH} ({report['model_file_size_kb']} KB)\n  - {METRICS_PATH}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Entrenamiento y evaluación del modelo S_hidroclimatico")
     parser.add_argument("--solo-evaluar", action="store_true", help="reevaluar el modelo guardado sin reentrenar")
+    parser.add_argument("--solo-calibrar", action="store_true", help="recalibrar la probabilidad de año malo (ML-16) del modelo guardado")
+    parser.add_argument("--seguimiento", action="store_true", help="prueba retrospectiva del seguimiento en campaña (ML-18) con el modelo guardado")
     args = parser.parse_args(argv)
     print("=" * 78)
     print("ML-7 | Entrenamiento con rindes reales MAGyP (período crítico + ENSO)")
@@ -400,6 +655,28 @@ def main(argv: list[str] | None = None) -> int:
     test = test[test["origen_muestra"] == ORIGEN_MAGYP].reset_index(drop=True)
     tv_real = tv[tv["origen_muestra"] == ORIGEN_MAGYP]
     print(f"train+val={len(tv)} ({len(tv_real)} reales, {tv['anio_campana'].nunique()} campañas) | test={len(test)}")
+
+    if args.seguimiento:
+        bundle = joblib.load(MODEL_PATH)
+        params = {k: v for k, v in bundle["model_params"].items() if k not in ("max_iter", "monotonic_cst")}
+        print(f"\n[ML-18] Seguimiento retrospectivo (modelo del {bundle['trained_at']}):")
+        bundle["seguimiento"] = seguimiento_retrospectivo(
+            bundle["model"], params, int(bundle["model_params"]["max_iter"]), tv, test
+        )
+        bundle["bundle_version"] = BUNDLE_VERSION
+        guardar_bundle(bundle, catalog)
+        return 0 if bundle["seguimiento"]["criterio_brier_final_menor_que_inicial"] else 1
+
+    if args.solo_calibrar:
+        bundle = joblib.load(MODEL_PATH)
+        params = {k: v for k, v in bundle["model_params"].items() if k not in ("max_iter", "monotonic_cst")}
+        print(f"\n[ML-16] Calibración de la probabilidad de año malo (modelo del {bundle['trained_at']}):")
+        bundle["calibracion_anio_malo"] = calibrar_bundle(
+            bundle["model"], params, int(bundle["model_params"]["max_iter"]), tv, test, escenarios
+        )
+        bundle["bundle_version"] = BUNDLE_VERSION
+        guardar_bundle(bundle, catalog)
+        return 0
 
     print("\n[1/5] Búsqueda por validación cruzada dejando una campaña afuera:")
     if args.solo_evaluar:
@@ -433,7 +710,10 @@ def main(argv: list[str] | None = None) -> int:
         "base_anio_normal_test": metricas_completas(test, base_anio_normal(tv_real, test)),
         "base_fao_mapeado_test": metricas_completas(test, base_fao_ensemble(test, exp_oni, meta["mapeo_fao_a_magyp"])),
     }
+    metrics["mae_kg_ha_test_produccion"] = mae_kg_ha_por_cultivo(test, promedio_por_fila(exp_oni, pred_exp, len(test)))
     for k, m in metrics.items():
+        if k == "mae_kg_ha_test_produccion":
+            continue
         g = m["global"]
         print(f"  - {k:<26} MAE={g['mae']:.3f}  RMSE={g['rmse']:.3f}  R²={g['r2']:.4f}  "
               f"Spearman={m['spearman_cultivos_medio']}  AUC años malos={m['anios_malos']['auc']}")
@@ -451,6 +731,9 @@ def main(argv: list[str] | None = None) -> int:
     for k, v in aceptacion.items():
         if k != "passed":
             print(f"  Aceptación {k}: {v['mejora']:.1%} (mínimo {v['minimo']:.0%}) → {'OK' if v['passed'] else 'FALLA'}")
+    print("  MAE en kg/ha (producción vs. tendencia sola):", {
+        c: f"{v['modelo']}/{v['tendencia']}" for c, v in metrics["mae_kg_ha_test_produccion"].items()
+    })
     print("  Por campaña (real / producción ONI):", {
         a: f"{v['real']}/{metrics['test_produccion_oni']['por_anio'][a]['predicho']}"
         for a, v in metrics["test_produccion_oni"]["por_anio"].items()
@@ -468,9 +751,12 @@ def main(argv: list[str] | None = None) -> int:
     checks["aceptacion"] = aceptacion
     checks["all_passed"] = all(v["passed"] for v in checks.values() if isinstance(v, dict) and "passed" in v)
 
+    print("\n[ML-16] Calibración de la probabilidad de año malo (fuera de muestra, 19 campañas):")
+    calibracion = calibrar_bundle(model, params, n_iter, tv, test, escenarios)
+
     print("\n[5/5] Serialización...")
     bundle = {
-        "bundle_version": "2.0.0",
+        "bundle_version": BUNDLE_VERSION,
         "model_version": MODEL_VERSION,
         "trained_at": trained_at,
         "evaluated_at": datetime.now(timezone.utc).isoformat(),
@@ -490,13 +776,9 @@ def main(argv: list[str] | None = None) -> int:
         "metrics": {**metrics, "cv_loso": {"modelo": comparacion, "base_anio_normal": cv_base}},
         "model_comparison_val": comparacion,
         "sanity_checks": checks,
+        "calibracion_anio_malo": calibracion,
     }
-    joblib.dump(bundle, MODEL_PATH, compress=3)
-    report = {k: v for k, v in bundle.items() if k != "model"}
-    report["crops_catalog"] = {"by_name": catalog["by_name"], "by_id": {str(k): v for k, v in catalog["by_id"].items()}}
-    report["model_file_size_kb"] = round(MODEL_PATH.stat().st_size / 1024, 1)
-    METRICS_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"  - {MODEL_PATH} ({report['model_file_size_kb']} KB)\n  - {METRICS_PATH}")
+    guardar_bundle(bundle, catalog)
 
     if not checks["all_passed"]:
         print("\nRESULTADO: FALLÓ al menos un chequeo (ver training_metrics.json).")

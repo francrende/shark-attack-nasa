@@ -7,7 +7,7 @@ reemplaza los bloques descriptivos de la respuesta por el dato real de los provi
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -16,8 +16,10 @@ from starlette.concurrency import run_in_threadpool
 from ml.escenarios import escenarios_por_cultivo
 from ml.predictor import run_recommendation
 from services.rotation_matrix import get_crops_for_campaign
+from providers.enso import fase_enso
 from providers.features import InsumosML, construir_insumos_ml
 from providers.nasa_power import NasaPowerUnavailable
+from providers.nasa_telemetry import ANALOGOS_START
 from schemas import Campana, SimulateRequest
 
 ConstructorInsumos = Callable[..., Awaitable[InsumosML]]
@@ -63,8 +65,17 @@ def _sin_duplicados(items: tuple[str, ...]) -> list[str]:
     return list(dict.fromkeys(items))
 
 
-def armar_respuesta(insumos: InsumosML, request: SimulateRequest) -> dict[str, Any]:
-    """Corre el motor de recomendación y ajusta la respuesta al contrato §5 (sin E/S)."""
+def armar_respuesta(
+    insumos: InsumosML,
+    request: SimulateRequest,
+    departamento_codigo: str | None = None,
+    advertencias_extra: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Corre el motor de recomendación y ajusta la respuesta al contrato §5 (sin E/S).
+
+    ``departamento_codigo`` es el departamento guardado del campo (BACK-28); sin él, el predictor
+    usa el más cercano a las coordenadas.
+    """
     if not insumos.escenarios_historicos:
         raise NasaPowerUnavailable(MSG_SIN_ESCENARIOS)
 
@@ -98,6 +109,7 @@ def armar_respuesta(insumos: InsumosML, request: SimulateRequest) -> dict[str, A
         simulacion_what_if=what_if,
         fecha_corte=insumos.fecha_corte,
         oni_actual=insumos.oni_actual,
+        departamento_codigo=departamento_codigo,
     )
 
     # Bloques descriptivos: dato satelital real, sin los topes del modelo ni el What-If.
@@ -116,7 +128,15 @@ def armar_respuesta(insumos: InsumosML, request: SimulateRequest) -> dict[str, A
         suelo["textura_predominante"] = perfil.textura_predominante
     if perfil.arcilla_pct is not None:
         suelo["arcilla_pct"] = round(float(perfil.arcilla_pct), 1)
-    respuesta["advertencias"] = _sin_duplicados(insumos.advertencias)
+    respuesta["advertencias"] = _sin_duplicados(tuple(advertencias_extra) + tuple(insumos.advertencias))
+    # BACK-27: fase ENSO con la que se eligieron los años análogos (el front explica contra qué
+    # campañas se compara).
+    if insumos.oni_actual is not None:
+        respuesta["fase_enso"] = {
+            "fase": fase_enso(float(insumos.oni_actual)),
+            "oni": round(float(insumos.oni_actual), 2),
+            "anios_analogos_desde": ANALOGOS_START.year,
+        }
     return respuesta
 
 
@@ -125,8 +145,13 @@ async def simular(
     *,
     construir: ConstructorInsumos = construir_insumos_ml,
     today: date | None = None,
+    campo: dict[str, Any] | None = None,
+    persistir_campo: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """Pipeline online completo: providers en paralelo → features → ensemble ML → respuesta §5.
+
+    BACK-24: ``campo`` es la fila de ``public.fields`` del usuario (el servicio único de datos del
+    lote usa sus datos fijos y guarda lo que falte). BACK-28: su departamento define el rinde normal.
 
     Raises:
         CampanaNoVigente: la campaña pedida no corresponde a la fecha (se valida antes de consultar).
@@ -134,7 +159,10 @@ async def simular(
     """
     today = today or datetime.now(timezone.utc).date()
     validar_campana(request.campana, today)
-    insumos = await construir(request.coordenadas.lat, request.coordenadas.lon, today=today)
+    # BACK-24: con campo guardado, el servicio único usa sus datos fijos y guarda lo que falte.
+    extra = {"campo": campo, "persistir_campo": persistir_campo} if campo is not None else {}
+    insumos = await construir(request.coordenadas.lat, request.coordenadas.lon, today=today, **extra)
+    departamento_codigo = campo.get("departamento_codigo") if campo is not None else None
     # El ensemble del modelo es CPU y síncrono: en un hilo aparte, para que el servidor siga
     # atendiendo otros pedidos (login, campos) mientras calcula. Idea de BACK-7 de Dolfina.
-    return await run_in_threadpool(armar_respuesta, insumos, request)
+    return await run_in_threadpool(armar_respuesta, insumos, request, departamento_codigo)

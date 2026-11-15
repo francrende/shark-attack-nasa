@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
   Compass,
@@ -12,7 +12,11 @@ import { AuthScreen } from './components/AuthScreen'
 import { BrandBlock } from './components/BrandBlock'
 import { FieldsSubheader } from './components/FieldsSubheader'
 import { ProvinceSelectorScreen } from './components/ProvinceSelectorScreen'
+import { AccionesCampana, type DatosCierre } from './components/AccionesCampana'
+import { AvisoEstadoDatos, type EstadoDatos } from './components/AvisoEstadoDatos'
 import { RecommendationPanel } from './components/RecommendationPanel'
+import { RegistrarSiembraForm } from './components/RegistrarSiembraForm'
+import { SeguimientoCampana } from './components/SeguimientoCampana'
 import {
   CampaignConfigPanel,
   WhatIfPanel,
@@ -31,17 +35,26 @@ const HistoricalPanel = lazy(() =>
 const MapView = lazy(() =>
   import('./components/MapView').then((m) => ({ default: m.MapView }))
 )
-import { DEMO_FIELDS } from './data/demoFields'
+import { CULTIVOS_CATALOGO, DEMO_FIELDS } from './data/demoFields'
 import {
-  getHistoricalSeriesForCoords,
+  campanaInicial,
+  fechaGibsCampana,
   type HistoricalMetricId,
+  visualHistorico,
 } from './data/historicalData'
 import {
   SimulateApiError,
   fetchFieldTelemetry,
+  fetchHistorial,
   generateSimulatedResponse,
+  SimulacionError,
   simulateCropRotation,
 } from './services/apiClient'
+import {
+  claveResultado,
+  guardarUltimoResultado,
+  leerUltimoResultado,
+} from './services/ultimoResultado'
 import {
   clearStoredAuthToken,
   fetchCurrentUser,
@@ -52,11 +65,16 @@ import {
   createUserField,
   deleteUserField,
   getUserField,
+  createCampaign,
+  deleteCampaign,
+  fetchSeguimiento,
   listFieldCampaigns,
   listUserFields,
   loginDemoAccount,
   removeCachedFieldPolygon,
   saveFieldPolygon,
+  SeguimientoError,
+  updateCampaign,
   updateUserField,
 } from './services/fieldsClient'
 import type { SearchCameraTarget } from './components/MapView'
@@ -65,10 +83,13 @@ import type {
   Campana,
   Coordenadas,
   CultivoAnterior,
+  CultivoId,
   FieldCampaign,
+  HistorialResponse,
   ObjetivoProductor,
   PerfilSueloTelemetria,
   SimulacionWhatIf,
+  SeguimientoResponse,
   SimulateResponse,
   TelemetryResponse,
   TopografiaTelemetria,
@@ -146,6 +167,18 @@ function getStoredTopoFromField(
     reintentar_srtm: field.reintentar_srtm,
   }
 }
+
+/** FRONT-37: cultivos con rinde MAGyP (los únicos con seguimiento, ML-18). */
+const CULTIVOS_CON_SEGUIMIENTO = new Set<string>([
+  'trigo',
+  'cebada',
+  'maiz_temprano',
+  'maiz_tardio',
+  'soja_primera',
+  'soja_segunda',
+  'girasol',
+  'sorgo',
+])
 
 export function App() {
   const defaultField = DEMO_FIELDS[0]
@@ -243,6 +276,9 @@ export function App() {
   const [simulationError, setSimulationError] = useState<string | null>(null)
   const [simulationRetryCount, setSimulationRetryCount] = useState<number>(0)
   const [isSimulating, setIsSimulating] = useState<boolean>(false)
+  // FRONT-36: estado de los datos cuando el backend no responde (nunca datos de ejemplo por error)
+  const [avisoDatos, setAvisoDatos] = useState<EstadoDatos | null>(null)
+  const [reintentoSimulacion, setReintentoSimulacion] = useState<number>(0)
   const [isHistoricalReady, setIsHistoricalReady] = useState<boolean>(false)
   const [hasPlanned, setHasPlanned] = useState<boolean>(false)
 
@@ -255,9 +291,21 @@ export function App() {
   const [fieldDataNotice, setFieldDataNotice] = useState<string | null>(null)
   const [latestFieldCampaign, setLatestFieldCampaign] =
     useState<FieldCampaign | null>(null)
+  // Campañas guardadas del lote, de la más reciente a la más vieja (FRONT-34 / FRONT-37)
+  const [fieldCampaigns, setFieldCampaigns] = useState<FieldCampaign[]>([])
+  // FRONT-37: seguimiento de la campaña sembrada del lote
+  const [seguimiento, setSeguimiento] = useState<SeguimientoResponse | null>(null)
+  const [seguimientoCargando, setSeguimientoCargando] = useState<boolean>(false)
+  const [seguimientoAviso, setSeguimientoAviso] = useState<EstadoDatos | null>(null)
+  const [seguimientoReintento, setSeguimientoReintento] = useState<number>(0)
 
   // Estado de la pestaña 'Información histórica' (10 años en vivo con el mapa)
-  const [historicalYear, setHistoricalYear] = useState<number>(2026)
+  // FRONT-39: campaña agrícola elegida (año de inicio, julio a junio) e historial real del lote
+  const [historicalYear, setHistoricalYear] = useState<number | null>(null)
+  const [historial, setHistorial] = useState<HistorialResponse | null>(null)
+  const [historialCargando, setHistorialCargando] = useState<boolean>(false)
+  const [historialAviso, setHistorialAviso] = useState<EstadoDatos | null>(null)
+  const [historialReintento, setHistorialReintento] = useState<number>(0)
   const [historicalMetric, setHistoricalMetric] =
     useState<HistoricalMetricId>('cultivos')
 
@@ -268,6 +316,7 @@ export function App() {
     setHasPlanned(false)
     setSimulationResult(null)
     setSimulationError(null)
+    setAvisoDatos(null)
 
     if (!campana || !cultivoAnterior) {
       setIsHistoricalReady(false)
@@ -279,7 +328,6 @@ export function App() {
 
     const timer = window.setTimeout(() => {
       if (!cancelled) {
-        getHistoricalSeriesForCoords(selectedCoords)
         setIsHistoricalReady(true)
       }
     }, 150)
@@ -290,7 +338,9 @@ export function App() {
     }
   }, [selectedCoords, campana, cultivoAnterior])
 
-  // Paso 2: Al presionar "Planificar" (o al ajustar objetivo/What-If ya planificado), consulta la recomendación
+  // Paso 2: Al presionar "Planificar" (o al ajustar objetivo/What-If ya planificado), consulta la recomendación.
+  // FRONT-36: si el backend falla nunca se muestran datos de ejemplo; se usa el último resultado
+  // real guardado de ese lote o un aviso claro con "Reintentar".
   useEffect(() => {
     if (!hasPlanned || !campana || !cultivoAnterior) {
       setIsSimulating(false)
@@ -301,6 +351,26 @@ export function App() {
     const controller = new AbortController()
     setSimulationError(null)
     setIsSimulating(true)
+    setAvisoDatos(null)
+
+    const conWhatIf =
+      whatIf.override_humedad_radicular_pct !== null || whatIf.variacion_lluvia_esperada_pct !== 0
+    const clave = claveResultado({
+      fieldId: selectedFieldId,
+      lat: selectedCoords.lat,
+      lon: selectedCoords.lon,
+      campana,
+      cultivoAnterior,
+      objetivo: objetivoProductor,
+    })
+    const guardado = conWhatIf ? null : leerUltimoResultado(clave)
+
+    // Render Free tarda 30–60 s en despertar: a los 5 s se avisa y, si hay, se muestra lo guardado.
+    const avisoDespertar = window.setTimeout(() => {
+      if (cancelled) return
+      setAvisoDatos({ tipo: 'despertando', consultadoEn: guardado?.consultadoEn ?? null })
+      if (guardado) setSimulationResult(guardado.respuesta)
+    }, 5000)
 
     const activeSavedField =
       !isDrawingNewField && editingPolygonField === null && selectedFieldId
@@ -321,6 +391,7 @@ export function App() {
           {
             ...(activeSavedField ? { field_id: activeSavedField.id } : {}),
             coordenadas: requestCoords,
+            coordenadas: selectedCoords,
             campana,
             cultivo_anterior: cultivoAnterior,
             objetivo_productor: objetivoProductor,
@@ -328,10 +399,15 @@ export function App() {
           },
           activeToken,
           controller.signal
+            field_id: authStatus === 'authenticated' ? selectedFieldId : null,
+          },
+          { token: authStatus === 'authenticated' ? activeToken : null, signal: controller.signal }
         )
         if (!cancelled) {
           setSimulationError(null)
           setSimulationResult(result)
+          setAvisoDatos(result.es_ejemplo ? { tipo: 'demo' } : null)
+          if (!conWhatIf) guardarUltimoResultado(clave, result)
         }
       } catch (err) {
         if (cancelled || controller.signal.aborted) return
@@ -348,6 +424,16 @@ export function App() {
             setSimulationError('Ocurrió un error inesperado')
             return
           }
+        if (cancelled) return
+        if (err instanceof SimulacionError && err.tipo === 'servicio_externo') {
+          setSimulationResult(null)
+          setAvisoDatos({ tipo: 'servicio_externo', fuente: err.fuente })
+        } else if (err instanceof SimulacionError && err.tipo === 'invalido') {
+          setSimulationResult(null)
+          setAvisoDatos({ tipo: 'invalido', mensaje: err.message })
+        } else {
+          setSimulationResult(guardado?.respuesta ?? null)
+          setAvisoDatos({ tipo: 'sin_conexion', consultadoEn: guardado?.consultadoEn ?? null })
         }
 
         setSimulationResult(
@@ -360,6 +446,7 @@ export function App() {
           })
         )
       } finally {
+        window.clearTimeout(avisoDespertar)
         if (!cancelled) {
           setIsSimulating(false)
         }
@@ -370,6 +457,7 @@ export function App() {
       cancelled = true
       controller.abort()
       window.clearTimeout(timer)
+      window.clearTimeout(avisoDespertar)
     }
   }, [
     hasPlanned,
@@ -385,6 +473,10 @@ export function App() {
     objetivoProductor,
     whatIf,
     simulationRetryCount,
+    selectedFieldId,
+    authStatus,
+    activeToken,
+    reintentoSimulacion,
   ])
 
   const handlePlan = () => {
@@ -501,22 +593,22 @@ export function App() {
       !activeToken ||
       !selectedFieldId
     ) {
-      setLatestFieldCampaign(null)
+      setFieldCampaigns([])
       return
     }
 
     const controller = new AbortController()
-    setLatestFieldCampaign(null)
+    setFieldCampaigns([])
 
     listFieldCampaigns(activeToken, selectedFieldId, controller.signal)
       .then((campaigns) => {
         if (!controller.signal.aborted) {
-          setLatestFieldCampaign(campaigns[0] ?? null)
+          setFieldCampaigns(campaigns)
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setLatestFieldCampaign(null)
+          setFieldCampaigns([])
         }
       })
 
@@ -524,6 +616,83 @@ export function App() {
       controller.abort()
     }
   }, [authStatus, activeToken, selectedFieldId])
+
+  // FRONT-37: campaña sembrada en curso (la más reciente, sin fecha de fin, sembrada hace menos
+  // de 9 meses y con rinde)
+  const campanaEnCurso = useMemo(() => {
+    const c = fieldCampaigns[0]
+    if (!c || c.fecha_fin || !CULTIVOS_CON_SEGUIMIENTO.has(c.cultivo)) return null
+    const dias = (Date.now() - Date.parse(`${c.fecha_inicio}T00:00:00`)) / 86_400_000
+    return dias >= 0 && dias <= 270 ? c : null
+  }, [fieldCampaigns])
+
+  // FRONT-34: "último cultivo" = la campaña más reciente que no es la que está creciendo ahora.
+  // La siembra en curso no es el antecesor del lote.
+  const latestFieldCampaign = useMemo(
+    () => fieldCampaigns.find((c) => c.id !== campanaEnCurso?.id) ?? null,
+    [fieldCampaigns, campanaEnCurso]
+  )
+
+  useEffect(() => {
+    setSeguimiento(null)
+    setSeguimientoAviso(null)
+    if (authStatus !== 'authenticated' || !activeToken || !selectedFieldId || !campanaEnCurso) {
+      setSeguimientoCargando(false)
+      return
+    }
+    const controller = new AbortController()
+    setSeguimientoCargando(true)
+    fetchSeguimiento(activeToken, selectedFieldId, campanaEnCurso.id, controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) setSeguimiento(res)
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        if (err instanceof SeguimientoError && err.tipo === 'servicio_externo') {
+          setSeguimientoAviso({ tipo: 'servicio_externo', fuente: err.fuente })
+        } else if (err instanceof SeguimientoError && err.tipo === 'invalido') {
+          setSeguimientoAviso({ tipo: 'invalido', mensaje: err.message })
+        } else {
+          setSeguimientoAviso({ tipo: 'sin_conexion' })
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSeguimientoCargando(false)
+      })
+    return () => controller.abort()
+  }, [authStatus, activeToken, selectedFieldId, campanaEnCurso, seguimientoReintento])
+
+  const handleRegistrarSiembra = async (datos: {
+    cultivo: CultivoId
+    campana: Campana
+    fechaSiembra: string
+  }) => {
+    if (!activeToken || !selectedFieldId) throw new Error('Iniciá sesión para registrar la siembra.')
+    const creada = await createCampaign(activeToken, selectedFieldId, {
+      campana: datos.campana,
+      cultivo: datos.cultivo,
+      fecha_inicio: datos.fechaSiembra,
+    })
+    setFieldCampaigns((previas) => [creada, ...previas])
+  }
+
+  // FRONT-38: cerrar la campaña en curso (cosecha y rinde real) o borrarla.
+  const handleCerrarCampana = async (datos: DatosCierre) => {
+    if (!activeToken || !selectedFieldId || !campanaEnCurso) return
+    const cerrada = await updateCampaign(activeToken, selectedFieldId, campanaEnCurso.id, {
+      fecha_fin: datos.fechaFin,
+      rinde_kg_ha: datos.rindeKgHa,
+      resultado_notas: datos.notas,
+    })
+    setFieldCampaigns((previas) => previas.map((c) => (c.id === cerrada.id ? cerrada : c)))
+  }
+
+  const handleBorrarCampana = async () => {
+    if (!activeToken || !selectedFieldId || !campanaEnCurso) return
+    const id = campanaEnCurso.id
+    await deleteCampaign(activeToken, selectedFieldId, id)
+    setFieldCampaigns((previas) => previas.filter((c) => c.id !== id))
+  }
 
   // Telemetría base para Info general y valor real de humedad en What-If
   const baselineResult = useMemo(() => {
@@ -546,12 +715,55 @@ export function App() {
     defaultField.cultivoAnteriorDefault,
   ])
 
-  // Fecha satelital histórica correspondiente al año elegido
-  const currentHistoricalGibsDate = useMemo(() => {
-    const series = getHistoricalSeriesForCoords(selectedCoords)
-    const found = series.find((r) => r.year === historicalYear)
-    return found?.gibsDate ?? '2024-11-08'
-  }, [selectedCoords, historicalYear])
+  // FRONT-39: historial real del lote (BACK-31), al abrir la pestaña o cambiar de lote
+  useEffect(() => {
+    if (activeTab !== 'historico') return
+    const controller = new AbortController()
+    setHistorialCargando(true)
+    setHistorialAviso(null)
+    const conSesion = authStatus === 'authenticated' && activeToken
+    fetchHistorial(selectedCoords, {
+      fieldId: conSesion ? selectedFieldId : null,
+      token: conSesion ? activeToken : null,
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (controller.signal.aborted) return
+        setHistorial(res)
+        setHistoricalYear((prev) => (prev != null && res.campanas.some((c) => c.anio === prev) ? prev : campanaInicial(res)))
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        setHistorial(null)
+        if (err instanceof SimulacionError && err.tipo === 'servicio_externo') {
+          setHistorialAviso({ tipo: 'servicio_externo', fuente: err.fuente })
+        } else if (err instanceof SimulacionError && err.tipo === 'invalido') {
+          setHistorialAviso({ tipo: 'invalido', mensaje: err.message })
+        } else {
+          setHistorialAviso({ tipo: 'sin_conexion' })
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setHistorialCargando(false)
+      })
+    return () => controller.abort()
+  }, [activeTab, selectedCoords, selectedFieldId, authStatus, activeToken, historialReintento, fieldCampaigns])
+
+  // Imagen satelital de la campaña elegida (15 de enero, pleno verano)
+  const currentHistoricalGibsDate = useMemo(
+    () => fechaGibsCampana(historicalYear ?? new Date().getFullYear() - 1),
+    [historicalYear]
+  )
+
+  const historialVisual = useMemo(
+    () =>
+      visualHistorico(
+        historial?.campanas.find((c) => c.anio === historicalYear) ?? null,
+        historicalMetric,
+        (id) => CULTIVOS_CATALOGO[id as CultivoId]?.nombre ?? id
+      ),
+    [historial, historicalYear, historicalMetric]
+  )
 
   // Solo los campos que caen dentro de las provincias seleccionadas
   const visibleFields = useMemo(
@@ -750,7 +962,7 @@ export function App() {
     })
   }
 
-  const handleSelectSearchLocation = (result: MapSearchResult) => {
+  const handleSelectSearchLocation = useCallback((result: MapSearchResult) => {
     setMapSearchTarget((prev) => ({
       label: result.label,
       coords: result.coords,
@@ -759,7 +971,7 @@ export function App() {
       polygons: result.polygons,
       requestId: (prev?.requestId ?? 0) + 1,
     }))
-  }
+  }, [])
 
   const handleStartDrawing = () => {
     setEditingPolygonField(null)
@@ -1173,9 +1385,10 @@ export function App() {
               customPolygon={customPolygon}
               historicalMode={{
                 active: activeTab === 'historico',
-                year: historicalYear,
+                year: historicalYear ?? new Date().getFullYear() - 1,
                 metric: historicalMetric,
                 gibsDateIso: currentHistoricalGibsDate,
+                visual: historialVisual,
               }}
               selectedProvinces={selectedProvinces}
               searchTarget={mapSearchTarget}
@@ -1271,6 +1484,32 @@ export function App() {
 
             {activeTab === 'planificacion' && (
               <>
+                {authStatus === 'authenticated' && selectedFieldId && campanaEnCurso && (
+                  <SeguimientoCampana
+                    nombreCultivo={CULTIVOS_CATALOGO[campanaEnCurso.cultivo as CultivoId]?.nombre ?? campanaEnCurso.cultivo}
+                    seguimiento={seguimiento}
+                    cargando={seguimientoCargando}
+                    aviso={seguimientoAviso}
+                    onReintentar={() => setSeguimientoReintento((n) => n + 1)}
+                    acciones={
+                      <AccionesCampana
+                        key={campanaEnCurso.id}
+                        nombreCultivo={CULTIVOS_CATALOGO[campanaEnCurso.cultivo as CultivoId]?.nombre ?? campanaEnCurso.cultivo}
+                        fechaSiembra={campanaEnCurso.fecha_inicio}
+                        onCerrar={handleCerrarCampana}
+                        onBorrar={handleBorrarCampana}
+                      />
+                    }
+                  />
+                )}
+                {authStatus === 'authenticated' && selectedFieldId && !campanaEnCurso && (
+                  <RegistrarSiembraForm onRegistrar={handleRegistrarSiembra} />
+                )}
+                {authStatus === 'demo' && (
+                  <section className="panel-section seguimiento-section seguimiento-demo">
+                    <p className="seg-invitacion">Registrate y guardá tu lote para seguir la campaña semana a semana.</p>
+                  </section>
+                )}
                 <CampaignConfigPanel
                   fieldName={selectedUserField?.nombre ?? null}
                   isDrawingField={isDrawingNewField || editingPolygonField !== null}
@@ -1295,6 +1534,13 @@ export function App() {
                         : 'Elija la prioridad de manejo y presione "Planificar" para generar la recomendación de cultivo.'}
                     </p>
                   </section>
+                )}
+
+                {hasPlanned && avisoDatos && (
+                  <AvisoEstadoDatos
+                    estado={avisoDatos}
+                    onReintentar={() => setReintentoSimulacion((n) => n + 1)}
+                  />
                 )}
 
                 {hasPlanned && isSimulating && !simulationResult && (
@@ -1334,16 +1580,24 @@ export function App() {
                           : undefined,
                       ])}
                       isWhatIfActive={isWhatIfActive}
+                      faseEnso={simulationResult.fase_enso}
+                      departamento={simulationResult.departamento_referencia}
                     />
 
-                    <WhatIfPanel
-                      whatIf={whatIf}
-                      nasaDetectedHumidityPct={
-                        baselineResult.telemetria_nasa.indice_humedad_radicular_pct
-                      }
-                      onChangeWhatIf={setWhatIf}
-                      onResetWhatIf={handleResetWhatIf}
-                    />
+                    {avisoDatos?.tipo === 'sin_conexion' ? (
+                      <section className="panel-section what-if-sin-conexion">
+                        <p>Necesitás conexión para simular escenarios.</p>
+                      </section>
+                    ) : (
+                      <WhatIfPanel
+                        whatIf={whatIf}
+                        nasaDetectedHumidityPct={
+                          baselineResult.telemetria_nasa.indice_humedad_radicular_pct
+                        }
+                        onChangeWhatIf={setWhatIf}
+                        onResetWhatIf={handleResetWhatIf}
+                      />
+                    )}
                   </>
                 )}
               </>
@@ -1401,12 +1655,16 @@ export function App() {
                 }
               >
                 <HistoricalPanel
-                  ubicacion={selectedCoords}
                   loteLabel={currentLoteLabel}
+                  historial={historial}
+                  cargando={historialCargando}
+                  aviso={historialAviso}
+                  onReintentar={() => setHistorialReintento((n) => n + 1)}
                   selectedYear={historicalYear}
                   selectedMetric={historicalMetric}
                   onChangeYear={setHistoricalYear}
                   onChangeMetric={setHistoricalMetric}
+                  nombreCultivo={(id) => CULTIVOS_CATALOGO[id as CultivoId]?.nombre ?? id}
                 />
               </Suspense>
             )}

@@ -294,3 +294,39 @@ def test_nasa_power_sin_geometry_da_none():
             return await fetch_daily_range(-33.95, -60.57, date(2024, 1, 1), date(2024, 1, 1), ["T2M"], client=client)
 
     assert asyncio.run(_go()).elevacion_m is None
+
+
+# ---------- BACK-32: modo segundo plano (cola de reintentos) ----------
+
+
+def _run_fondo(handler, lat_lon=PERGAMINO):
+    async def _go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await fetch_topografia(*lat_lon, client=client, segundo_plano=True)
+
+    return asyncio.run(_go())
+
+
+def _timeout(req):
+    raise httpx.ReadTimeout("timeout", request=req)
+
+
+def test_srtm_segundo_plano_consulta_con_corte_activo_y_no_lo_toca():
+    _run(_handler(_timeout))  # el tráfico en vivo abre el corte
+    registro = []
+    topo = _run_fondo(_handler(lambda r: httpx.Response(200, json=_respuesta_topo(LLANO_REAL)), registro=registro))
+    assert topo.fuente == "opentopodata_srtm30m" and "topo" in registro
+    assert srtm._corte.cortado  # el éxito en segundo plano no lo cierra
+
+
+def test_srtm_segundo_plano_timeout_largo_y_no_abre_corte():
+    timeouts = []
+
+    def topo(req):
+        timeouts.append(req.extensions["timeout"]["read"])
+        raise httpx.ReadTimeout("timeout", request=req)
+
+    resultado = _run_fondo(_handler(topo))
+    assert resultado.reintentar_srtm is True
+    assert timeouts == [srtm.TIMEOUT_SEGUNDO_PLANO_S]
+    assert not srtm._corte.cortado

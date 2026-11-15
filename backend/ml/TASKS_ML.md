@@ -50,6 +50,10 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `ML-13` | Años análogos desde 1981 (climatología y días de calor siguen en 2006–2025); `train_baseline --solo-evaluar` | `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/ml/generate_dataset.py`, `backend/ml/train_baseline.py`, `backend/ml/data/*`, `backend/ml/modelo_agro.joblib`, tests, `CONTEXT.md` | `ML-12` | `[x]` |
 | `ML-14` | Secuencias de rotación que respetan el invierno que ya pasó (antecesor o barbecho) y dejan la del perfil como "próximo ciclo" | `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `CONTEXT.md` | `ML-11` | `[x]` |
 | `ML-15` | Explicación en lenguaje de productor: escala MAGyP en palabras, contraste con números, práctica habitual y cultivos no sembrables | `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `CONTEXT.md` | `ML-14` | `[x]` |
+| `ML-16` | Distribución predictiva con el error real fuera de muestra (19 campañas): probabilidad de año malo con puerta por cultivo y tope, probabilidad típica y rango año malo / año bueno | `backend/ml/calibracion.py` (nuevo), `backend/ml/train_baseline.py`, `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/ml/visualize_model.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `backend/ml/reports/08_calibracion_anio_malo.png`, `CONTEXT.md` | `ML-15` | `[x]` |
+| `ML-17` | Rinde en kg/ha: tendencia MAGyP por departamento y cultivo, departamento más cercano a la coordenada, conversión de puntaje a kg/ha (esperado, año malo, año bueno, normal) y "lo normal" para los cultivos que no anticipan | `backend/ml/magyp.py`, `backend/ml/departamentos.py` (nuevo), `backend/ml/rinde.py` (nuevo), `backend/ml/data/tendencias_magyp.json` (nuevo), `backend/ml/calibracion.py`, `backend/ml/predictor.py`, `backend/ml/train_baseline.py`, `backend/ml/test_predictor.py`, `backend/ml/test_dataset_magyp.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-16` | `[x]` |
+| `ML-18` | Seguimiento en campaña: ventana mezclada (clima observado desde la siembra + resto de cada año análogo), serie semanal de probabilidad y rinde, distribución por nivel de avance y prueba retrospectiva en 19 campañas | `backend/ml/escenarios.py`, `backend/ml/predictor.py`, `backend/ml/train_baseline.py`, `backend/ml/visualize_model.py`, `backend/ml/test_predictor.py`, `backend/providers/features.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/reports/09_seguimiento_retrospectivo.png`, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-16`, `ML-17` | `[x]` |
+| `ML-19` | Mejorar el modelo de producción antes de prometer predicción por lote: más campañas (1990+, retoma ML-9), modelo directo con lo conocido al decidir y mejores features del período crítico; medido con la distribución fuera de muestra de ML-16 | `backend/ml/generate_dataset.py`, `backend/ml/magyp.py`, `backend/ml/train_baseline.py`, `backend/ml/predictor.py`, `backend/ml/data/*`, `backend/ml/modelo_agro.joblib`, tests, `CONTEXT.md` | `ML-16`, `ML-9` | `[ ]` |
 
 ---
 
@@ -573,4 +577,95 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Qué NO debe congelarse en `public.fields` para el modelo (variables dinámicas):**
   - `GWETROOT` (`gwetroot_saturacion_pct`), `GWETTOP` (`gwettop_saturacion_pct`), `tendencia_humedad_15d_pct`, `anomalia_lluvia_90d_pct`, `indice_aridez_evaporativa`, `riesgo_termico_verano`, `oni_actual` y `dias_hasta_siembra` dependen del clima reciente y de la fecha de consulta; deben seguir calculándose en vivo desde NASA POWER / ENSO / años análogos para no alterar la predicción.
 
+---
 
+### `[x]` ML-16: Distribución predictiva — probabilidad de año malo y rango real
+- **Objetivo:** Exponer lo que el modelo sabe de años malos como algo que se pueda creer: una probabilidad de año malo (rinde 15% o más bajo la tendencia, `UMBRAL_ANIO_MALO = 35`), la probabilidad típica del cultivo para comparar y un rango "año malo / año bueno" que de verdad deje 10% afuera de cada lado.
+- **Archivos:** `backend/ml/calibracion.py` (nuevo), `backend/ml/train_baseline.py`, `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/ml/visualize_model.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `backend/ml/reports/08_calibracion_anio_malo.png`, `CONTEXT.md`, `backend/ml/TASKS_ML.md`.
+- **Qué cambió respecto de la especificación original (decidido con el desarrollador el 2026-11-15, después de medir):**
+  1. **Datos de calibración: 19 campañas fuera de muestra, no val + test.** El modelo final se entrena con train + val, así que 2019–2021 no son fuera de muestra. `predicciones_fuera_de_muestra` entrena un modelo por campaña de train + val dejándola afuera (mismos hiperparámetros e iteraciones, ~7 s cada uno) y usa el modelo final en test.
+  2. **Lo que se encontró al medir así:**
+     - AUC de años malos 0,61 (no 0,78, que era solo el test, dominado por 2022/23). Dentro de una misma campaña, 0,535: el modelo anticipa en parte **qué años** vienen malos, no qué lotes andan peor ese año.
+     - **El P10 del ensemble no es un año malo:** el 39% de los rindes reales cae debajo (debería ser 10%). El ensemble solo mide la variación del clima entre años análogos (~6 puntos) y el rinde real varía ~24.
+     - La logística sobre promedio y P10 (lo especificado) daba +2,3% de Brier y en el tramo alto decía 49% cuando pasaba 28%. Probadas cinco variantes (global, por campaña, con probabilidad típica) e isotónica encima: todas iguales o peores.
+  3. **Método final: distribución del error real por cultivo.** `puntaje_real ≈ promedio + error`, con el error tomado de los 99 cuantiles de los residuos fuera de muestra de cada cultivo. De ahí salen, coherentes entre sí, `prob_anio_malo` = P(puntaje < 35) y `puntaje_anio_malo` / `puntaje_anio_bueno` (cuantiles 10 y 90).
+  4. **Tope de probabilidad** (`tope_prob`): la mayor frecuencia real observada en un tramo con al menos 1% de los casos, redondeada hacia arriba a 0,05. Hoy 0,35.
+  5. **Puerta por cultivo** (`prob_valida_por_cultivo`): la probabilidad solo se publica para los cultivos en los que le gana a la típica fuera de muestra. Para el resto: `prob_anio_malo = None`, `anticipa_diferencias = False`, y se informa la frecuencia habitual.
+  6. Se mantienen: sin la penalización por demanda hídrica (es el rinde del propio cultivo) y `None` en coberturas y camelina.
+- **Implementación:**
+  - `ml/calibracion.py`: funciones puras (`resumen_ensemble`, `cuantiles_ponderados`, `prob_menor`, `calibrar`, `prob_anio_malo`, `rango_predictivo`).
+  - `train_baseline.py`: `resumen_produccion`, `predicciones_fuera_de_muestra`, `calibrar_bundle` y flag `--solo-calibrar`. El entrenamiento completo también calibra. Bundle `2.1.0` con `calibracion_anio_malo` (versión 2).
+  - `predictor.predict_ensemble`: cada cultivo trae `prob_anio_malo`, `prob_anio_malo_tipica`, `anticipa_diferencias`, `puntaje_anio_malo` y `puntaje_anio_bueno` (`CAMPOS_DISTRIBUCION_PREDICTIVA`), también en `ranking_cultivos`. Bundles sin calibración: todo en `None`.
+  - Explicación: "su peor 10% de años da 45" pasa a "en los años análogos más desfavorables baja a 45", porque el P10 del ensemble no es el peor 10% de los rindes.
+  - `visualize_model.py`: `reports/08_calibracion_anio_malo.png` (diagrama, mejora por cultivo y probabilidad por campaña).
+- **Resultado de la Verificación (2026-11-15):**
+
+  | Métrica (fuera de muestra, 19 campañas) | Valor |
+  | :--- | :--- |
+  | Brier contra la probabilidad típica | +3,5% (sin 2022/23: +1,9%) ✅ criterio (> 0, y ≥ 0 sin 2022/23) |
+  | Maíz tardío / soja 2da / maíz temprano / soja 1ra | +8,0% / +7,2% / +5,5% / +4,3% → anticipan |
+  | Trigo / sorgo / girasol / cebada | −1,8% / −1,4% / −0,9% / −0,8% → solo frecuencia habitual |
+  | Diagrama | predicha 0,17 → real 0,21; 0,25 → 0,23; 0,34 → 0,33 |
+  | Debajo del año malo / arriba del año bueno | 10,8% / 10,3% |
+
+  `pytest -q`: en verde con 11 tests nuevos en `TestDistribucionPredictivaML16`.
+- **Límite:** la probabilidad se mueve poco (0,2–0,35) y por campaña no anticipa la magnitud de 2008/09 ni de 2022/23. Mejorarla es ML-19.
+
+---
+
+### `[x]` ML-17: Rinde en kg/ha
+- **Objetivo:** Traducir el puntaje (50 = año normal) a kilos por hectárea, que es como piensa el productor y lo que necesita el margen bruto: rinde esperado, rinde en un año malo y en un año bueno (`puntaje_anio_malo` / `puntaje_anio_bueno` de ML-16, **no** el P10/P90 del ensemble) y rinde normal del departamento.
+- **Archivos:** `backend/ml/magyp.py`, `backend/ml/departamentos.py` (nuevo), `backend/ml/rinde.py` (nuevo), `backend/ml/data/tendencias_magyp.json` (nuevo), `backend/ml/calibracion.py`, `backend/ml/predictor.py`, `backend/ml/train_baseline.py`, `backend/ml/test_predictor.py`, `backend/ml/test_dataset_magyp.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `CONTEXT.md`, `backend/ml/TASKS_ML.md`.
+- **Decisiones (2026-11-15):**
+  1. **Fórmula:** se invierte el label: `rinde_kg_ha = tendencia(departamento, cultivo, año) × (1 + (puntaje − 50) / 100)`. La tendencia es **la misma del label** (`ANIOS_TENDENCIA` = 2006–2024, no solo train como decía la especificación): así 50 da exactamente el rinde normal. Un test verifica que la tendencia exportada reproduce `tendencia_kgxha` del dataset, y otro que el JSON está al día.
+  2. **Departamento:** el de centroide más cercano (haversine) en `departamentos_pampa.json`; más allá de 75 km, fuera de cobertura. El backend puede pasar el departamento guardado del campo (`departamento_codigo`, BACK-28), que tiene prioridad.
+  3. **Cultivos que no anticipan (hoy trigo, cebada, girasol y sorgo): esperado = normal y rango = histórico del cultivo.** Al medir el error en kg/ha en test, en esos cultivos el modelo es **peor** que decir "lo normal" (trigo 587 contra 561 kg/ha, cebada 633 contra 612, girasol 225 contra 205; sorgo empata, 827 contra 830). Mostrar "4.700 kg/ha (+4%)" sería un desvío que el modelo no sabe estimar. `calibracion.puntaje_esperado` devuelve 50 y `rango_predictivo` usa los cuantiles 10 y 90 del puntaje real del cultivo (`cuantiles_puntaje_real`, calibración versión 3).
+  4. Sin la penalización hídrica, `maiz_temprano` y `maiz_tardio` con el mismo normal ("maíz" de MAGyP), coberturas y camelina sin rinde, y redondeo a 50 kg/ha.
+- **Implementación:**
+  - `magyp.py`: el ajuste por departamento × cultivo pasa a `_ajustar_grupo`, compartido por `calcular_labels` y `tendencias_por_departamento`. Comando `python -m ml.magyp --tendencias` → `data/tendencias_magyp.json` (171 departamentos, 928 pares, sin red).
+  - `departamentos.py`: `departamento_mas_cercano(lat, lon)` y `departamento_por_codigo(codigo)`. Sin dependencias fuera de `ml/`.
+  - `rinde.py`: `rinde_normal_kg_ha`, `rinde_desde_puntaje`, `rinde_kg_ha` y los motivos sin dato (`MOTIVO_SIN_MAGYP`, `MOTIVO_FUERA_DE_COBERTURA`, `MOTIVO_SIN_UBICACION`, y "No hay suficientes campañas de este cultivo en <departamento>").
+  - `predictor.py`: `predict_ensemble(..., departamento, motivo_sin_departamento)` agrega `rinde_kg_ha` a cada cultivo; `predict_and_recommend(..., departamento_codigo)` y `run_recommendation` resuelven el departamento (`resolver_departamento`). La respuesta trae `rinde_kg_ha` en el ranking y en `recomendacion_principal`, y `departamento_referencia` arriba (`None` fuera de cobertura).
+  - `train_baseline.py`: `mae_kg_ha_por_cultivo` → `metrics.mae_kg_ha_test_produccion` (modelo contra tendencia sola, por cultivo).
+- **Resultado de la Verificación (2026-11-15):**
+  - Error en kg/ha en test 2022–2024 (producción contra "lo normal"): soja 2da 439/508, soja 1ra 511/544, maíz temprano 1.102/1.146, maíz tardío 1.080/1.146 → se publica el del modelo; trigo 587/561, cebada 633/612, girasol 225/205, sorgo 827/830 → se publica lo normal.
+  - Pergamino (verano, 15/11/2026, perfil 46%): maíz temprano 8.100 kg/ha esperados (normal 7.700; año malo 5.100, año bueno 10.150); soja 1ra 4.500 (normal 4.300; 2.950–5.450); trigo 4.500 = normal (2.800–5.800). Cebada: "No hay suficientes campañas de este cultivo en Pergamino para estimar lo normal."
+  - `pytest -q`: 311 en verde (9 tests nuevos de ML-17).
+- **Límites:** es el rinde **del departamento**, no del lote; cerca de los límites entre departamentos el centroide puede elegir el vecino (faltan los polígonos del IGN).
+
+---
+
+### `[x]` ML-18: Seguimiento en campaña (ventana mezclada)
+- **Objetivo:** Antes de sembrar el modelo sabe poco (ML-16). Esta tarea recalcula la probabilidad de año malo y el rinde **durante la campaña**: los días del período crítico que ya pasaron se toman del clima observado y los que faltan, de cada año análogo.
+- **Archivos:** `backend/ml/escenarios.py`, `backend/ml/predictor.py`, `backend/ml/train_baseline.py`, `backend/ml/visualize_model.py`, `backend/ml/test_predictor.py`, `backend/providers/features.py` (helpers puros `tramo`, `features_de_tramos`, `contar_eventos`; coordinado con Backend), `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `backend/ml/reports/09_seguimiento_retrospectivo.png`, `CONTEXT.md`, `backend/ml/TASKS_ML.md`.
+- **Decisiones (2026-11-15):** las de la especificación (fecha de siembra = `campaigns.fecha_inicio`; estado del suelo, ONI y fase ENSO fijos al día de la siembra con `dias_hasta_siembra = 0`; sin reentrenar; solo los 8 cultivos con rinde MAGyP; un punto por semana), más:
+  - **Una distribución predictiva por nivel de avance** (0%, 25%, 50%, 75%, 100% del período crítico), medida fuera de muestra con el mismo esquema que ML-16 (`calibrar` en cada nivel). En producción se usa la del nivel más cercano. Sin ella, el rango no se achicaría nunca.
+  - La prueba retrospectiva usa las **19 campañas** (no solo 2022/23 y 2019/20): cada campaña con un modelo que no la vio, siembra en el inicio del calendario, estado del suelo y ONI de ese día.
+- **Implementación:**
+  - `escenarios.py`: `inicio_periodo_critico_real`, `dias_observados`, `ventana_mezclada`, `escenarios_en_curso` (con caché de pesos ENSO) y `clima_observado` (lluvia, días de calor, heladas y tormentas observados sin topes, y lluvia mediana de los análogos en los mismos días).
+  - `predictor.predict_seguimiento(...)`: serie desde la siembra (avance 0) y cada 7 días hasta el último dato; `etapa` (`previa` / `en_curso` / `terminado`), `observado`, probabilidad típica, `anticipa_diferencias`, rinde normal, fase ENSO de la siembra y `rango_por_avance`.
+  - `train_baseline.py --seguimiento`: `filas_seguimiento` + `seguimiento_retrospectivo` → `bundle["seguimiento"]` (bundle 2.2.0).
+- **Resultado de la Verificación (2026-11-15, 19.545 casos fuera de muestra):**
+
+  | Avance | MAE | AUC años malos | Brier vs. típica | Medio ancho del rango | 2022/23: prob. media (típica 0,24) | Cultivos que anticipan |
+  | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+  | 0% (siembra) | 18,56 | 0,609 | +3,4% | ±32 | 0,31 | 4 |
+  | 25% | 18,25 | 0,632 | +4,7% | ±32 | 0,33 | 4 |
+  | 50% | 17,91 | 0,655 | +6,7% | ±31 | 0,37 | 7 |
+  | 75% | 17,54 | 0,677 | +9,3% | ±30 | 0,42 | 7 |
+  | 100% | 17,23 | 0,695 | **+12,2%** | ±29 | **0,47** | 7 |
+
+  ✅ Criterio: el Brier al 100% es menor que al 0% y la mejora es monótona. En 2022/23 la probabilidad media llega casi al doble de la típica (0,47 contra 0,24) recién al terminar el período crítico.
+  `pytest -q`: 331 en verde (7 tests nuevos en `TestSeguimientoML18`).
+- **Límites:** el rango se achica poco (±32 → ±29 puntos): buena parte del error del rinde no depende del clima regional del período crítico (manejo, plagas, lote). El clima es regional (no ve tormentas locales) y NASA POWER publica con 3 a 7 días de atraso.
+
+---
+
+### `[ ]` ML-19: Mejorar el modelo de producción
+- **Objetivo:** ML-16 mostró que, antes de sembrar, el modelo le gana poco a la frecuencia habitual (+3,5% de Brier, AUC 0,61 fuera de muestra) y nada en trigo, cebada, girasol y sorgo. Antes de prometer predicción por lote hay que mejorarlo, y medirlo con el mismo criterio: la distribución fuera de muestra de ML-16 se recalcula sola en cada entrenamiento.
+- **Requiere reentrenar.** Palancas, en orden de impacto esperado:
+  1. **Más campañas (retoma ML-9):** 1990/91 en adelante. Cada campaña es una observación independiente del clima; hoy son 19. Tendencia flexible (siembra directa, soja RR) y verificar desde cuándo MAGyP separa soja de primera y de segunda.
+  2. **Modelo directo para producción:** entrenado solo con lo conocido al decidir (estado actual, ONI, cultivo, días a siembra), con los años análogos como features resumidas. El actual queda para el What-If y el seguimiento (ML-18).
+  3. **Mejores features del período crítico:** ET0 (Hargreaves), lluvia menos demanda, exceso hídrico (2017/18), umbral de calor por cultivo y calendario corrido por latitud.
+- **Criterio de aceptación:** mejora del Brier fuera de muestra contra la probabilidad típica mayor a la actual (+3,5%), sin empeorar sin 2022/23, y al menos un cultivo de invierno con mejora positiva.
+- **Definition of Done:** a definir con el desarrollador antes de empezar.

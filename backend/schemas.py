@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +192,15 @@ class FieldResponse(BaseModel):
     topo_localidad_fallback: str | None = None
     topo_distancia_fuente_km: float | None = None
     reintentar_srtm: bool = True
+    # BACK-28: departamento MAGyP de referencia (ML-17); None fuera de cobertura o en campos viejos
+    departamento_codigo: str | None = None
+    departamento_nombre: str | None = None
+    departamento_provincia: str | None = None
+    departamento_distancia_km: float | None = None
     created_at: datetime
+    # BACK-25: hay un reintento en segundo plano de ISRIC/SRTM para este campo. Mientras sea
+    # true, el frontend consulta GET /fields/{id} cada 30 s para ver si llegó el dato real.
+    reintento_en_curso: bool = False
 
     @field_validator("suelo_advertencias", "topo_advertencias", mode="before")
     @classmethod
@@ -224,6 +232,13 @@ class CampaignCreate(BaseModel):
     rinde_kg_ha: float | None = Field(default=None, ge=0)
     resultado_notas: str | None = Field(default=None, max_length=1000)
     simulacion_json: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _cosecha_despues_de_siembra(self) -> "CampaignCreate":
+        # BACK-30: fecha_inicio es la siembra y fecha_fin la cosecha (cierre de la campaña).
+        if self.fecha_fin is not None and self.fecha_fin < self.fecha_inicio:
+            raise ValueError("La fecha de cosecha no puede ser anterior a la de siembra.")
+        return self
 
 
 class CampaignUpdate(BaseModel):
@@ -275,6 +290,10 @@ class SimulateRequest(_Estricto):
     cultivo_anterior: str | None = None
     objetivo_productor: ObjetivoProductor = "equilibrio"
     simulacion_what_if: SimulacionWhatIf | None = None
+    # BACK-24: campo guardado. Con él, suelo y topografía salen de public.fields (si son reales)
+    # y lo que falte se busca y se guarda. Requiere Bearer token. Sin él, todo sigue como §5.
+    # BACK-28: el departamento guardado del campo define el rinde normal (ML-17).
+    field_id: UUID | None = None
 
     @field_validator("cultivo_anterior")
     @classmethod
@@ -332,14 +351,67 @@ class PeorEscenario(BaseModel):
     frecuencia_riesgo_helada: int
 
 
-class DistribucionHidroclimatica(BaseModel):
+class RindeKgHaOut(BaseModel):
+    """ML-17: rinde del departamento de referencia en kg/ha (redondeado a 50).
+
+    En los cultivos que no anticipan diferencias, ``esperado`` es el rinde normal y el rango es
+    el histórico del cultivo. Sin dato, los valores son ``None`` y ``motivo_sin_dato`` dice por qué.
+    """
+
+    esperado: float | None = None
+    anio_malo: float | None = None
+    anio_bueno: float | None = None
+    normal: float | None = None
+    motivo_sin_dato: str | None = None
+
+
+class CamposDistribucionPredictiva(BaseModel):
+    """ML-16: distribución predictiva con el error real del modelo (CONTEXT §4.8). Todo opcional."""
+
+    prob_anio_malo: float | None = Field(
+        default=None, ge=0, le=1,
+        description="Probabilidad de rinde 15% o más bajo lo normal. None si el cultivo no anticipa diferencias.",
+    )
+    prob_anio_malo_tipica: float | None = Field(
+        default=None, ge=0, le=1, description="Frecuencia habitual de años malos del cultivo."
+    )
+    anticipa_diferencias: bool | None = Field(
+        default=None, description="Si el sistema anticipa diferencias entre años para este cultivo."
+    )
+    puntaje_anio_malo: float | None = Field(
+        default=None, description="Puntaje en un año malo (cuantil 10 con el error real). No es el P10 del ensemble."
+    )
+    puntaje_anio_bueno: float | None = Field(
+        default=None, description="Puntaje en un año bueno (cuantil 90 con el error real). No es el P90 del ensemble."
+    )
+    rinde_kg_ha: RindeKgHaOut | None = None
+
+
+class DistribucionHidroclimatica(CamposDistribucionPredictiva):
     promedio: float
-    p10: float
+    p10: float = Field(description="P10 del clima de los años análogos (no el peor 10% de los rindes).")
     p90: float
     anios_desfavorables: int
     anios_evaluados: int
     umbral_desfavorable: float
     peor_escenario: PeorEscenario
+
+
+class DepartamentoReferenciaOut(BaseModel):
+    """ML-17: departamento MAGyP cuyo rinde normal se usa como referencia."""
+
+    codigo: str
+    nombre: str
+    provincia: str
+    distancia_km: float
+
+
+class FaseEnsoOut(BaseModel):
+    """Fase ENSO con la que se eligieron los años análogos (ML-12)."""
+
+    fase: Literal["nina", "neutro", "nino"]
+    oni: float
+    anios_analogos_desde: int
 
 
 class RecomendacionPrincipal(BaseModel):
@@ -348,12 +420,13 @@ class RecomendacionPrincipal(BaseModel):
     score_final: float
     sub_scores: SubScores
     distribucion_hidroclimatica: DistribucionHidroclimatica | None = None
+    rinde_kg_ha: RindeKgHaOut | None = None  # ML-17
     perfil_mercado: str
     factores_clave_ml: list[str]
     explicacion: str
 
 
-class ItemRanking(BaseModel):
+class ItemRanking(CamposDistribucionPredictiva):
     cultivo: str
     score_final: float
     riesgo: NivelRiesgo
@@ -412,6 +485,8 @@ class SimulateResponse(BaseModel):
     validacion_local_requerida: ValidacionLocal
     cobertura_12_meses: Cobertura12Meses
     comparacion_estrategias: list[EstrategiaRotacion]
+    departamento_referencia: DepartamentoReferenciaOut | None = None  # ML-17 (None fuera de cobertura)
+    fase_enso: FaseEnsoOut | None = None
     advertencias: list[str] = Field(
         default_factory=list,
         description="Avisos de calidad de dato (fallbacks de SoilGrids/SRTM, propiedades faltantes).",
@@ -470,4 +545,132 @@ class TelemetryResponse(BaseModel):
     telemetria_nasa: TelemetriaNasaInfoOut | None = None
     topografia_srtm: TopografiaTelemetriaOut | None = None
     perfil_suelo: PerfilSueloTelemetriaOut
+    advertencias: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Seguimiento de campaña (GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento — BACK-29)
+# ---------------------------------------------------------------------------
+
+EtapaSeguimiento = Literal["previa", "en_curso", "terminado"]
+
+
+class PuntoSeguimientoOut(BaseModel):
+    """Un punto de la serie semanal (ML-18): lo que se esperaba con lo observado hasta ``fecha``."""
+
+    fecha: date
+    dias_observados: int
+    avance: float = Field(ge=0, le=1, description="Fracción del período crítico ya observada.")
+    promedio: float
+    prob_anio_malo: float | None = Field(default=None, ge=0, le=1)
+    puntaje_anio_malo: float | None = None
+    puntaje_anio_bueno: float | None = None
+    rinde_kg_ha: RindeKgHaOut | None = None
+
+
+class ClimaObservadoOut(BaseModel):
+    """Clima de los días ya observados del período crítico (sin topes del modelo)."""
+
+    desde: date
+    dias: int
+    lluvia_mm: float
+    lluvia_normal_mm: float | None = Field(
+        default=None, description="Lluvia mediana de los años análogos en los mismos días."
+    )
+    dias_calor: int = Field(description="Días con más de 34 °C.")
+    heladas: int = Field(description="Días con menos de 2 °C.")
+    tormentas: int = Field(description="Días con más de 50 mm.")
+
+
+class FaseEnsoSiembraOut(BaseModel):
+    fase: Literal["nina", "neutro", "nino"]
+    oni: float
+
+
+class SeguimientoResponse(BaseModel):
+    """Cómo viene una campaña ya sembrada (ML-18 / BACK-29)."""
+
+    campana_id: UUID
+    cultivo: str
+    campana: Campana
+    fecha_siembra: date
+    etapa: EtapaSeguimiento
+    inicio_periodo_critico: date
+    fin_periodo_critico: date
+    dias_observados: int
+    dias_periodo_critico: int
+    fecha_ultimo_dato: date
+    serie: list[PuntoSeguimientoOut]
+    observado: ClimaObservadoOut | None = None
+    prob_anio_malo_tipica: float | None = Field(default=None, ge=0, le=1)
+    anticipa_diferencias: bool | None = None
+    rinde_normal_kg_ha: float | None = None
+    fase_enso_siembra: FaseEnsoSiembraOut | None = None
+    departamento_referencia: DepartamentoReferenciaOut | None = None
+    anios_analogos: int
+    rango_por_avance: bool = Field(
+        description="True si el rango usa la distribución medida para este avance (se achica al avanzar)."
+    )
+    calculado_el: date
+    advertencias: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Historial del lote por campaña (GET /api/v1/historial — BACK-31)
+# ---------------------------------------------------------------------------
+
+
+class RindeZonaOut(BaseModel):
+    """Rinde MAGyP del departamento en una campaña, contra su rinde normal (tendencia)."""
+
+    cultivo: str = Field(description="Cultivo MAGyP: trigo, cebada, maiz, soja_primera, soja_segunda, girasol, sorgo.")
+    rinde_kg_ha: float
+    normal_kg_ha: float | None = None
+    vs_normal_pct: int | None = None
+
+
+class CosechaLoteOut(BaseModel):
+    """Campaña guardada del lote (``public.campaigns``)."""
+
+    id: str
+    cultivo: str
+    fecha_siembra: date
+    fecha_cosecha: date | None = None
+    rinde_kg_ha: float | None = None
+    en_curso: bool
+
+
+class CampanaHistorialOut(BaseModel):
+    anio: int = Field(description="Año de inicio de la campaña agrícola (julio a junio).")
+    etiqueta: str = Field(description='Rótulo de la campaña, por ejemplo "2022/23".')
+    completa: bool = Field(description="False para la campaña en curso o con meses sin dato.")
+    meses_con_dato: int
+    lluvia_mm: float | None = None
+    lluvia_vs_normal_pct: int | None = Field(
+        default=None, description="Desvío contra lo normal; en la campaña en curso, solo de los meses completos."
+    )
+    lluvia_comparada_hasta: str | None = Field(
+        default=None, description='Campaña en curso: último mes completo comparado, "AAAA-MM".'
+    )
+    agua_raices_promedio_pct: int | None = None
+    mes_mas_seco: str | None = Field(default=None, description='Mes con menos agua en raíces, "AAAA-MM".')
+    agua_raices_mes_mas_seco_pct: int | None = None
+    agua_raices_mes_mas_seco_normal_pct: int | None = None
+    rinde_zona: list[RindeZonaOut] = Field(default_factory=list)
+    cosechas_lote: list[CosechaLoteOut] = Field(default_factory=list)
+
+
+class NormalesHistorialOut(BaseModel):
+    lluvia_mm: float | None = None
+    agua_raices_pct: int | None = None
+    campanas_completas: int
+
+
+class HistorialResponse(BaseModel):
+    """Información histórica real del lote por campaña agrícola (BACK-31)."""
+
+    ubicacion: Ubicacion
+    departamento_referencia: DepartamentoReferenciaOut | None = None
+    normales: NormalesHistorialOut
+    campanas: list[CampanaHistorialOut]
     advertencias: list[str] = Field(default_factory=list)

@@ -4,6 +4,7 @@ Uso (desde backend/):
     python -m providers.generar_precache nasa    # climatología + días de calor por celda pampeana
     python -m providers.generar_precache suelo   # perfil SoilGrids de los lotes de ejemplo
     python -m providers.generar_precache grilla  # BACK-19: grilla de suelo ISRIC (~100 km) -> Supabase
+    python -m providers.generar_precache subir-clima [--forzar]  # BACK-26: JSON de celdas -> Supabase
 
 Ambos son secuenciales (las consultas en paralelo a NASA POWER se colgaban y ISRIC limita a
 5 llamadas/minuto), reanudables (saltean lo ya generado con la versión vigente) y guardan
@@ -299,6 +300,43 @@ async def generar_grilla() -> None:
         print("Volvé a correr el comando para reintentar solo los que faltan.", flush=True)
 
 
+# ---------------------------------------------------------------------------
+# BACK-26: clima histórico por celda (climatologia_pampa.json) -> Supabase (provider_cache)
+# ---------------------------------------------------------------------------
+
+
+def subir_clima(forzar: bool = False, ruta: Path = RUTA_PRECALCULO) -> None:
+    """Sube las celdas vigentes del JSON a ``provider_cache`` (espacio ``nasa_hist``).
+
+    Reanudable: saltea las claves que ya están, salvo con ``--forzar`` (por ejemplo, después de
+    regenerar el JSON con otra ``version_calculo``).
+    """
+    from config import get_settings
+    from providers.cache_supabase import crear_cache_supabase
+    from providers.nasa_telemetry import ESPACIO_HIST
+
+    cache = crear_cache_supabase(get_settings())
+    if cache is None:
+        print("Falta SUPABASE_SECRET_KEY (o SUPABASE_URL) en backend/.env.")
+        sys.exit(1)
+    datos = _leer(ruta, "celdas", {})
+    celdas = {k: v for k, v in datos.get("celdas", {}).items() if v.get("version_calculo") == VERSION_CALCULO}
+    existentes = set() if forzar else cache.claves(ESPACIO_HIST)
+    pendientes = {k: v for k, v in celdas.items() if k not in existentes}
+    print(
+        f"Celdas vigentes ({VERSION_CALCULO}): {len(celdas)} | ya en Supabase: {len(celdas) - len(pendientes)} | "
+        f"a subir: {len(pendientes)}",
+        flush=True,
+    )
+    claves = sorted(pendientes)
+    lote = 10
+    for i in range(0, len(claves), lote):
+        cache.escribir_directo(ESPACIO_HIST, {k: pendientes[k] for k in claves[i : i + lote]}, tam_lote=lote)
+        print(f"  {min(i + lote, len(claves))}/{len(claves)}", flush=True)
+    total = len(cache.claves(ESPACIO_HIST))
+    print(f"Listo. Filas nasa_hist en Supabase: {total}", flush=True)
+
+
 if __name__ == "__main__":
     comando = sys.argv[1] if len(sys.argv) > 1 else ""
     if comando == "nasa":
@@ -307,6 +345,8 @@ if __name__ == "__main__":
         asyncio.run(generar_suelo())
     elif comando == "grilla":
         asyncio.run(generar_grilla())
+    elif comando == "subir-clima":
+        subir_clima(forzar="--forzar" in sys.argv[2:])
     else:
         print(__doc__)
         sys.exit(1)
