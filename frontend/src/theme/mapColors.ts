@@ -17,6 +17,24 @@ export const THEME_COLORS = {
   waterRainDark: '#2E5670',
   goldYellow: '#D99B26',
   earthBrown: '#8C5A3C',
+  terracotta: '#9E472A',
+  heatSoilLight: '#FF824F',
   primaryLighter: '#8AA15B',
   riskCritical: '#B8292F',
 } as const
+
+/**
+ * Paleta compartida entre las pills de campos y los polígonos en Leaflet (sin tonos verdes).
+ * Cada entrada se corresponde con una clase CSS `.field-chip-btn.<variant>` en App.css.
+ */
+export const FIELD_PALETTE = [
+  { variant: 'variant-coral', hex: THEME_COLORS.heatSoilLight },
+  { variant: 'variant-water', hex: THEME_COLORS.waterRainLight },
+  { variant: 'variant-gold', hex: THEME_COLORS.goldYellow },
+  { variant: 'variant-terracotta', hex: THEME_COLORS.terracotta },
+] as const
+
+export function getFieldColorByIndex(index: number) {
+  const safeIndex = index >= 0 ? index : 0
+  return FIELD_PALETTE[safeIndex % FIELD_PALETTE.length]
+}
