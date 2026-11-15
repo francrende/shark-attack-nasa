@@ -55,6 +55,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-22** | Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación | `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.css` | `FRONT-21` | `[x]` |
 | **FRONT-23** | Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-22` | `[x]` |
 | **FRONT-24** | Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL` | `frontend/.env.example`, `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx` | `FRONT-18`, `FRONT-23` | `[x]` |
+| **FRONT-25** | Actualización de Credenciales Demo (`demoereia@gmail.com`) para Autenticación Real en Supabase | `frontend/.env.example`, `frontend/src/services/fieldsClient.ts` | `FRONT-24` | `[x]` |
 
 ---
 
@@ -600,5 +601,17 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Configuración de API:** Se agrega `frontend/.env.example` (y `frontend/.env.local` para desarrollo local) con `VITE_API_URL=http://localhost:8000`.
   - **Contrato Auth (`BACK-3`):** `AuthResponse` acepta `access_token: string | null` y `requiere_confirmacion_email?: boolean` para manejar cuentas recién registradas que requieren confirmación por email en Supabase.
   - **Persistencia de sesión:** `authClient.ts` almacena y limpia `access_token` y `refresh_token` de forma consistente al iniciar y cerrar sesión.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-25: Actualización de Credenciales Demo (`demoereia@gmail.com`) para Autenticación Real en Supabase
+- **Objetivo:** Actualizar las credenciales de fallback y de ejemplo del Modo Demo para usar la cuenta confirmada en Supabase (`demoereia@gmail.com` / `contraseñadedemo`), reemplazando el dominio ficticio `demo@ereia.app` que Supabase rechaza en validación de email.
+- **Archivos Permitidos:**
+  - `frontend/.env.example`
+  - `frontend/src/services/fieldsClient.ts`
+- **Decisiones Acordadas con el Desarrollador:**
+  - El Modo Demo se autentica contra `/api/v1/auth/login` con `demoereia@gmail.com` / `contraseñadedemo` (sobrescribible vía `VITE_DEMO_EMAIL` y `VITE_DEMO_PASSWORD`).
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

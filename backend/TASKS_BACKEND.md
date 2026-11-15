@@ -40,6 +40,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-2` | Esquema SQL en Supabase (`profiles`, `fields`, `campaigns` + RLS) | `backend/sql/schema.sql` | `BACK-1` | `[x]` |
 | `BACK-3` | Endpoints de Auth y dependencia JWT (Supabase Auth) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/main.py` | `BACK-1`, `BACK-2` | `[x]` |
 | `BACK-4` | CRUD de Campos y Campañas/Resultados por Campo | `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py` | `BACK-2`, `BACK-3` | `[x]` |
+| `BACK-5` | Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email | `backend/TASKS_BACKEND.md` | `BACK-3` | `[x]` |
 
 ---
 
@@ -108,6 +109,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   4. Registrar ambos routers en `backend/main.py`.
 - **Definition of Done (Comando de Verificación):**
   - Crear un campo, agregar una campaña con fechas/cultivo/resultado y listar el historial del campo autenticado vía `/docs` o `pytest`/script de prueba.
+
+### `[x]` BACK-5: Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email
+- **Objetivo:** Verificar en vivo el servidor FastAPI conectado a Supabase Auth (`/health`, `/api/v1/auth/register`, `/api/v1/auth/login`), validar el usuario demo confirmado en Supabase y documentar la mitigación del `email rate limit exceeded` del SMTP gratuito de Supabase.
+- **Archivos Permitidos:** `backend/TASKS_BACKEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Usuario demo oficial en Supabase: `demoereia@gmail.com` (creado y confirmado manualmente en Supabase Auth).
+  - Para evitar el límite de ~2 correos/hora del SMTP gratuito de Supabase (`email rate limit exceeded`) durante pruebas y demo, se recomienda desactivar **Confirm email** en **Authentication → Providers → Email** del Dashboard de Supabase.
+- **Especificación Técnica:**
+  1. Levantar FastAPI con `uvicorn` en `http://127.0.0.1:8000` y verificar `GET /health` (`supabase_configured: True`).
+  2. Probar `POST /api/v1/auth/register` y `POST /api/v1/auth/login` con `demoereia@gmail.com` obteniendo `200 OK` y `access_token` JWT válido.
+- **Definition of Done (Comando de Verificación):**
+  - `GET http://127.0.0.1:8000/health` devuelve `{"status":"ok","supabase_configured":true}` y `POST /api/v1/auth/login` con `demoereia@gmail.com` devuelve `200 OK` con `access_token`.
 
 ---
 

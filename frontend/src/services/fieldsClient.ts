@@ -2,8 +2,8 @@ import type { FieldCreateRequest, UserField } from '../types/api'
 import { loginUser, requestBackendJson } from './authClient'
 
 const POLYGONS_STORAGE_KEY = 'ereia_field_polygons_v1'
-const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL || 'demo@ereia.app'
-const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || 'demo1234'
+const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL || 'demoereia@gmail.com'
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || 'contraseñadedemo'
 
 function readPolygonCache(): Record<string, [number, number][]> {
   try {
