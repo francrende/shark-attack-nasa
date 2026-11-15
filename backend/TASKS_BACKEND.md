@@ -496,6 +496,12 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m providers.generar_precache nasa`: 299/299 celdas en v2.
   - (Con red) `cd backend && python -m providers.check_features_live`: Pergamino da aridez de unos 0,75, 19 escenarios con calor de 1 a 51 días, y las 8 features actuales completas.
 
+> **Actualización desde el track de ML (ML-7, 15/11/2026):**
+> - **`nasa_telemetry`:** pasa a `telemetria-v3`. `ReferenciaHistorica` gana `calendario_lluvia` (lluvia diaria, 2 caracteres base 64 por día) y se regeneró `climatologia_pampa.json`: 299/299 celdas, 7,5 MB.
+> - **`features.py`:** suma `features_ventana` (tormentas, calor, heladas y lluvia de cualquier ventana), `calendario_lluvia` y `features_actuales_desde_series`, que es la función pura que comparten producción y entrenamiento. `InsumosML` gana `calendario_eventos`, `calendario_lluvia` y `oni_actual`.
+> - **`providers/enso.py` (nuevo):** ONI de NOAA CPC desde `data/oni.ascii.txt` empaquetado, con `actualizar_oni` opcional.
+> - **`simulation_service`:** arma los años análogos del período crítico de cada cultivo, ponderados por ONI (`ml/escenarios.py`), y pasa `fecha_corte` y `oni_actual`. `ItemRanking` gana `fuera_de_ventana_siembra`.
+
 ### `[x]` BACK-7: Endpoint `POST /api/v1/simulate`
 > **Verificación (15/11/2026):**
 > - **Tests:** 22 nuevos en `routers/test_simulate.py`, incluido uno de punta a punta con los providers reales y HTTP mockeado. La suite completa del backend da 203 en verde.

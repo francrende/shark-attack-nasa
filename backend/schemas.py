@@ -149,6 +149,7 @@ class ItemRanking(BaseModel):
     cultivo: str
     score_final: float
     riesgo: NivelRiesgo
+    fuera_de_ventana_siembra: bool = False  # ML-7: la siembra de este cultivo ya terminó
     score_hidroclimatico_p10: float | None = None
     anios_desfavorables: int | None = None
     anios_evaluados: int | None = None

@@ -336,4 +336,4 @@ def test_entrada_v1_en_cache_se_recalcula():
     ins = _construir(_handler(registro))
     assert "nasa_hist" in registro
     assert len(ins.escenarios_historicos) == 19
-    assert obtener_cache().get(nasa_telemetry.ESPACIO_HIST, clave)["version_calculo"] == "telemetria-v2"
+    assert obtener_cache().get(nasa_telemetry.ESPACIO_HIST, clave)["version_calculo"] == nasa_telemetry.VERSION_CALCULO

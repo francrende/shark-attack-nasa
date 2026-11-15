@@ -1,1178 +1,622 @@
-"""
-Generador del Dataset de Entrenamiento, Validación y Testeo (ML-1).
+"""Generador del dataset de entrenamiento con rindes reales de MAGyP (ML-6).
 
-Resuelve simultáneamente:
-1. Cero Domain Shift: Extrae ventanas reales de 90 días a partir de 20 años de series
-   diarias reales (2006-2025) de NASA POWER API (SMAP/GLDAS/GPM IMERG: PRECTOTCORR,
-   GWETROOT, GWETTOP, T2M_MAX, T2M_MIN, EVPTRNS), NASA SRTM 30m (OpenTopoData) e
-   ISRIC SoilGrids en 15 localidades agrícolas de Argentina, cacheadas localmente en
-   `backend/ml/data/nasa_raw_telemetry.json`.
-2. Cero Overfitting Espacial: Desacopla las variables estáticas (`elevacion_m`,
-   `pendiente_terreno_pct`, `textura_arcilla_pct`) aplicando variabilidad continua
-   intra-zona a escala de lote para impedir que los árboles memoricen coordenadas fijas.
-3. Cero Data Leakage Temporal: Divide el dataset mediante bloques cronológicos estrictos
-   (Out-of-Time Split):
-   - Train (70% - 11.550 filas):      Campañas históricas 2006-2019
-   - Validation (15% - 2.475 filas):  Campañas 2020-2022
-   - Test (15% - 2.475 filas):        Campañas recientes 2023-2025
+Uso (desde ``backend/``)::
+
+    python -m ml.generate_dataset                  # descargas faltantes + dataset
+    python -m ml.generate_dataset --solo-descargas # solo MAGyP, georef, suelo/topografía y NASA
+    python -m ml.generate_dataset --sin-red        # falla si falta algún dato en caché
+
+Pasos:
+1. **Label**: CSV de MAGyP → región pampeana → puntaje vs. tendencia (``magyp.py``).
+2. **Departamentos**: centroide de georef + suelo (SoilGrids 0–30 cm) y topografía (SRTM, Horn
+   3×3), con los providers del backend (Tarea C.3). Sin jitter: la variación espacial es real.
+3. **NASA POWER** diaria 2005-10 → 2025-12 por celda (deduplicada), secuencial y reanudable.
+4. **Filas**: por departamento × campaña × fecha t (cada 10 días, desde la habilitación de la
+   campaña hasta el fin de siembra de cada cultivo). Las features actuales salen de
+   ``providers.features.features_actuales_desde_series`` y las futuras del calendario de
+   eventos del backend (Tarea C.2): entrenamiento y producción calculan igual.
+5. **Split por campaña**, pesos ``1/n_ventanas``, filas FAO (coberturas) y What-If (label delta)
+   solo en train.
 """
 
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+import gzip
 import json
+import time
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-import httpx
 import numpy as np
 import pandas as pd
 
+from ml import calendario_siembra as cal
+from ml.fao_labels import CROP_CATALOG, FEATURE_COLUMNS, TARGET_COLUMN, compute_fao_hydroclimatic_score
+from ml.magyp import (
+    CULTIVO_MODELO_A_MAGYP,
+    PROVINCIAS_PAMPA,
+    calcular_labels,
+    descargar_csv,
+    filtrar_pampa,
+)
+
+__all__ = ["CROP_CATALOG", "FEATURE_COLUMNS", "TARGET_COLUMN", "compute_fao_hydroclimatic_score"]
+
 SEED = 42
-SAMPLES_PER_CROP_TRAIN = 1050  # 70% de 1500
-SAMPLES_PER_CROP_VAL = 225     # 15% de 1500
-SAMPLES_PER_CROP_TEST = 225    # 15% de 1500
+ML_DIR = Path(__file__).resolve().parent
+DATA_DIR = ML_DIR / "data"
+RAW_DIR = DATA_DIR / "raw"
+CACHE_NASA_DIR = DATA_DIR / "cache" / "nasa"
+MAGYP_CRUDO = RAW_DIR / "estimaciones_agricolas.csv"
+MAGYP_PAMPA = DATA_DIR / "magyp_pampa.csv"
+DEPARTAMENTOS_JSON = DATA_DIR / "departamentos_pampa.json"
+SALIDA_SPLIT = DATA_DIR / "dataset_magyp_{split}.csv.gz"
+SALIDA_ESCENARIOS = DATA_DIR / "dataset_magyp_escenarios.csv.gz"
+METADATA_JSON = DATA_DIR / "dataset_magyp_metadata.json"
 
-NASA_POWER_BASE_URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
-OPENTOPO_BASE_URL = "https://api.opentopodata.org/v1/srtm30m"
-SOILGRIDS_BASE_URL = "https://rest.isric.org/soilgrids/v2.0/properties/query"
+ANIOS_TRAIN = range(2006, 2019)  # campañas 2006/07 … 2018/19
+ANIOS_VAL = range(2019, 2022)  # 2019/20 … 2021/22
+ANIOS_TEST = range(2022, 2025)  # 2022/23 … 2024/25
+# ML-7: la tendencia de rinde se ajusta con todo el período (label = desvío vs. tendencia de
+# largo plazo, igual en todos los splits). Solo usa rindes, nunca clima.
+ANIOS_TENDENCIA = range(2006, 2025)
 
-# Las 12 features oficiales de entrada (X) definidas en CONTEXT.md (Sección 4.3)
-FEATURE_COLUMNS: list[str] = [
+NASA_INICIO = date(2005, 10, 1)  # 100 días antes de la primera ventana (feb-2006)
+NASA_FIN = date(2025, 12, 31)
+NASA_PARAMETROS = ["GWETROOT", "GWETTOP", "PRECTOTCORR", "T2M_MAX", "T2M_MIN", "EVPTRNS"]
+DIAS_SERIE_RECIENTE = 100  # igual que VENTANA_RECIENTE_DIAS del backend
+TIMEOUT_CELDA_S = 240.0
+REINTENTOS_RED = 3
+TIMEOUT_SUELO_OFFLINE_S = 90.0
+CONCURRENCIA_SUELO = 4
+INTERVALO_SUELO_S = 13.0  # < 5 llamadas/minuto de ISRIC
+ESPERAS_REINTENTO_S = (15.0, 30.0, 60.0, 310.0, 310.0)  # la última supera el corte automático (300 s)
+
+# 15 features del modelo ML-7: 8 actuales + 4 del período crítico + dias_hasta_siembra + ONI + cultivo
+FEATURE_COLUMNS_V2: list[str] = [
     "gwetroot_saturacion_pct",
     "gwettop_saturacion_pct",
     "tendencia_humedad_15d_pct",
     "anomalia_lluvia_90d_pct",
-    "frecuencia_tormentas_extremas",
-    "frecuencia_estres_termico",
-    "frecuencia_riesgo_helada",
     "indice_aridez_evaporativa",
     "pendiente_terreno_pct",
     "elevacion_m",
     "textura_arcilla_pct",
+    "frecuencia_tormentas_extremas",
+    "frecuencia_estres_termico",
+    "frecuencia_riesgo_helada",
+    "lluvia_periodo_critico_mm",
+    "dias_hasta_siembra",
+    "oni_actual",
     "cultivo_candidato",
 ]
+NUMERIC_FEATURES_V2: list[str] = FEATURE_COLUMNS_V2[:-1]
 
-TARGET_COLUMN = "s_hidroclimatico"
+CULTIVOS_COBERTURA = ("vicia_cobertura", "avena_cobertura", "camelina")
+PESO_COBERTURA_FAO = 0.5
+PESO_WHAT_IF = 0.25
+FRACCION_WHAT_IF = 0.15
 
-# 15 localidades representativas de la región agrícola argentina con valores de respaldo
-# (Cartas de Suelo GeoINTA / SRTM 30m) en caso de rate-limit de OpenTopoData o SoilGrids.
-AGRO_LOCATIONS: list[dict[str, Any]] = [
-    {
-        "id": "pergamino_ba",
-        "nombre": "Pergamino (Pampa Ondulada)",
-        "lat": -33.89,
-        "lon": -60.57,
-        "fallback_elev_m": 68.0,
-        "fallback_slope_pct": 1.15,
-        "fallback_clay_pct": 25.4,
-        "slope_spread": 0.65,
-        "clay_spread": 3.5,
-    },
-    {
-        "id": "venado_tuerto_sf",
-        "nombre": "Venado Tuerto (Sur Santa Fe)",
-        "lat": -33.75,
-        "lon": -61.97,
-        "fallback_elev_m": 112.0,
-        "fallback_slope_pct": 0.75,
-        "fallback_clay_pct": 23.8,
-        "slope_spread": 0.45,
-        "clay_spread": 3.2,
-    },
-    {
-        "id": "marcos_juarez_cba",
-        "nombre": "Marcos Juárez (Sudeste Córdoba)",
-        "lat": -32.70,
-        "lon": -62.10,
-        "fallback_elev_m": 114.0,
-        "fallback_slope_pct": 0.85,
-        "fallback_clay_pct": 24.5,
-        "slope_spread": 0.50,
-        "clay_spread": 3.4,
-    },
-    {
-        "id": "rio_cuarto_cba",
-        "nombre": "Río Cuarto (Suroeste Córdoba)",
-        "lat": -33.12,
-        "lon": -64.35,
-        "fallback_elev_m": 438.0,
-        "fallback_slope_pct": 1.95,
-        "fallback_clay_pct": 17.2,
-        "slope_spread": 1.10,
-        "clay_spread": 3.0,
-    },
-    {
-        "id": "trenque_lauquen_ba",
-        "nombre": "Trenque Lauquen (Pampa Arenosa)",
-        "lat": -35.97,
-        "lon": -62.73,
-        "fallback_elev_m": 96.0,
-        "fallback_slope_pct": 0.60,
-        "fallback_clay_pct": 15.8,
-        "slope_spread": 0.40,
-        "clay_spread": 2.8,
-    },
-    {
-        "id": "tandil_ba",
-        "nombre": "Tandil (Pampa Serrana / Sudeste)",
-        "lat": -37.32,
-        "lon": -59.13,
-        "fallback_elev_m": 188.0,
-        "fallback_slope_pct": 2.85,
-        "fallback_clay_pct": 27.6,
-        "slope_spread": 1.45,
-        "clay_spread": 4.0,
-    },
-    {
-        "id": "balcarce_ba",
-        "nombre": "Balcarce (Sudeste Bonaerense)",
-        "lat": -37.85,
-        "lon": -58.26,
-        "fallback_elev_m": 118.0,
-        "fallback_slope_pct": 2.10,
-        "fallback_clay_pct": 26.8,
-        "slope_spread": 1.15,
-        "clay_spread": 3.8,
-    },
-    {
-        "id": "tres_arroyos_ba",
-        "nombre": "Tres Arroyos (Sur Bonaerense / Fina)",
-        "lat": -38.37,
-        "lon": -60.28,
-        "fallback_elev_m": 108.0,
-        "fallback_slope_pct": 1.25,
-        "fallback_clay_pct": 24.9,
-        "slope_spread": 0.70,
-        "clay_spread": 3.5,
-    },
-    {
-        "id": "chascomus_ba",
-        "nombre": "Chascomús (Cuenca del Salado)",
-        "lat": -35.57,
-        "lon": -58.01,
-        "fallback_elev_m": 18.0,
-        "fallback_slope_pct": 0.30,
-        "fallback_clay_pct": 33.5,
-        "slope_spread": 0.25,
-        "clay_spread": 4.8,
-    },
-    {
-        "id": "parana_er",
-        "nombre": "Paraná (Lomadas Entrerrianas)",
-        "lat": -31.74,
-        "lon": -60.51,
-        "fallback_elev_m": 78.0,
-        "fallback_slope_pct": 2.45,
-        "fallback_clay_pct": 37.2,
-        "slope_spread": 1.25,
-        "clay_spread": 5.0,
-    },
-    {
-        "id": "rafaela_sf",
-        "nombre": "Rafaela (Centro Santa Fe)",
-        "lat": -31.25,
-        "lon": -61.49,
-        "fallback_elev_m": 99.0,
-        "fallback_slope_pct": 0.70,
-        "fallback_clay_pct": 28.4,
-        "slope_spread": 0.45,
-        "clay_spread": 3.8,
-    },
-    {
-        "id": "general_pico_lp",
-        "nombre": "General Pico (Noreste La Pampa)",
-        "lat": -35.66,
-        "lon": -63.75,
-        "fallback_elev_m": 143.0,
-        "fallback_slope_pct": 0.65,
-        "fallback_clay_pct": 14.9,
-        "slope_spread": 0.40,
-        "clay_spread": 2.7,
-    },
-    {
-        "id": "junin_ba",
-        "nombre": "Junín (Noroeste Bonaerense)",
-        "lat": -34.58,
-        "lon": -60.95,
-        "fallback_elev_m": 81.0,
-        "fallback_slope_pct": 0.80,
-        "fallback_clay_pct": 21.6,
-        "slope_spread": 0.50,
-        "clay_spread": 3.2,
-    },
-    {
-        "id": "azul_ba",
-        "nombre": "Azul (Centro Bonaerense)",
-        "lat": -36.78,
-        "lon": -59.86,
-        "fallback_elev_m": 136.0,
-        "fallback_slope_pct": 1.35,
-        "fallback_clay_pct": 29.8,
-        "slope_spread": 0.80,
-        "clay_spread": 4.2,
-    },
-    {
-        "id": "victoria_er",
-        "nombre": "Victoria (Sur Entre Ríos - Vertisoles)",
-        "lat": -32.62,
-        "lon": -60.15,
-        "fallback_elev_m": 54.0,
-        "fallback_slope_pct": 2.20,
-        "fallback_clay_pct": 38.5,
-        "slope_spread": 1.15,
-        "clay_spread": 5.2,
-    },
-]
-
-# Parámetros ecofisiológicos FAO GAEZ v4 / FAO-56 por cultivo calibrados para ventanas de 90 días en Argentina
-CROP_CATALOG: dict[str, dict[str, Any]] = {
-    # ================= CAMPAÑA FINA (INVIERNO) =================
-    "trigo": {
-        "id": 0,
-        "campana": "invierno",
-        "gwetroot_opt_min": 48.0,
-        "gwetroot_opt_max": 78.0,
-        "gwetroot_crit_min": 26.0,
-        "gwetroot_waterlog_max": 86.0,
-        "ky_drought": 1.08,
-        "ky_waterlog": 1.10,
-        "heat_tol": 4.0,
-        "heat_sens": 1.8,
-        "frost_tol": 22.0,
-        "frost_sens": 0.75,
-        "aridity_opt": 0.82,
-        "runoff_sens": 0.95,
-        "base_potential": 96.5,
-    },
-    "cebada": {
-        "id": 1,
-        "campana": "invierno",
-        "gwetroot_opt_min": 46.0,
-        "gwetroot_opt_max": 74.0,
-        "gwetroot_crit_min": 25.0,
-        "gwetroot_waterlog_max": 80.0,
-        "ky_drought": 1.02,
-        "ky_waterlog": 1.55,
-        "heat_tol": 3.5,
-        "heat_sens": 2.0,
-        "frost_tol": 20.0,
-        "frost_sens": 0.85,
-        "aridity_opt": 0.78,
-        "runoff_sens": 1.00,
-        "base_potential": 95.0,
-    },
-    "vicia_cobertura": {
-        "id": 2,
-        "campana": "invierno",
-        "gwetroot_opt_min": 38.0,
-        "gwetroot_opt_max": 76.0,
-        "gwetroot_crit_min": 20.0,
-        "gwetroot_waterlog_max": 83.0,
-        "ky_drought": 0.76,
-        "ky_waterlog": 1.20,
-        "heat_tol": 5.0,
-        "heat_sens": 1.5,
-        "frost_tol": 22.0,
-        "frost_sens": 0.65,
-        "aridity_opt": 0.70,
-        "runoff_sens": 0.70,
-        "base_potential": 91.0,
-    },
-    "avena_cobertura": {
-        "id": 3,
-        "campana": "invierno",
-        "gwetroot_opt_min": 36.0,
-        "gwetroot_opt_max": 82.0,
-        "gwetroot_crit_min": 19.0,
-        "gwetroot_waterlog_max": 88.0,
-        "ky_drought": 0.74,
-        "ky_waterlog": 0.88,
-        "heat_tol": 5.0,
-        "heat_sens": 1.6,
-        "frost_tol": 22.0,
-        "frost_sens": 0.70,
-        "aridity_opt": 0.72,
-        "runoff_sens": 0.65,
-        "base_potential": 91.5,
-    },
-    "camelina": {
-        "id": 4,
-        "campana": "invierno",
-        "gwetroot_opt_min": 30.0,
-        "gwetroot_opt_max": 70.0,
-        "gwetroot_crit_min": 16.0,
-        "gwetroot_waterlog_max": 81.0,
-        "ky_drought": 0.62,
-        "ky_waterlog": 1.35,
-        "heat_tol": 6.0,
-        "heat_sens": 1.4,
-        "frost_tol": 26.0,
-        "frost_sens": 0.55,
-        "aridity_opt": 0.60,
-        "runoff_sens": 0.80,
-        "base_potential": 88.0,
-    },
-    # ================= CAMPAÑA GRUESA (VERANO) =================
-    "maiz_temprano": {
-        "id": 5,
-        "campana": "verano",
-        "gwetroot_opt_min": 56.0,
-        "gwetroot_opt_max": 82.0,
-        "gwetroot_crit_min": 33.0,
-        "gwetroot_waterlog_max": 88.0,
-        "ky_drought": 1.38,
-        "ky_waterlog": 1.10,
-        "heat_tol": 4.0,
-        "heat_sens": 3.1,
-        "frost_tol": 2.5,
-        "frost_sens": 2.5,
-        "aridity_opt": 1.00,
-        "runoff_sens": 1.15,
-        "base_potential": 97.5,
-    },
-    "maiz_tardio": {
-        "id": 6,
-        "campana": "verano",
-        "gwetroot_opt_min": 45.0,
-        "gwetroot_opt_max": 78.0,
-        "gwetroot_crit_min": 24.0,
-        "gwetroot_waterlog_max": 88.0,
-        "ky_drought": 0.84,
-        "ky_waterlog": 1.05,
-        "heat_tol": 8.0,
-        "heat_sens": 1.6,
-        "frost_tol": 3.0,
-        "frost_sens": 2.2,
-        "aridity_opt": 0.76,
-        "runoff_sens": 0.90,
-        "base_potential": 92.5,
-    },
-    "soja_primera": {
-        "id": 7,
-        "campana": "verano",
-        "gwetroot_opt_min": 54.0,
-        "gwetroot_opt_max": 80.0,
-        "gwetroot_crit_min": 31.0,
-        "gwetroot_waterlog_max": 87.0,
-        "ky_drought": 1.25,
-        "ky_waterlog": 1.15,
-        "heat_tol": 5.0,
-        "heat_sens": 2.5,
-        "frost_tol": 2.0,
-        "frost_sens": 2.6,
-        "aridity_opt": 0.94,
-        "runoff_sens": 1.45,
-        "base_potential": 96.0,
-    },
-    "soja_segunda": {
-        "id": 8,
-        "campana": "verano",
-        "gwetroot_opt_min": 50.0,
-        "gwetroot_opt_max": 78.0,
-        "gwetroot_crit_min": 29.0,
-        "gwetroot_waterlog_max": 86.0,
-        "ky_drought": 1.28,
-        "ky_waterlog": 1.20,
-        "heat_tol": 6.0,
-        "heat_sens": 2.3,
-        "frost_tol": 2.0,
-        "frost_sens": 2.8,
-        "aridity_opt": 0.92,
-        "runoff_sens": 1.30,
-        "base_potential": 90.5,
-    },
-    "girasol": {
-        "id": 9,
-        "campana": "verano",
-        "gwetroot_opt_min": 40.0,
-        "gwetroot_opt_max": 70.0,
-        "gwetroot_crit_min": 19.0,
-        "gwetroot_waterlog_max": 78.0,
-        "ky_drought": 0.70,
-        "ky_waterlog": 1.65,
-        "heat_tol": 10.0,
-        "heat_sens": 1.2,
-        "frost_tol": 3.0,
-        "frost_sens": 2.0,
-        "aridity_opt": 0.66,
-        "runoff_sens": 1.05,
-        "base_potential": 90.2,
-    },
-    "sorgo": {
-        "id": 10,
-        "campana": "verano",
-        "gwetroot_opt_min": 38.0,
-        "gwetroot_opt_max": 76.0,
-        "gwetroot_crit_min": 16.0,
-        "gwetroot_waterlog_max": 90.0,
-        "ky_drought": 0.56,
-        "ky_waterlog": 0.85,
-        "heat_tol": 12.0,
-        "heat_sens": 1.0,
-        "frost_tol": 2.5,
-        "frost_sens": 2.2,
-        "aridity_opt": 0.60,
-        "runoff_sens": 0.72,
-        "base_potential": 91.0,
-    },
-}
+ORIGEN_MAGYP = "magyp_real"
+ORIGEN_COBERTURA = "fao_cobertura"
+ORIGEN_WHAT_IF = "whatif_delta"
 
 
-def _fetch_single_location(loc: dict[str, Any]) -> dict[str, Any]:
-    """Descarga 20 años de datos diarios reales de NASA POWER + SRTM + SoilGrids para una localidad."""
-    lat = loc["lat"]
-    lon = loc["lon"]
-    params = {
-        "parameters": "PRECTOTCORR,GWETROOT,GWETTOP,T2M_MAX,T2M_MIN,EVPTRNS",
-        "community": "AG",
-        "longitude": lon,
-        "latitude": lat,
-        "start": "20060101",
-        "end": "20251231",
-        "format": "JSON",
-    }
+def split_de(anio: int) -> str | None:
+    if anio in ANIOS_TRAIN:
+        return "train"
+    if anio in ANIOS_VAL:
+        return "val"
+    if anio in ANIOS_TEST:
+        return "test"
+    return None
 
-    with httpx.Client(timeout=45.0) as client:
-        resp = client.get(NASA_POWER_BASE_URL, params=params)
+
+# ---------------------------------------------------------------------------
+# 1. MAGyP
+# ---------------------------------------------------------------------------
+
+
+def cargar_magyp(sin_red: bool = False) -> pd.DataFrame:
+    if MAGYP_PAMPA.exists():
+        return pd.read_csv(MAGYP_PAMPA, dtype={"departamento_id": str})
+    if not MAGYP_CRUDO.exists():
+        if sin_red:
+            raise FileNotFoundError(f"Falta {MAGYP_PAMPA} y no se permite red")
+        print(f"Descargando MAGyP → {MAGYP_CRUDO}")
+        descargar_csv(MAGYP_CRUDO)
+    crudo = pd.read_csv(MAGYP_CRUDO, encoding="utf-8", dtype={"departamento_id": str}, low_memory=False)
+    df = filtrar_pampa(crudo)
+    df.to_csv(MAGYP_PAMPA, index=False)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# 2. Departamentos: centroide + suelo + topografía (providers del backend)
+# ---------------------------------------------------------------------------
+
+
+def _leer_json(ruta: Path) -> dict[str, Any]:
+    return json.loads(ruta.read_text(encoding="utf-8")) if ruta.exists() else {}
+
+
+def _guardar_json(ruta: Path, datos: Any) -> None:
+    tmp = ruta.with_suffix(ruta.suffix + ".tmp")
+    tmp.write_text(json.dumps(datos, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(ruta)
+
+
+# Códigos INDEC que cambiaron después de la serie de MAGyP (georef → MAGyP).
+# Chascomús pasó de 06217 a 06218 al crearse Lezama (06466); MAGyP mantiene el código viejo.
+GEOREF_A_MAGYP: dict[str, str] = {"06218": "06217"}
+
+
+async def cargar_centroides(ids: set[str], client: Any) -> dict[str, dict[str, Any]]:
+    deps = _leer_json(DEPARTAMENTOS_JSON)
+    faltan = ids - set(deps)
+    if not faltan:
+        return deps
+    for prov in PROVINCIAS_PAMPA:
+        resp = await client.get(
+            "https://apis.datos.gob.ar/georef/api/departamentos",
+            params={"provincia": prov, "max": 500, "campos": "id,nombre,centroide"},
+            timeout=30.0,
+        )
         resp.raise_for_status()
-        power_json = resp.json()
-
-        # Elevación de respaldo embebida en NASA POWER (geometry.coordinates[2])
-        coords = power_json.get("geometry", {}).get("coordinates", [lon, lat, loc["fallback_elev_m"]])
-        elev_m = float(coords[2]) if len(coords) >= 3 and coords[2] is not None else loc["fallback_elev_m"]
-        slope_pct = float(loc["fallback_slope_pct"])
-        srtm_source = "nasa_power_geometry_plus_geointa_slope"
-
-        # Intento de consulta a OpenTopoData SRTM 30m (punto central y desplazado ~100m)
-        try:
-            lat_offset = round(lat + 0.001, 6)
-            topo_resp = client.get(
-                OPENTOPO_BASE_URL,
-                params={"locations": f"{lat},{lon}|{lat_offset},{lon}"},
-                timeout=8.0,
-            )
-            if topo_resp.status_code == 200:
-                results = topo_resp.json().get("results", [])
-                if len(results) >= 2 and results[0].get("elevation") is not None and results[1].get("elevation") is not None:
-                    e0 = float(results[0]["elevation"])
-                    e1 = float(results[1]["elevation"])
-                    elev_m = e0
-                    calc_slope = abs(e1 - e0) / 111.0 * 100.0
-                    # Combinar pendiente puntual 30m con pendiente media de cuenca para evitar ruido de píxel nulo
-                    slope_pct = round(max(0.15, 0.5 * calc_slope + 0.5 * loc["fallback_slope_pct"]), 2)
-                    srtm_source = "opentopodata_srtm30m"
-        except Exception:
-            pass
-
-        # Intento de consulta a ISRIC SoilGrids (arcilla 0-30cm)
-        clay_pct = float(loc["fallback_clay_pct"])
-        soil_source = "geointa_soilgrids_calibrated"
-        try:
-            sg_resp = client.get(
-                SOILGRIDS_BASE_URL,
-                params={
-                    "lon": lon,
-                    "lat": lat,
-                    "property": "clay",
-                    "depth": "0-5cm",
-                    "value": "mean",
-                },
-                timeout=8.0,
-            )
-            if sg_resp.status_code == 200:
-                layers = sg_resp.json().get("properties", {}).get("layers", [])
-                if layers:
-                    val = layers[0].get("depths", [{}])[0].get("values", {}).get("mean")
-                    if val is not None and val > 0:
-                        clay_pct = round(float(val) / 10.0, 2)  # g/kg -> %
-                        soil_source = "isric_soilgrids_v2"
-        except Exception:
-            pass
-
-    daily_params = power_json["properties"]["parameter"]
-    return {
-        "id": loc["id"],
-        "nombre": loc["nombre"],
-        "lat": lat,
-        "lon": lon,
-        "elevacion_m": round(elev_m, 1),
-        "pendiente_terreno_pct": round(slope_pct, 2),
-        "textura_arcilla_pct": round(clay_pct, 2),
-        "slope_spread": loc["slope_spread"],
-        "clay_spread": loc["clay_spread"],
-        "srtm_source": srtm_source,
-        "soil_source": soil_source,
-        "daily": daily_params,
-    }
-
-
-def fetch_or_load_nasa_telemetry(cache_path: Path, force_refresh: bool = False) -> list[dict[str, Any]]:
-    """Carga el caché local de telemetría NASA o lo descarga desde las APIs reales si no existe."""
-    if cache_path.exists() and not force_refresh:
-        print(f"[Cache] Cargando telemetría histórica real de la NASA desde {cache_path.name}...")
-        return json.loads(cache_path.read_text(encoding="utf-8"))
-
-    print(f"[NASA API] Descargando 20 años (2006-2025) de series diarias reales en {len(AGRO_LOCATIONS)} localidades...")
-    results: list[dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_loc = {
-            executor.submit(_fetch_single_location, loc): loc for loc in AGRO_LOCATIONS
-        }
-        for future in as_completed(future_to_loc):
-            loc = future_to_loc[future]
-            data = future.result()
-            results.append(data)
-            print(
-                f"  ✓ {data['nombre']} ({data['lat']}, {data['lon']}) -> "
-                f"{len(data['daily']['GWETROOT'])} días | Elev: {data['elevacion_m']}m | "
-                f"Pendiente: {data['pendiente_terreno_pct']}% | Arcilla: {data['textura_arcilla_pct']}%"
-            )
-
-    # Ordenar determinísticamente por orden en AGRO_LOCATIONS
-    order_map = {loc["id"]: idx for idx, loc in enumerate(AGRO_LOCATIONS)}
-    results.sort(key=lambda item: order_map[item["id"]])
-
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(json.dumps(results, ensure_ascii=False), encoding="utf-8")
-    print(f"[Cache] Telemetría real guardada en {cache_path} ({cache_path.stat().st_size / (1024*1024):.2f} MB)")
-    return results
-
-
-def extract_real_90d_windows(telemetry_list: list[dict[str, Any]]) -> pd.DataFrame:
-    """
-    Convierte las series diarias crudas de 20 años de NASA POWER en ventanas históricas reales
-    de 90 días (con paso de 10 días para evitar solapamiento inmediato excesivo),
-    filtrando valores '-999.0' y calculando exactamente las 8 features hidroclimáticas.
-    Convierte las series diarias crudas de 20 años de NASA POWER en pares de ventanas
-    históricas reales de 90 días centradas en cada fecha de decisión t (con paso de 10 días):
-    - Ventana Pasada `win_past = [t - 89, t]` (90 días previos hasta hoy): estado hídrico
-      heredado en el suelo (`gwetroot_saturacion_pct`, `gwettop_saturacion_pct`,
-      `tendencia_humedad_15d_pct`, `anomalia_lluvia_90d_pct`, `indice_aridez_evaporativa`).
-    - Ventana Futura `win_future = [t + 1, t + 90]` (90 días posteriores a la decisión):
-      riesgos meteorológicos durante el ciclo del cultivo (`frecuencia_tormentas_extremas`,
-      `frecuencia_estres_termico`, `frecuencia_riesgo_helada`).
-    """
-    window_records: list[dict[str, Any]] = []
-
-    for loc in telemetry_list:
-        daily = loc["daily"]
-        dates = sorted(daily["PRECTOTCORR"].keys())
-
-        df_loc = pd.DataFrame(
-            {
-                "date_str": dates,
-                "prectotcorr": [float(daily["PRECTOTCORR"][d]) for d in dates],
-                "gwetroot": [float(daily["GWETROOT"][d]) for d in dates],
-                "gwettop": [float(daily["GWETTOP"][d]) for d in dates],
-                "t2m_max": [float(daily["T2M_MAX"][d]) for d in dates],
-                "t2m_min": [float(daily["T2M_MIN"][d]) for d in dates],
-                "evptrns": [float(daily.get("EVPTRNS", {}).get(d, -999.0)) for d in dates],
-            }
-        )
-        df_loc["date"] = pd.to_datetime(df_loc["date_str"], format="%Y%m%d")
-        df_loc["year"] = df_loc["date"].dt.year
-        df_loc["month"] = df_loc["date"].dt.month
-        df_loc["doy"] = df_loc["date"].dt.day_of_year
-
-        # Regla técnica obligatoria (CONTEXT.md 3.1.A): Filtrar lags y faltantes (-999 / < -900)
-        for col in ["prectotcorr", "gwetroot", "gwettop", "t2m_max", "t2m_min", "evptrns"]:
-            df_loc.loc[df_loc[col] < -900.0, col] = np.nan
-
-        # Interpolación/forward-fill suave sobre huecos aislados de satélite
-        df_loc[["prectotcorr", "gwetroot", "gwettop", "t2m_max", "t2m_min", "evptrns"]] = (
-            df_loc[["prectotcorr", "gwetroot", "gwettop", "t2m_max", "t2m_min", "evptrns"]]
-            .ffill()
-            .bfill()
-        )
-
-        # Suma móvil de 90 días de lluvia para construir la climatología de 20 años por día del año
-        df_loc["rain_90d"] = df_loc["prectotcorr"].rolling(window=90, min_periods=75).sum()
-        clim_rain_by_doy = df_loc.groupby("doy")["rain_90d"].mean().to_dict()
-
-        # Extraer ventanas reales cada 10 días desde el día 90 en adelante
-        for idx in range(90, len(df_loc), 10):
-            win = df_loc.iloc[idx - 89 : idx + 1]
-            last_row = win.iloc[-1]
-            row_15d_ago = win.iloc[-15]
-        # Extraer pares de ventanas reales cada 10 días asegurando 90 días hacia atrás y 90 hacia adelante
-        for idx in range(90, len(df_loc) - 90, 10):
-            win_past = df_loc.iloc[idx - 89 : idx + 1]
-            win_future = df_loc.iloc[idx + 1 : idx + 91]
-
-            last_row = win_past.iloc[-1]
-            row_15d_ago = win_past.iloc[-15]
-
-            # --- A. Ventana Pasada [t - 89, t]: Estado Hídrico y Memoria del Suelo ---
-            gwetroot_pct = float(last_row["gwetroot"]) * 100.0
-            gwettop_pct = float(last_row["gwettop"]) * 100.0
-            gwetroot_15d_ago_pct = float(row_15d_ago["gwetroot"]) * 100.0
-            gwettop_15d_ago_pct = float(row_15d_ago["gwettop"]) * 100.0
-
-            # Variación neta combinada (raíz + superficie) en los últimos 15 días válidos
-            # Variación neta combinada (raíz + superficie) en los últimos 15 días válidos [t - 14, t]
-            tendencia_15d_pct = 0.65 * (gwetroot_pct - gwetroot_15d_ago_pct) + 0.35 * (
-                gwettop_pct - gwettop_15d_ago_pct
-            )
-
-            rain_90d = float(win["prectotcorr"].sum())
-            rain_90d = float(win_past["prectotcorr"].sum())
-            doy = int(last_row["doy"])
-            hist_rain_90d = max(25.0, float(clim_rain_by_doy.get(doy, 180.0)))
-            anomalia_lluvia_90d_pct = ((rain_90d - hist_rain_90d) / hist_rain_90d) * 100.0
-
-            tormentas_extremas = int((win["prectotcorr"] > 50.0).sum())
-            estres_termico = int((win["t2m_max"] > 34.0).sum())
-            riesgo_helada = int((win["t2m_min"] < 2.0).sum())
-
-            # Demanda evaporativa acumulada en 90 días (EVPTRNS o aproximación Hargreaves si EVPTRNS<=0)
-            evap_90d = float(win["evptrns"].clip(lower=0.1).sum())
-            # Demanda evaporativa acumulada en los 90 días previos [t - 89, t]
-            evap_90d = float(win_past["evptrns"].clip(lower=0.1).sum())
-            if evap_90d < 45.0:
-                t_mean = 0.5 * (win["t2m_max"] + win["t2m_min"])
-                evap_90d = float(np.clip(t_mean * 0.16, 1.2, 6.5).sum())
-                t_mean_past = 0.5 * (win_past["t2m_max"] + win_past["t2m_min"])
-                evap_90d = float(np.clip(t_mean_past * 0.16, 1.2, 6.5).sum())
-
-            indice_aridez = rain_90d / max(30.0, evap_90d)
-
-            # --- B. Ventana Futura [t + 1, t + 90]: Riesgos Meteorológicos del Ciclo del Cultivo ---
-            tormentas_extremas = int((win_future["prectotcorr"] > 50.0).sum())
-            estres_termico = int((win_future["t2m_max"] > 34.0).sum())
-            riesgo_helada = int((win_future["t2m_min"] < 2.0).sum())
-
-            month = int(last_row["month"])
-            # Asignar estación agronómica de la ventana real:
-            # Meses 4..9 (Abril a Septiembre) -> ventana de campaña fina (invierno)
-            # Meses 10..12 y 1..3 (Octubre a Marzo) -> ventana de campaña gruesa (verano)
-            season_campana = "invierno" if 4 <= month <= 9 else "verano"
-            # Asignar estación agronómica según el centro de la ventana futura del ciclo [t + 1, t + 90]:
-            # Mes central 4..9 (Abril a Septiembre) -> ciclo de campaña fina (invierno)
-            # Mes central 10..12 y 1..3 (Octubre a Marzo) -> ciclo de campaña gruesa (verano)
-            future_mid_month = int(win_future.iloc[44]["month"])
-            season_campana = "invierno" if 4 <= future_mid_month <= 9 else "verano"
-
-            window_records.append(
-                {
-                    "location_id": loc["id"],
-                    "date": last_row["date_str"],
-                    "year": int(last_row["year"]),
-                    "past_start_year": int(win_past.iloc[0]["year"]),
-                    "future_end_year": int(win_future.iloc[-1]["year"]),
-                    "month": month,
-                    "season_campana": season_campana,
-                    "gwetroot_saturacion_pct": round(float(np.clip(gwetroot_pct, 5.0, 99.0)), 2),
-                    "gwettop_saturacion_pct": round(float(np.clip(gwettop_pct, 5.0, 99.0)), 2),
-                    "tendencia_humedad_15d_pct": round(float(np.clip(tendencia_15d_pct, -40.0, 40.0)), 2),
-                    "anomalia_lluvia_90d_pct": round(float(np.clip(anomalia_lluvia_90d_pct, -80.0, 140.0)), 2),
-                    "frecuencia_tormentas_extremas": int(np.clip(tormentas_extremas, 0, 12)),
-                    "frecuencia_estres_termico": int(np.clip(estres_termico, 0, 45)),
-                    "frecuencia_riesgo_helada": int(np.clip(riesgo_helada, 0, 55)),
-                    "indice_aridez_evaporativa": round(float(np.clip(indice_aridez, 0.08, 3.0)), 3),
-                    "base_pendiente_pct": float(loc["pendiente_terreno_pct"]),
-                    "base_elevacion_m": float(loc["elevacion_m"]),
-                    "base_arcilla_pct": float(loc["textura_arcilla_pct"]),
-                    "slope_spread": float(loc["slope_spread"]),
-                    "clay_spread": float(loc["clay_spread"]),
+        for d in resp.json()["departamentos"]:
+            dep_id = GEOREF_A_MAGYP.get(d["id"], d["id"])
+            if dep_id in faltan:
+                deps[dep_id] = {
+                    "nombre": d["nombre"],
+                    "provincia": PROVINCIAS_PAMPA[prov],
+                    "lat": round(d["centroide"]["lat"], 5),
+                    "lon": round(d["centroide"]["lon"], 5),
                 }
-            )
+    sin_match = sorted(ids - set(deps))
+    if sin_match:
+        print(f"AVISO: {len(sin_match)} departamentos MAGyP sin centroide en georef: {sin_match}")
+    _guardar_json(DEPARTAMENTOS_JSON, deps)
+    return deps
 
-    return pd.DataFrame(window_records)
+
+def _necesita_estaticos(dep: dict[str, Any]) -> bool:
+    return "suelo" not in dep or "topografia" not in dep or dep["suelo"].get("reintentar") or dep["topografia"].get("reintentar")
 
 
-def compute_fao_hydroclimatic_score(
-    features: dict[str, Any],
-    crop_name: str,
-    rng: np.random.Generator | None = None,
-    noise_std: float = 1.5,
-) -> float:
+async def completar_estaticos(deps: dict[str, dict[str, Any]], client: Any) -> None:
+    """Suelo y topografía por centroide, reintentando los fallbacks transitorios.
+
+    Offline se tolera la latencia de ISRIC (~30 s por consulta en horas pico): timeout largo y
+    hasta ``CONCURRENCIA_SUELO`` consultas en vuelo, lanzadas cada ``INTERVALO_SUELO_S`` para no
+    superar el límite de 5 llamadas/minuto. Producción no cambia (timeout de 8 s).
     """
-    Calcula el Puntaje de Aptitud Hidroclimática y Topográfica (S_hidroclimatico, 0 a 100)
-    integrando las curvas de respuesta FAO GAEZ v4 / FAO-56 y las interacciones no lineales
-    documentadas en CONTEXT.md (Sección 4.2, 4.3 y 4.4).
-    """
-    p = CROP_CATALOG[crop_name]
+    from providers import soilgrids
+    from providers.soilgrids import SoilGridsUnavailable, fetch_perfil_suelo
+    from providers.srtm import SrtmUnavailable, fetch_topografia
 
-    gwetroot = float(features["gwetroot_saturacion_pct"])
-    gwettop = float(features["gwettop_saturacion_pct"])
-    tendencia_15d = float(features["tendencia_humedad_15d_pct"])
-    anomalia_lluvia = float(features["anomalia_lluvia_90d_pct"])
-    tormentas = int(features["frecuencia_tormentas_extremas"])
-    estres_termico = int(features["frecuencia_estres_termico"])
-    riesgo_helada = int(features["frecuencia_riesgo_helada"])
-    aridez = float(features["indice_aridez_evaporativa"])
-    pendiente = float(features["pendiente_terreno_pct"])
-    elevacion = float(features["elevacion_m"])
-    arcilla = float(features["textura_arcilla_pct"])
+    soilgrids.TIMEOUT_S = TIMEOUT_SUELO_OFFLINE_S
+    semaforo = asyncio.Semaphore(CONCURRENCIA_SUELO)
+    ritmo = asyncio.Lock()
+    pendientes = [i for i, d in deps.items() if _necesita_estaticos(d)]
+    hechos = 0
 
-    # 1. Humedad efectiva en zona radicular ajustada por pérdida de infiltración en pendiente
-    # y retención por textura arcillosa (interacción SRTM + SoilGrids + GPM).
-    runoff_loss_pct = 0.0
-    if pendiente > 1.2:
-        infiltration_resistance = 1.0 + max(0.0, (arcilla - 28.0) / 35.0)
-        storm_amplifier = 1.0 + 0.22 * tormentas
-        runoff_loss_pct = (
-            (pendiente - 1.2)
-            * 1.65
-            * infiltration_resistance
-            * storm_amplifier
-            * p["runoff_sens"]
-        )
+    async def _paciente(dep, fetch, excepcion, flag: str, pausar: bool):
+        resultado = None
+        for espera in ESPERAS_REINTENTO_S:
+            if pausar:
+                async with ritmo:  # espacia los lanzamientos a ISRIC
+                    await asyncio.sleep(INTERVALO_SUELO_S)
+            try:
+                resultado = await fetch(dep["lat"], dep["lon"], client=client)
+                if not getattr(resultado, flag):
+                    return resultado
+            except excepcion as exc:
+                print(f"    {dep['nombre']}: {exc} — reintento en {espera:.0f}s")
+            await asyncio.sleep(espera)
+        return resultado
 
-    clay_retention_bonus = np.clip((arcilla - 20.0) * 0.14, -1.8, 2.5)
-    effective_gwetroot = gwetroot - 0.55 * runoff_loss_pct + clay_retention_bonus
+    async def _uno(dep_id: str) -> None:
+        nonlocal hechos
+        dep = deps[dep_id]
+        async with semaforo:
+            perfil = await _paciente(dep, fetch_perfil_suelo, SoilGridsUnavailable, "reintentar_soilgrids", True)
+        topo = await _paciente(dep, fetch_topografia, SrtmUnavailable, "reintentar_srtm", False)
+        hechos += 1
+        if perfil is None or topo is None:
+            print(f"  estáticos {hechos}/{len(pendientes)} {dep['nombre']}: sin dato, se reintenta en la próxima corrida")
+            return
+        dep["suelo"] = {"arcilla_pct": perfil.arcilla_pct, "fuente": perfil.fuente, "reintentar": perfil.reintentar_soilgrids}
+        dep["topografia"] = {
+            "elevacion_m": topo.elevacion_m,
+            "pendiente_terreno_pct": topo.pendiente_terreno_pct,
+            "fuente": topo.fuente,
+            "reintentar": topo.reintentar_srtm,
+        }
+        _guardar_json(DEPARTAMENTOS_JSON, deps)
+        print(f"  estáticos {hechos}/{len(pendientes)} {dep['nombre']}: arcilla {perfil.arcilla_pct} ({perfil.fuente}), "
+              f"pendiente {topo.pendiente_terreno_pct} ({topo.fuente})")
 
-    score = float(p["base_potential"])
+    print(f"Suelo y topografía: {len(pendientes)} departamentos por completar")
+    await asyncio.gather(*(_uno(d) for d in pendientes))
 
-    # 2. Respuesta al déficit hídrico radicular (Curva no lineal FAO-56 Ky)
-    opt_min = p["gwetroot_opt_min"]
-    opt_max = p["gwetroot_opt_max"]
-    crit_min = p["gwetroot_crit_min"]
-    ky = p["ky_drought"]
 
-    if effective_gwetroot < opt_min:
-        deficit_ratio = (opt_min - effective_gwetroot) / max(10.0, (opt_min - crit_min))
-        drought_penalty = 24.0 * ky * (deficit_ratio**1.35)
-        score -= drought_penalty
-    elif effective_gwetroot <= opt_max:
-        mid_opt = 0.5 * (opt_min + opt_max)
-        half_span = max(8.0, 0.5 * (opt_max - opt_min))
-        center_bonus = (1.8 + 1.8 * ky) * (1.0 - abs(effective_gwetroot - mid_opt) / half_span)
-        score += max(0.0, center_bonus)
+# ---------------------------------------------------------------------------
+# 3. NASA POWER por celda
+# ---------------------------------------------------------------------------
 
-    # 3. Respuesta al exceso hídrico / anegamiento (GWETROOT > umbral + arcilla alta + pendiente plana)
-    waterlog_max = p["gwetroot_waterlog_max"]
-    if gwetroot > waterlog_max:
-        excess = gwetroot - waterlog_max
-        poor_drainage_factor = 1.0
-        if arcilla > 32.0:
-            poor_drainage_factor += (arcilla - 32.0) / 25.0
-        if pendiente < 0.6:
-            poor_drainage_factor += (0.6 - pendiente) * 0.65
-        waterlog_penalty = (
-            1.45 * p["ky_waterlog"] * (excess**1.25) * poor_drainage_factor
-        )
-        score -= waterlog_penalty
 
-    # 4. Anomalía de precipitación de 90 días e Índice de Aridez Evaporativa (PRECTOTCORR / EVPTRNS)
-    if anomalia_lluvia < -10.0:
-        rain_def_scale = abs(anomalia_lluvia + 10.0) / 25.0
-        score -= 7.2 * (ky**1.15) * rain_def_scale
-    elif anomalia_lluvia > 35.0 and gwetroot > 78.0:
-        score -= 4.5 * p["ky_waterlog"] * ((anomalia_lluvia - 35.0) / 30.0)
+def _ruta_celda(clave: str) -> Path:
+    return CACHE_NASA_DIR / f"{clave.replace(',', '_')}.json.gz"
 
-    if aridez < p["aridity_opt"]:
-        aridity_gap = (p["aridity_opt"] - aridez) / max(0.35, p["aridity_opt"])
-        score -= 8.0 * ky * (aridity_gap**1.2)
 
-    # 5. Interacción crítica NO LINEAL: Golpes de Calor (T2M_MAX > 34°C) x Sequía Radicular (FAO-56)
-    # Con buena humedad radicular (>= 50%), la transpiración refrigera el canopeo y amplía la
-    # tolerancia térmica; con sequía (< 42%), el cierre estomático multiplica el daño por calor.
-    transpiration_heat_buffer = max(0.0, (effective_gwetroot - 46.0) * 0.28)
-    effective_heat_tol = p["heat_tol"] + transpiration_heat_buffer
-    if estres_termico > effective_heat_tol:
-        excess_heat_days = estres_termico - effective_heat_tol
-        if effective_gwetroot < 42.0:
-            moisture_stress_multiplier = 1.0 + 1.15 * ((42.0 - effective_gwetroot) / 20.0)
-            heat_penalty = excess_heat_days * p["heat_sens"] * moisture_stress_multiplier
+def leer_serie_celda(clave: str) -> Any | None:
+    from providers.nasa_power import dict_a_serie
+
+    ruta = _ruta_celda(clave)
+    if not ruta.exists():
+        return None
+    with gzip.open(ruta, "rt", encoding="utf-8") as f:
+        return dict_a_serie(json.load(f))
+
+
+async def descargar_celdas(deps: dict[str, dict[str, Any]], client: Any) -> None:
+    from providers.cache import clave_celda_power
+    from providers.nasa_power import fetch_daily_range, serie_a_dict
+
+    CACHE_NASA_DIR.mkdir(parents=True, exist_ok=True)
+    celdas: dict[str, tuple[float, float]] = {}
+    for dep in deps.values():
+        celdas.setdefault(clave_celda_power(dep["lat"], dep["lon"]), (dep["lat"], dep["lon"]))
+    pendientes = [(k, v) for k, v in celdas.items() if not _ruta_celda(k).exists()]
+    print(f"NASA POWER: {len(celdas)} celdas, {len(pendientes)} por descargar")
+    for n, (clave, (lat, lon)) in enumerate(pendientes, 1):
+        t0 = time.monotonic()
+        for intento in range(REINTENTOS_RED):
+            try:
+                serie = await asyncio.wait_for(
+                    fetch_daily_range(lat, lon, NASA_INICIO, NASA_FIN, NASA_PARAMETROS, client=client),
+                    TIMEOUT_CELDA_S,
+                )
+                break
+            except Exception as exc:  # noqa: BLE001 - red: reintentar y seguir
+                print(f"  celda {clave} intento {intento + 1} falló: {exc}")
+                await asyncio.sleep(10.0 * (intento + 1))
         else:
-            # Suelo húmedo: enfriamiento transpirativo amortigua la pendiente (sublineal y acotado)
-            cooling_factor = np.clip(0.68 - 0.011 * (effective_gwetroot - 42.0), 0.26, 0.68)
-            heat_penalty = min(
-                22.0,
-                (excess_heat_days**0.82) * p["heat_sens"] * cooling_factor,
-            )
-        score -= float(heat_penalty)
-
-    # 6. Riesgo de Helada (T2M_MIN < 2°C) e interacción con altitud (SRTM elevacion_m)
-    effective_frost_days = float(riesgo_helada) + max(0.0, (elevacion - 220.0) / 140.0)
-    if effective_frost_days > p["frost_tol"]:
-        excess_frost = effective_frost_days - p["frost_tol"]
-        score -= (excess_frost**0.90) * p["frost_sens"]
-
-    # 7. Anomalías físicas en curso (CONTEXT.md Sección 4.4):
-    # 7a. Pulso de Secado Rápido (Flash Drought Onset: tendencia_15d < -10%)
-    if tendencia_15d < -10.0:
-        drying_severity = abs(tendencia_15d + 10.0) / 12.0
-        evap_multiplier = 1.25 if aridez < 0.65 else 1.0
-        score -= 5.8 * ky * drying_severity * evap_multiplier
-
-    # 7b. Trampa de "Falsa Recarga" Superficial (GWETTOP > 58% pero GWETROOT < 36%)
-    if gwettop > 58.0 and gwetroot < 36.0:
-        decouple_gap = (gwettop - gwetroot) / 25.0
-        score -= 6.5 * (ky**1.3) * decouple_gap
-
-    # 7c. Suelo superficial extremadamente seco para emergencia/implantación (GWETTOP < 22%)
-    if gwettop < 22.0:
-        score -= (22.0 - gwettop) * 0.45 * ky
-
-    # 8. Penalización directa por escorrentía y tormentas torrenciales (> 50 mm/día) en pendiente
-    score -= 0.75 * runoff_loss_pct
-
-    # 9. Bonus de rusticidad defensiva en escenarios restrictivos (sequía radicular / déficit de lluvias)
-    if gwetroot <= 44.0 and anomalia_lluvia < -10.0:
-        rusticity_factor = max(0.0, 1.05 - ky)
-        drought_intensity = np.clip((44.0 - gwetroot) / 14.0, 0.3, 1.4)
-        score += 11.5 * rusticity_factor * drought_intensity
-
-    # 10. Ruido gaussiano leve (±1.5 pts) para evitar sobreajuste determinístico
-    if rng is not None and noise_std > 0.0:
-        score += float(rng.normal(0.0, noise_std))
-
-    return float(np.clip(round(score, 2), 0.0, 100.0))
+            continue
+        tmp = _ruta_celda(clave).with_suffix(".tmp")
+        with gzip.open(tmp, "wt", encoding="utf-8") as f:
+            json.dump(serie_a_dict(serie), f)
+        tmp.replace(_ruta_celda(clave))
+        print(f"  celda {n}/{len(pendientes)} {clave} ({time.monotonic() - t0:.1f}s)")
 
 
-def _build_split_from_real_windows(
-    windows_df: pd.DataFrame,
-    samples_per_crop: int,
-    split_name: str,
-    rng: np.random.Generator,
-) -> pd.DataFrame:
-    """
-    Construye un split (Train, Val o Test) tomando exclusivamente ventanas reales
-    del bloque de años correspondiente:
-    - 85% ventanas reales de NASA POWER con desacople espacial continuo de lote (SRTM/SoilGrids)
-    - 15% ventanas reales de ese mismo bloque perturbadas con escenarios What-If
-      (para cubrir los extremos de los sliders de simulación y pendientes/anomalías severas).
-    """
-    rows: list[dict[str, Any]] = []
-    n_pure_real = int(round(samples_per_crop * 0.85))
-    n_what_if = samples_per_crop - n_pure_real
-
-    for crop_name, crop_meta in CROP_CATALOG.items():
-        campana = crop_meta["campana"]
-        crop_id = crop_meta["id"]
-
-        season_pool = windows_df[windows_df["season_campana"] == campana].reset_index(drop=True)
-        if len(season_pool) == 0:
-            season_pool = windows_df.reset_index(drop=True)
-
-        # Estratificar selección de ventanas reales cubriendo cuartiles de humedad (secas, normales, húmedas)
-        q_labels = pd.qcut(
-            season_pool["gwetroot_saturacion_pct"].rank(method="first"),
-            q=4,
-            labels=False,
-        )
-        sampled_indices: list[int] = []
-        per_quartile = n_pure_real // 4
-        remainder = n_pure_real - (per_quartile * 4)
-
-        for q_idx in range(4):
-            q_pool = season_pool.index[q_labels == q_idx].to_numpy()
-            count_q = per_quartile + (1 if q_idx < remainder else 0)
-            chosen = rng.choice(q_pool, size=count_q, replace=len(q_pool) < count_q)
-            sampled_indices.extend(int(i) for i in chosen)
-
-        # 1. 85% Ventanas Reales de NASA POWER + Desacople Espacial Intra-Zona (Anti-Overfitting Espacial)
-        for idx in sampled_indices:
-            w = season_pool.iloc[idx]
-
-            # Desacople espacial: mezcla entre el perfil topográfico/edáfico local y variabilidad continua de lote
-            if rng.random() < 0.75:
-                elev = float(np.clip(w["base_elevacion_m"] + rng.normal(0.0, 18.0), 6.0, 580.0))
-                slope = float(
-                    np.clip(
-                        w["base_pendiente_pct"] + rng.normal(0.0, w["slope_spread"]),
-                        0.05,
-                        7.5,
-                    )
-                )
-                clay = float(
-                    np.clip(
-                        w["base_arcilla_pct"] + rng.normal(0.0, w["clay_spread"]),
-                        9.0,
-                        52.0,
-                    )
-                )
-            else:
-                # Cruce con otro perfil edáfico/topográfico regional para que clima y suelo generalicen libremente
-                other = AGRO_LOCATIONS[int(rng.integers(0, len(AGRO_LOCATIONS)))]
-                elev = float(np.clip(other["fallback_elev_m"] + rng.normal(0.0, 22.0), 6.0, 580.0))
-                slope = float(
-                    np.clip(
-                        rng.gamma(shape=1.6, scale=max(0.35, other["fallback_slope_pct"] * 0.75)),
-                        0.05,
-                        8.0,
-                    )
-                )
-                clay = float(
-                    np.clip(
-                        other["fallback_clay_pct"] + rng.normal(0.0, other["clay_spread"]),
-                        9.0,
-                        52.0,
-                    )
-                )
-
-            # Jitter mínimo de sub-celda satelital (~9km SMAP -> escala de lote)
-            gwetroot = float(np.clip(w["gwetroot_saturacion_pct"] + rng.normal(0.0, 1.2), 8.0, 99.0))
-            gwettop = float(np.clip(w["gwettop_saturacion_pct"] + rng.normal(0.0, 1.5), 6.0, 99.0))
-            tendencia = float(np.clip(w["tendencia_humedad_15d_pct"] + rng.normal(0.0, 0.8), -38.0, 38.0))
-            anomalia = float(np.clip(w["anomalia_lluvia_90d_pct"] + rng.normal(0.0, 1.5), -75.0, 130.0))
-            aridez = float(np.clip(w["indice_aridez_evaporativa"] + rng.normal(0.0, 0.03), 0.08, 2.8))
-
-            feat: dict[str, Any] = {
-                "gwetroot_saturacion_pct": round(gwetroot, 2),
-                "gwettop_saturacion_pct": round(gwettop, 2),
-                "tendencia_humedad_15d_pct": round(tendencia, 2),
-                "anomalia_lluvia_90d_pct": round(anomalia, 2),
-                "frecuencia_tormentas_extremas": int(w["frecuencia_tormentas_extremas"]),
-                "frecuencia_estres_termico": int(w["frecuencia_estres_termico"]),
-                "frecuencia_riesgo_helada": int(w["frecuencia_riesgo_helada"]),
-                "indice_aridez_evaporativa": round(aridez, 3),
-                "pendiente_terreno_pct": round(slope, 2),
-                "elevacion_m": round(elev, 1),
-                "textura_arcilla_pct": round(clay, 2),
-                "cultivo_candidato": crop_name,
-                "cultivo_id": crop_id,
-                "campana": campana,
-                "origen_muestra": f"nasa_real_{w['year']}",
-            }
-            feat[TARGET_COLUMN] = compute_fao_hydroclimatic_score(
-                feat, crop_name=crop_name, rng=rng, noise_std=1.5
-            )
-            rows.append(feat)
-
-        # 2. 15% Ventanas Reales perturbadas con escenarios What-If (extremos de sliders y anomalías)
-        what_if_indices = rng.choice(season_pool.index.to_numpy(), size=n_what_if, replace=True)
-        for idx in what_if_indices:
-            w = season_pool.iloc[int(idx)]
-            mode = int(rng.integers(0, 4))
-
-            gwetroot = float(w["gwetroot_saturacion_pct"])
-            gwettop = float(w["gwettop_saturacion_pct"])
-            tendencia = float(w["tendencia_humedad_15d_pct"])
-            anomalia = float(w["anomalia_lluvia_90d_pct"])
-            tormentas = int(w["frecuencia_tormentas_extremas"])
-            estres = int(w["frecuencia_estres_termico"])
-            helada = int(w["frecuencia_riesgo_helada"])
-            aridez = float(w["indice_aridez_evaporativa"])
-
-            if mode == 0:
-                # Escenario What-If Slider Seco / La Niña Severa
-                gwetroot = float(rng.uniform(12.0, 34.0))
-                gwettop = float(np.clip(gwetroot + rng.normal(-4.0, 6.0), 8.0, 48.0))
-                anomalia = float(np.clip(anomalia - rng.uniform(18.0, 45.0), -70.0, -15.0))
-                aridez = float(np.clip(aridez * rng.uniform(0.45, 0.75), 0.12, 0.70))
-                if campana == "verano":
-                    estres = int(np.clip(estres + rng.integers(3, 10), 4, 22))
-            elif mode == 1:
-                # Escenario What-If Slider Húmedo / El Niño / Anegamiento
-                gwetroot = float(rng.uniform(80.0, 97.0))
-                gwettop = float(np.clip(gwetroot + rng.normal(3.0, 4.0), 75.0, 99.0))
-                anomalia = float(np.clip(anomalia + rng.uniform(20.0, 50.0), 15.0, 120.0))
-                tormentas = int(np.clip(tormentas + rng.integers(1, 5), 1, 9))
-                aridez = float(np.clip(aridez * rng.uniform(1.25, 1.80), 1.10, 2.60))
-            elif mode == 2:
-                # Trampa de Falsa Recarga Superficial (GWETTOP > 60% con GWETROOT < 35%)
-                gwetroot = float(rng.uniform(16.0, 34.5))
-                gwettop = float(rng.uniform(60.0, 86.0))
-                tendencia = float(rng.normal(3.0, 5.0))
-            else:
-                # Pulso de Secado Rápido (Flash Drought) en lote con pendiente elevada
-                gwetroot = float(rng.uniform(22.0, 42.0))
-                tendencia = float(rng.uniform(-28.0, -14.0))
-
-            elev = float(np.clip(w["base_elevacion_m"] + rng.normal(0.0, 25.0), 8.0, 560.0))
-            slope = float(np.clip(rng.gamma(shape=1.8, scale=1.35), 0.10, 8.2))
-            clay = float(np.clip(w["base_arcilla_pct"] + rng.normal(0.0, 6.5), 10.0, 52.0))
-
-            feat = {
-                "gwetroot_saturacion_pct": round(gwetroot, 2),
-                "gwettop_saturacion_pct": round(gwettop, 2),
-                "tendencia_humedad_15d_pct": round(tendencia, 2),
-                "anomalia_lluvia_90d_pct": round(anomalia, 2),
-                "frecuencia_tormentas_extremas": tormentas,
-                "frecuencia_estres_termico": estres,
-                "frecuencia_riesgo_helada": helada,
-                "indice_aridez_evaporativa": round(aridez, 3),
-                "pendiente_terreno_pct": round(slope, 2),
-                "elevacion_m": round(elev, 1),
-                "textura_arcilla_pct": round(clay, 2),
-                "cultivo_candidato": crop_name,
-                "cultivo_id": crop_id,
-                "campana": campana,
-                "origen_muestra": f"nasa_whatif_{w['year']}",
-            }
-            feat[TARGET_COLUMN] = compute_fao_hydroclimatic_score(
-                feat, crop_name=crop_name, rng=rng, noise_std=1.5
-            )
-            rows.append(feat)
-
-    df_split = pd.DataFrame(rows)
-    ordered_cols = FEATURE_COLUMNS + ["cultivo_id", "campana", "origen_muestra", TARGET_COLUMN]
-    return df_split[ordered_cols].sample(frac=1.0, random_state=SEED).reset_index(drop=True)
+# ---------------------------------------------------------------------------
+# 4. Filas (funciones puras)
+# ---------------------------------------------------------------------------
 
 
-def build_and_save_all_splits(
-    windows_df: pd.DataFrame,
-    output_dir: Path,
-    telemetry_list: list[dict[str, Any]],
-    seed: int = SEED,
-) -> dict[str, Any]:
-    """
-    Realiza el corte Out-of-Time (por bloques de años reales de la NASA) para evitar
-    Data Leakage temporal y guarda train.csv (70%), val.csv (15%) y test.csv (15%).
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(seed)
+def recortar_serie(serie: Any, desde: date, hasta: date) -> Any:
+    """Sub-serie [desde, hasta] (como la ventana reciente que consulta producción)."""
+    from providers.nasa_power import NasaPowerDailySeries
 
-    # Bloques temporales estrictamente disjuntos:
-    # - Train: 2006 a 2019 (14 años de historia real)
-    # - Val:   2020 a 2022 (3 años de validación real, incluye La Niña 2020-2022)
-    # - Test:  2023 a 2025 (3 años de testeo futuro real, incluye fin de sequía 2023 y transición 2024-2025)
-    win_train = windows_df[windows_df["year"] <= 2019].copy()
-    win_val = windows_df[(windows_df["year"] >= 2020) & (windows_df["year"] <= 2022)].copy()
-    win_test = windows_df[windows_df["year"] >= 2023].copy()
-    # Bloques temporales estrictamente disjuntos (ni win_past ni win_future cruzan las fronteras):
-    # - Train: 2006 a 2019 (14 años de historia real, con future_end_year <= 2019)
-    # - Val:   2020 a 2022 (3 años de validación real, past_start_year >= 2020 y future_end_year <= 2022)
-    # - Test:  2023 a 2025 (3 años de testeo futuro real, past_start_year >= 2023)
-    win_train = windows_df[windows_df["future_end_year"] <= 2019].copy()
-    win_val = windows_df[
-        (windows_df["past_start_year"] >= 2020) & (windows_df["future_end_year"] <= 2022)
-    ].copy()
-    win_test = windows_df[windows_df["past_start_year"] >= 2023].copy()
-
-    df_train = _build_split_from_real_windows(win_train, SAMPLES_PER_CROP_TRAIN, "train", rng)
-    df_val = _build_split_from_real_windows(win_val, SAMPLES_PER_CROP_VAL, "val", rng)
-    df_test = _build_split_from_real_windows(win_test, SAMPLES_PER_CROP_TEST, "test", rng)
-
-    train_path = output_dir / "train.csv"
-    val_path = output_dir / "val.csv"
-    test_path = output_dir / "test.csv"
-
-    df_train.to_csv(train_path, index=False)
-    df_val.to_csv(val_path, index=False)
-    df_test.to_csv(test_path, index=False)
-
-    df_all = pd.concat([df_train, df_val, df_test], ignore_index=True)
-
-    # Benchmark del caso testigo de CONTEXT.md (Sección 5)
-    benchmark_features = {
-        "gwetroot_saturacion_pct": 34.0,
-        "gwettop_saturacion_pct": 28.5,
-        "tendencia_humedad_15d_pct": -12.0,
-        "anomalia_lluvia_90d_pct": -24.2,
-        "frecuencia_tormentas_extremas": 1,
-        "frecuencia_estres_termico": 6,
-        "frecuencia_riesgo_helada": 0,
-        "indice_aridez_evaporativa": 0.52,
-        "pendiente_terreno_pct": 1.8,
-        "elevacion_m": 78.5,
-        "textura_arcilla_pct": 24.5,
-    }
-    summer_benchmark = {
-        crop: compute_fao_hydroclimatic_score(
-            benchmark_features, crop_name=crop, rng=None, noise_std=0.0
-        )
-        for crop, meta in CROP_CATALOG.items()
-        if meta["campana"] == "verano"
-    }
-
-    metadata = {
-        "seed": seed,
-        "data_source": "NASA POWER API (2006-2025 daily SMAP/GLDAS/GPM IMERG) + NASA SRTM 30m + ISRIC SoilGrids / GeoINTA",
-        "anti_overfitting_strategy": {
-            "domain_shift_mitigation": "85% real 90-day NASA POWER windows (2006-2025) + 15% What-If slider perturbations over real windows",
-            "domain_shift_mitigation": "85% real NASA POWER dual-windows (past [-89d, t] for soil water + future [t+1, +90d] for crop-cycle risks) + 15% What-If slider perturbations",
-            "spatial_overfitting_mitigation": "Continuous intra-zone & cross-zone spatial jittering on elevacion_m, pendiente_terreno_pct, and textura_arcilla_pct",
-            "temporal_leakage_mitigation": "Strict Out-of-Time Temporal Block Split: Train (2006-2019), Val (2020-2022), Test (2023-2025)",
-            "temporal_leakage_mitigation": "Strict Out-of-Time Temporal Block Split with zero window overlap across boundaries: Train (2006-2019), Val (2020-2022), Test (2023-2025)",
-        },
-        "real_nasa_windows_extracted": {
-            "total_90d_windows": len(windows_df),
-            "train_pool_2006_2019": len(win_train),
-            "val_pool_2020_2022": len(win_val),
-            "test_pool_2023_2025": len(win_test),
-        },
-        "locations_count": len(telemetry_list),
-        "locations": [
-            {
-                "id": loc["id"],
-                "nombre": loc["nombre"],
-                "lat": loc["lat"],
-                "lon": loc["lon"],
-                "elevacion_m": loc["elevacion_m"],
-                "pendiente_terreno_pct": loc["pendiente_terreno_pct"],
-                "textura_arcilla_pct": loc["textura_arcilla_pct"],
-            }
-            for loc in telemetry_list
-        ],
-        "total_rows": len(df_all),
-        "splits": {
-            "train": {
-                "rows": len(df_train),
-                "ratio": round(len(df_train) / len(df_all), 4),
-                "years": "2006-2019",
-                "file": train_path.name,
-            },
-            "val": {
-                "rows": len(df_val),
-                "ratio": round(len(df_val) / len(df_all), 4),
-                "years": "2020-2022",
-                "file": val_path.name,
-            },
-            "test": {
-                "rows": len(df_test),
-                "ratio": round(len(df_test) / len(df_all), 4),
-                "years": "2023-2025",
-                "file": test_path.name,
-            },
-        },
-        "features_12": FEATURE_COLUMNS,
-        "target": TARGET_COLUMN,
-        "crops_catalog": {
-            k: {"id": v["id"], "campana": v["campana"]} for k, v in CROP_CATALOG.items()
-        },
-        "target_stats_by_crop": (
-            df_all.groupby("cultivo_candidato")[TARGET_COLUMN]
-            .agg(["count", "mean", "std", "min", "median", "max"])
-            .round(2)
-            .to_dict(orient="index")
-        ),
-        "context_md_drought_benchmark_summer": summer_benchmark,
-    }
-
-    metadata_path = output_dir / "dataset_metadata.json"
-    metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
-    return metadata
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Generador de Dataset ML con Telemetría Real NASA POWER")
-    parser.add_argument(
-        "--refresh-cache",
-        action="store_true",
-        help="Fuerza la descarga desde NASA POWER API incluso si existe nasa_raw_telemetry.json",
+    dias = [desde + timedelta(days=i) for i in range((hasta - desde).days + 1)]
+    return NasaPowerDailySeries(
+        lat=serie.lat,
+        lon=serie.lon,
+        start=desde,
+        end=hasta,
+        series={p: {d: v.get(d) for d in dias if d in v} for p, v in serie.series.items()},
     )
+
+
+def referencia_historica(serie: Any) -> Any:
+    """Climatología + calendario de eventos sobre 2006–2025, igual que el precálculo del backend."""
+    from providers.nasa_telemetry import HIST_END, HIST_PARAMETROS, HIST_START, calcular_referencia
+
+    hist = recortar_serie(serie, HIST_START, HIST_END)
+    hist = type(hist)(
+        lat=hist.lat, lon=hist.lon, start=hist.start, end=hist.end,
+        series={p: hist.series[p] for p in HIST_PARAMETROS},
+    )
+    return calcular_referencia(hist)
+
+
+def features_actuales_en(serie: Any, referencia: Any, corte: date, estaticos: dict[str, float]) -> dict[str, Any] | None:
+    """Las 8 features actuales en ``corte`` (misma función que producción) + ONI publicado."""
+    from providers.enso import oni_al
+    from providers.features import features_actuales_desde_series
+    from providers.nasa_power import NasaPowerUnavailable
+
+    reciente = recortar_serie(serie, corte - timedelta(days=DIAS_SERIE_RECIENTE - 1), corte)
+    try:
+        actuales = features_actuales_desde_series(reciente, corte, referencia.clim_por_doy, **estaticos)
+    except NasaPowerUnavailable:
+        return None
+    return {**actuales, "oni_actual": oni_al(corte)}
+
+
+def filas_departamento(
+    dep_id: str,
+    serie: Any,
+    estaticos: dict[str, float],
+    labels: dict[tuple[str, int], float],
+    anios: range,
+    escenarios_out: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Filas reales (MAGyP) y de cobertura (sin label aún) de un departamento.
+
+    Las features futuras son las **observadas en el período crítico** del cultivo en esa campaña.
+    Si se pasa ``escenarios_out``, agrega las features críticas de cada cultivo y año histórico del
+    departamento (para que ML-7 evalúe con años análogos, igual que producción).
+    """
+    from ml.escenarios import features_criticas
+
+    referencia = referencia_historica(serie)
+    cal_ev, cal_ll = referencia.calendario_eventos, referencia.calendario_lluvia
+    criticas: dict[tuple[str, int], dict[str, Any] | None] = {}
+
+    def _critica(cultivo: str, anio: int) -> dict[str, Any] | None:
+        if (cultivo, anio) not in criticas:
+            criticas[(cultivo, anio)] = features_criticas(cal_ev, cal_ll, cultivo, anio)
+        return criticas[(cultivo, anio)]
+
+    filas: list[dict[str, Any]] = []
+    for anio in anios:
+        for campana in ("invierno", "verano"):
+            cultivos = cal.cultivos_de(campana)
+            for t in cal.fechas_ventana(campana, anio):
+                actuales = None
+                for cultivo in cultivos:
+                    if t > cal.fin_siembra(cultivo, anio):
+                        continue
+                    magyp = CULTIVO_MODELO_A_MAGYP.get(cultivo)
+                    if magyp is not None and (magyp, anio) not in labels:
+                        continue
+                    critica = _critica(cultivo, anio)
+                    if critica is None:
+                        continue
+                    if actuales is None:
+                        actuales = features_actuales_en(serie, referencia, t, estaticos)
+                        if actuales is None:
+                            break
+                    filas.append(
+                        {
+                            "departamento_id": dep_id,
+                            "anio_campana": anio,
+                            "campana": campana,
+                            "fecha_t": t.isoformat(),
+                            **actuales,
+                            **critica,
+                            "dias_hasta_siembra": cal.dias_hasta_siembra(cultivo, t, anio),
+                            "cultivo_candidato": cultivo,
+                            "cultivo_id": CROP_CATALOG[cultivo]["id"],
+                            TARGET_COLUMN: labels[(magyp, anio)] if magyp is not None else np.nan,
+                            "origen_muestra": ORIGEN_MAGYP if magyp is not None else ORIGEN_COBERTURA,
+                        }
+                    )
+    if escenarios_out is not None:
+        for cultivo in cal.CALENDARIO:
+            for anio in sorted(cal_ev):
+                c = _critica(cultivo, anio)
+                if c is not None:
+                    escenarios_out.append({"departamento_id": dep_id, "cultivo_candidato": cultivo, "anio": anio, **c})
+    return filas
+
+
+def asignar_pesos(df: pd.DataFrame) -> pd.Series:
+    """1/n_ventanas por departamento × campaña × cultivo (cada campaña real pesa 1 en total)."""
+    n = df.groupby(["departamento_id", "anio_campana", "cultivo_candidato"])["fecha_t"].transform("size")
+    return 1.0 / n
+
+
+def ajustar_mapeo_cuantiles(fao: np.ndarray, label: np.ndarray, n: int = 101) -> tuple[np.ndarray, np.ndarray]:
+    q = np.linspace(0, 100, n)
+    x = np.percentile(fao, q)
+    y = np.percentile(label, q)
+    x, idx = np.unique(x, return_index=True)  # interp necesita x estrictamente creciente
+    return x, y[idx]
+
+
+def aplicar_mapeo(valores: np.ndarray, mapeo: tuple[np.ndarray, np.ndarray]) -> np.ndarray:
+    return np.interp(valores, mapeo[0], mapeo[1])
+
+
+def _fao(fila: dict[str, Any]) -> float:
+    return compute_fao_hydroclimatic_score(fila, crop_name=fila["cultivo_candidato"], rng=None, noise_std=0.0)
+
+
+def perturbar_what_if(fila: dict[str, Any], rng: np.random.Generator) -> dict[str, Any]:
+    """Escenarios extremos de ML-1 (seco, húmedo, falsa recarga, secado rápido), sin tocar estáticos."""
+    from providers.features import aplicar_topes
+
+    f = dict(fila)
+    modo = int(rng.integers(0, 4))
+    if modo == 0:
+        f["gwetroot_saturacion_pct"] = float(rng.uniform(12.0, 34.0))
+        f["gwettop_saturacion_pct"] = float(np.clip(f["gwetroot_saturacion_pct"] + rng.normal(-4.0, 6.0), 8.0, 48.0))
+        f["anomalia_lluvia_90d_pct"] = float(np.clip(f["anomalia_lluvia_90d_pct"] - rng.uniform(18.0, 45.0), -70.0, -15.0))
+        f["indice_aridez_evaporativa"] = float(np.clip(f["indice_aridez_evaporativa"] * rng.uniform(0.45, 0.75), 0.12, 0.70))
+        f["lluvia_periodo_critico_mm"] = float(f["lluvia_periodo_critico_mm"] * rng.uniform(0.4, 0.7))
+        if f["campana"] == "verano":
+            f["frecuencia_estres_termico"] = int(np.clip(f["frecuencia_estres_termico"] + rng.integers(3, 10), 4, 45))
+    elif modo == 1:
+        f["gwetroot_saturacion_pct"] = float(rng.uniform(80.0, 97.0))
+        f["gwettop_saturacion_pct"] = float(np.clip(f["gwetroot_saturacion_pct"] + rng.normal(3.0, 4.0), 75.0, 99.0))
+        f["anomalia_lluvia_90d_pct"] = float(np.clip(f["anomalia_lluvia_90d_pct"] + rng.uniform(20.0, 50.0), 15.0, 120.0))
+        f["frecuencia_tormentas_extremas"] = int(np.clip(f["frecuencia_tormentas_extremas"] + rng.integers(1, 5), 1, 9))
+        f["indice_aridez_evaporativa"] = float(np.clip(f["indice_aridez_evaporativa"] * rng.uniform(1.25, 1.80), 1.10, 2.60))
+        f["lluvia_periodo_critico_mm"] = float(f["lluvia_periodo_critico_mm"] * rng.uniform(1.3, 1.8))
+    elif modo == 2:
+        f["gwetroot_saturacion_pct"] = float(rng.uniform(16.0, 34.5))
+        f["gwettop_saturacion_pct"] = float(rng.uniform(60.0, 86.0))
+        f["tendencia_humedad_15d_pct"] = float(rng.normal(3.0, 5.0))
+    else:
+        f["gwetroot_saturacion_pct"] = float(rng.uniform(22.0, 42.0))
+        f["tendencia_humedad_15d_pct"] = float(rng.uniform(-28.0, -14.0))
+    numericas = {k: f[k] for k in FEATURE_COLUMNS_V2[:-1] if k not in ("dias_hasta_siembra", "oni_actual")}
+    f.update(aplicar_topes(numericas))
+    return f
+
+
+def construir_dataset(filas: list[dict[str, Any]], seed: int = SEED) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Split, pesos, mapeo FAO→MAGyP, filas de cobertura y What-If (solo train)."""
+    rng = np.random.default_rng(seed)
+    df = pd.DataFrame(filas)
+    df["split"] = df["anio_campana"].map(split_de)
+    df = df[df["split"].notna()].copy()
+
+    reales = df[df["origen_muestra"] == ORIGEN_MAGYP].copy()
+    reales["sample_weight"] = asignar_pesos(reales)
+
+    # Mapeo FAO → escala MAGyP por campaña, ajustado solo con train
+    reales["fao_raw"] = [_fao(r) for r in reales.to_dict("records")]
+    mapeos: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for campana, g in reales[reales["split"] == "train"].groupby("campana"):
+        mapeos[campana] = ajustar_mapeo_cuantiles(g["fao_raw"].to_numpy(), g[TARGET_COLUMN].to_numpy())
+
+    # Coberturas (FAO mapeado), solo train
+    cob = df[(df["origen_muestra"] == ORIGEN_COBERTURA) & (df["split"] == "train")].copy()
+    if len(cob):
+        cob[TARGET_COLUMN] = [
+            float(aplicar_mapeo(np.array([_fao(r)]), mapeos[r["campana"]])[0]) for r in cob.to_dict("records")
+        ]
+        cob["sample_weight"] = PESO_COBERTURA_FAO * asignar_pesos(cob)
+
+    # What-If con label delta, solo train
+    train_reales = reales[reales["split"] == "train"]
+    n_wi = int(round(FRACCION_WHAT_IF * len(train_reales)))
+    elegidas = train_reales.sample(n=n_wi, random_state=seed) if n_wi else train_reales.iloc[:0]
+    wi_filas = []
+    for r in elegidas.to_dict("records"):
+        p = perturbar_what_if(r, rng)
+        mapeo = mapeos[r["campana"]]
+        delta = aplicar_mapeo(np.array([_fao(p)]), mapeo)[0] - aplicar_mapeo(np.array([r["fao_raw"]]), mapeo)[0]
+        p[TARGET_COLUMN] = float(np.clip(r[TARGET_COLUMN] + delta, 0.0, 100.0))
+        p["sample_weight"] = PESO_WHAT_IF * r["sample_weight"]
+        p["origen_muestra"] = ORIGEN_WHAT_IF
+        wi_filas.append(p)
+    wi = pd.DataFrame(wi_filas)
+
+    final = pd.concat([reales.drop(columns="fao_raw"), cob, wi.drop(columns="fao_raw", errors="ignore")], ignore_index=True)
+    final[TARGET_COLUMN] = final[TARGET_COLUMN].astype(float).round(2)
+    columnas = [
+        "split", "origen_muestra", "departamento_id", "anio_campana", "campana", "fecha_t",
+        *NUMERIC_FEATURES_V2, "cultivo_candidato", "cultivo_id", TARGET_COLUMN, "sample_weight",
+    ]
+    mapeo_meta = {c: {"fao": m[0].round(2).tolist(), "magyp": m[1].round(2).tolist()} for c, m in mapeos.items()}
+    return final[columnas], mapeo_meta
+
+
+def resumen(df: pd.DataFrame, labels: pd.DataFrame, deps: dict[str, Any]) -> dict[str, Any]:
+    reales = df[df["origen_muestra"] == ORIGEN_MAGYP]
+    sequias = {}
+    for anio in (2008, 2017, 2022):
+        g = reales[(reales["anio_campana"] == anio) & reales["cultivo_candidato"].isin(["maiz_temprano", "maiz_tardio", "soja_primera", "soja_segunda"])]
+        sequias[f"{anio}/{anio + 1}"] = round(float(np.average(g[TARGET_COLUMN], weights=g["sample_weight"])), 1) if len(g) else None
+    fuentes_suelo = pd.Series([d.get("suelo", {}).get("fuente") for d in deps.values()]).value_counts().to_dict()
+    fuentes_topo = pd.Series([d.get("topografia", {}).get("fuente") for d in deps.values()]).value_counts().to_dict()
+    return {
+        "version": "ml6-magyp-v1",
+        "features": FEATURE_COLUMNS_V2,
+        "target": TARGET_COLUMN,
+        "splits": {"train": [ANIOS_TRAIN.start, ANIOS_TRAIN.stop - 1], "val": [ANIOS_VAL.start, ANIOS_VAL.stop - 1], "test": [ANIOS_TEST.start, ANIOS_TEST.stop - 1]},
+        "filas": df.groupby(["split", "origen_muestra"]).size().unstack(fill_value=0).to_dict(orient="index"),
+        "campanas_reales": reales.groupby("split")[["departamento_id", "anio_campana", "cultivo_candidato"]].apply(lambda g: len(g.drop_duplicates())).to_dict(),
+        "departamentos": int(reales["departamento_id"].nunique()),
+        "labels_magyp": int(len(labels)),
+        "label_por_cultivo": reales.groupby("cultivo_candidato")[TARGET_COLUMN].describe().round(1).to_dict(orient="index"),
+        "label_medio_por_split": reales.groupby("split")[TARGET_COLUMN].mean().round(1).to_dict(),
+        "sanidad_sequias_maiz_soja": sequias,
+        "fuentes_suelo": fuentes_suelo,
+        "fuentes_topografia": fuentes_topo,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 5. Orquestación
+# ---------------------------------------------------------------------------
+
+
+async def descargas(ids: set[str]) -> dict[str, dict[str, Any]]:
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        deps = await cargar_centroides(ids, client)
+        resultados = await asyncio.gather(
+            completar_estaticos(deps, client), descargar_celdas(deps, client), return_exceptions=True
+        )
+        for r in resultados:
+            if isinstance(r, BaseException):
+                print(f"AVISO: una descarga terminó con error (se reanuda en la próxima corrida): {r!r}")
+    return deps
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--solo-descargas", action="store_true")
+    parser.add_argument("--sin-red", action="store_true")
     args = parser.parse_args()
 
-    base_dir = Path(__file__).resolve().parent
-    data_dir = base_dir / "data"
-    cache_path = data_dir / "nasa_raw_telemetry.json"
+    from providers.cache import clave_celda_power
 
-    telemetry_list = fetch_or_load_nasa_telemetry(cache_path, force_refresh=args.refresh_cache)
-    windows_df = extract_real_90d_windows(telemetry_list)
-    metadata = build_and_save_all_splits(
-        windows_df=windows_df,
-        output_dir=data_dir,
-        telemetry_list=telemetry_list,
-        seed=SEED,
-    )
+    magyp = cargar_magyp(sin_red=args.sin_red)
+    labels = calcular_labels(magyp, ANIOS_TENDENCIA)
+    ids = set(labels["departamento_id"])
+    print(f"MAGyP: {len(labels)} labels en {len(ids)} departamentos")
 
-    print("\n=== Dataset ML Basado en Telemetría Real NASA Generado Exitosamente ===")
-    print(
-        f"Ventanas reales de 90 días extraídas (2006-2025): {metadata['real_nasa_windows_extracted']['total_90d_windows']}"
-    )
-    print(f"Total de filas generadas: {metadata['total_rows']}")
-    for split_name, info in metadata["splits"].items():
-        print(
-            f"  - {split_name.upper():<5} ({info['years']}): {info['rows']:>6} filas "
-            f"({info['ratio']*100:.1f}%) -> {info['file']}"
+    deps = _leer_json(DEPARTAMENTOS_JSON) if args.sin_red else asyncio.run(descargas(ids))
+    if args.solo_descargas:
+        return 0
+
+    por_dep = {
+        dep_id: {(r.cultivo_magyp, int(r.anio_campana)): float(r.puntaje) for r in g.itertuples()}
+        for dep_id, g in labels.groupby("departamento_id")
+    }
+    filas: list[dict[str, Any]] = []
+    escenarios: list[dict[str, Any]] = []
+    series: dict[str, Any] = {}
+    omitidos = []
+    t0 = time.monotonic()
+    for n, dep_id in enumerate(sorted(ids), 1):
+        dep = deps.get(dep_id)
+        if dep is None or dep.get("suelo", {}).get("arcilla_pct") is None or "topografia" not in dep:
+            omitidos.append(dep_id)
+            continue
+        clave = clave_celda_power(dep["lat"], dep["lon"])
+        if clave not in series:
+            series[clave] = leer_serie_celda(clave)
+        if series[clave] is None:
+            omitidos.append(dep_id)
+            continue
+        estaticos = {
+            "pendiente_terreno_pct": dep["topografia"]["pendiente_terreno_pct"],
+            "elevacion_m": dep["topografia"]["elevacion_m"],
+            "textura_arcilla_pct": dep["suelo"]["arcilla_pct"],
+        }
+        filas.extend(
+            filas_departamento(
+                dep_id, series[clave], estaticos, por_dep[dep_id], range(ANIOS_TRAIN.start, ANIOS_TEST.stop), escenarios
+            )
         )
+        if n % 20 == 0:
+            print(f"  filas: {n}/{len(ids)} departamentos ({time.monotonic() - t0:.0f}s)")
+    if omitidos:
+        print(f"AVISO: {len(omitidos)} departamentos sin datos completos (omitidos): {omitidos}")
+
+    df, mapeos = construir_dataset(filas)
+    pd.DataFrame(escenarios).to_csv(SALIDA_ESCENARIOS, index=False, compression="gzip")
+    for split, g in df.groupby("split"):
+        g.drop(columns="split").to_csv(SALIDA_SPLIT.with_name(SALIDA_SPLIT.name.format(split=split)), index=False, compression="gzip")
+    meta = resumen(df, labels, deps)
+    meta["mapeo_fao_a_magyp"] = mapeos
+    meta["departamentos_omitidos"] = omitidos
+    _guardar_json(METADATA_JSON, meta)
+    print(json.dumps({k: meta[k] for k in ("filas", "departamentos", "label_medio_por_split", "sanidad_sequias_maiz_soja")}, indent=1, ensure_ascii=False))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 
 from providers.cache import clave_celda_power, obtener_cache
-from providers.features import calendario_eventos
+from providers.features import calendario_eventos, calendario_lluvia
 from providers.nasa_power import (
     NasaPowerDailySeries,
     NasaPowerUnavailable,
@@ -64,7 +64,7 @@ RIESGO_ALTO_HASTA = 40.0  # [25, 40] -> alto ; > 40 -> critico
 # Caché (BACK-4): clave = celda de la grilla de NASA POWER (0,5° × 0,625°)
 # Cambiar si cambia el cálculo de la climatología, los días de calor o el calendario de eventos.
 # v2 (BACK-6): agrega T2M_MIN y el calendario de eventos diarios para los escenarios del ensemble.
-VERSION_CALCULO = "telemetria-v2"
+VERSION_CALCULO = "telemetria-v3"  # v3: + calendario de lluvia diaria (ML-7)
 ESPACIO_HIST = "nasa_hist"
 ESPACIO_RECIENTE = "nasa_reciente"
 TTL_RECIENTE_S = 6 * 3600.0
@@ -237,6 +237,7 @@ class ReferenciaHistorica:
     dias_calor_verano_promedio: float
     # año -> un carácter por día con los bits tormenta/calor/helada (providers.features)
     calendario_eventos: dict[int, str] = field(default_factory=dict)
+    calendario_lluvia: dict[int, str] = field(default_factory=dict)  # 2 caracteres por día (ML-7)
 
 
 def calcular_referencia(serie_hist: NasaPowerDailySeries) -> ReferenciaHistorica:
@@ -253,6 +254,7 @@ def calcular_referencia(serie_hist: NasaPowerDailySeries) -> ReferenciaHistorica
             [tmax.get(d) for d in fechas],
             [tmin.get(d) for d in fechas],
         ),
+        calendario_lluvia=calendario_lluvia(fechas, [lluvia.get(d) for d in fechas]),
     )
 
 
@@ -267,6 +269,7 @@ def referencia_a_dict(ref: ReferenciaHistorica) -> dict[str, Any]:
         # Solo referencia: al leer se reclasifica con los umbrales vigentes.
         "riesgo_termico_verano": clasificar_riesgo_termico(ref.dias_calor_verano_promedio),
         "calendario_eventos": {str(anio): texto for anio, texto in sorted(ref.calendario_eventos.items())},
+        "calendario_lluvia": {str(anio): texto for anio, texto in sorted(ref.calendario_lluvia.items())},
     }
 
 
@@ -282,6 +285,7 @@ def dict_a_referencia(datos: Any) -> ReferenciaHistorica | None:
             clim_por_doy={doy: float(v) for doy, v in enumerate(lista, start=1) if v is not None},
             dias_calor_verano_promedio=float(datos["dias_calor_verano_promedio"]),
             calendario_eventos={int(a): str(t) for a, t in datos.get("calendario_eventos", {}).items()},
+            calendario_lluvia={int(a): str(t) for a, t in datos.get("calendario_lluvia", {}).items()},
         )
     except (KeyError, TypeError, ValueError):
         return None

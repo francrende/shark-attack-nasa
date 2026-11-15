@@ -24,6 +24,7 @@ from __future__ import annotations
 import threading
 import warnings
 from collections.abc import Mapping, Sequence
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -50,6 +51,11 @@ except ImportError:
         get_crops_for_campaign,
     )
 
+try:
+    from backend.ml import calendario_siembra as cal
+except ImportError:
+    from ml import calendario_siembra as cal  # type: ignore[no-redef]
+
 Campaign = Literal["invierno", "verano"]
 ProducerObjective = Literal[
     "resiliencia_hidroclimatica",
@@ -62,26 +68,28 @@ AnomalySeverity = Literal["baja", "media", "alta"]
 ML_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL_PATH = ML_DIR / "modelo_agro.joblib"
 
-# Orden estricto de las 12 features oficiales de CONTEXT.md (Sección 4.3)
+# Orden estricto de las 15 features del modelo ML-7 (CONTEXT.md §4.3). Debe coincidir con
+# ``feature_columns`` del bundle (lo verifica ``AgroPredictor``).
 FEATURE_COLUMNS: tuple[str, ...] = (
     "gwetroot_saturacion_pct",
     "gwettop_saturacion_pct",
     "tendencia_humedad_15d_pct",
     "anomalia_lluvia_90d_pct",
-    "frecuencia_tormentas_extremas",
-    "frecuencia_estres_termico",
-    "frecuencia_riesgo_helada",
     "indice_aridez_evaporativa",
     "pendiente_terreno_pct",
     "elevacion_m",
     "textura_arcilla_pct",
+    "frecuencia_tormentas_extremas",
+    "frecuencia_estres_termico",
+    "frecuencia_riesgo_helada",
+    "lluvia_periodo_critico_mm",
+    "dias_hasta_siembra",
+    "oni_actual",
     "cultivo_candidato",
 )
 NUMERIC_FEATURES: tuple[str, ...] = FEATURE_COLUMNS[:-1]
 
-# ML-5: separación entre las features que se conocen al decidir (ventana pasada + terreno)
-# y las de la ventana futura, que en producción llegan como escenarios por año (BACK-6).
-# Deben coincidir con FEATURES_ACTUALES / FEATURES_FUTURAS de backend/providers/features.py.
+# Se conocen al decidir (ventana pasada + terreno). Igual a FEATURES_ACTUALES del backend.
 CURRENT_FEATURES: tuple[str, ...] = (
     "gwetroot_saturacion_pct",
     "gwettop_saturacion_pct",
@@ -92,11 +100,18 @@ CURRENT_FEATURES: tuple[str, ...] = (
     "elevacion_m",
     "textura_arcilla_pct",
 )
+# Período crítico del cultivo: en producción llegan como años análogos (ML-5/ML-7).
+# Igual a FEATURES_PERIODO_CRITICO de backend/providers/features.py.
 FUTURE_FEATURES: tuple[str, ...] = (
     "frecuencia_tormentas_extremas",
     "frecuencia_estres_termico",
     "frecuencia_riesgo_helada",
+    "lluvia_periodo_critico_mm",
 )
+# Las 3 de eventos son obligatorias en un escenario; la lluvia usa la climatología si falta.
+REQUIRED_FUTURE_FEATURES: tuple[str, ...] = FUTURE_FEATURES[:3]
+DEFAULT_LLUVIA_CRITICA_MM = 250.0
+ONI_NEUTRO = 0.0
 
 # Umbral por defecto de "año desfavorable" (coincide con el corte 'critico' de S_hidro).
 # Se recalibra al reentrenar con rindes MAGyP (50 = año normal) sin cambiar el contrato.
@@ -208,6 +223,10 @@ def apply_what_if_simulation(
             _clamp(sim["indice_aridez_evaporativa"] * scale_factor, 0.08, 2.80),
             3,
         )
+        if "lluvia_periodo_critico_mm" in sim:
+            sim["lluvia_periodo_critico_mm"] = round(
+                max(0.0, sim["lluvia_periodo_critico_mm"] * (1.0 + rain_delta_clamped / 100.0)), 1
+            )
         if rain_delta_clamped >= 25.0:
             sim["frecuencia_tormentas_extremas"] = float(
                 min(10, int(round(sim["frecuencia_tormentas_extremas"])) + 1)
@@ -362,7 +381,7 @@ def _validate_ensemble_inputs(
     if not escenarios_historicos:
         raise ValueError("escenarios_historicos no puede estar vacío")
     for i, esc in enumerate(escenarios_historicos):
-        faltan_esc = [f for f in FUTURE_FEATURES if f not in esc]
+        faltan_esc = [f for f in REQUIRED_FUTURE_FEATURES if f not in esc]
         if faltan_esc:
             raise ValueError(f"escenario {i} incompleto, faltan: {faltan_esc}")
 
@@ -387,10 +406,14 @@ def representative_scenario(escenarios_historicos: Sequence[Mapping[str, Any]]) 
     Se usa para lo que necesita un único vector (anomalías, factores clave, clasificadores
     de riesgo térmico y de escorrentía) cuando la predicción es por ensemble.
     """
-    return {
+    out = {
         f: float(round(float(np.median([float(esc[f]) for esc in escenarios_historicos]))))
-        for f in FUTURE_FEATURES
+        for f in REQUIRED_FUTURE_FEATURES
     }
+    lluvias = [float(e["lluvia_periodo_critico_mm"]) for e in escenarios_historicos if "lluvia_periodo_critico_mm" in e]
+    if lluvias:
+        out["lluvia_periodo_critico_mm"] = round(float(np.median(lluvias)), 1)
+    return out
 
 
 # Redacción en prosa: nombre sin paréntesis y artículo con el género correcto.
@@ -562,7 +585,7 @@ def detect_physical_anomalies(
                 "severidad": sev,
                 "evidencia": (
                     f"Riesgo térmico {nivel_termico}: {estres_termico} días esperados con "
-                    f"T2M_MAX > 34°C en los próximos 90 días (años análogos de NASA POWER)."
+                    f"T2M_MAX > 34°C en el período crítico del cultivo (años análogos de NASA POWER)."
                 ),
             }
         )
@@ -607,29 +630,68 @@ class AgroPredictor:
         self.feature_importances: dict[str, Any] = bundle["feature_importances"]
         self.feature_baselines: dict[str, Any] = bundle["feature_baselines"]
         self.training_metrics: dict[str, Any] = bundle.get("metrics", {})
+        self.model_version: str = bundle.get("model_version", "ml2-fao")
+        # Columnas numéricas en el orden del bundle (la última es el cultivo codificado).
+        self._numeric_cols: list[str] = self.feature_columns[:-1]
+
+    # ------------------------------------------------------------------
+    # Armado de filas
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _anio_campana_para(campana: Campaign, fecha: date) -> int:
+        """Año de la campaña ``campana`` más próxima a ``fecha`` (la vigente o la siguiente)."""
+        if cal.campana_de(fecha) == campana:
+            return cal.anio_campana(fecha)
+        return fecha.year if campana == "verano" or fecha.month < 7 else fecha.year + 1
+
+    def _contexto_cultivo(self, crop: str, campana: Campaign, fecha: date) -> dict[str, float]:
+        anio = self._anio_campana_para(campana, fecha)
+        return {"dias_hasta_siembra": float(cal.dias_hasta_siembra(crop, fecha, anio))}
+
+    def fuera_de_ventana_siembra(self, crop: str, campana: Campaign, fecha: date) -> bool:
+        """La siembra del cultivo ya terminó en la campaña vigente (se marca, no se excluye)."""
+        return fecha > cal.fin_siembra(crop, self._anio_campana_para(campana, fecha))
+
+    def _default(self, feat: str, campana: Campaign) -> float:
+        if feat == "oni_actual":
+            return ONI_NEUTRO
+        base = self.feature_baselines.get("by_campana", {}).get(campana, {}).get(feat)
+        if base is None:
+            base = self.feature_baselines.get("global", {}).get(feat)
+        if base is not None:
+            return float(base["mean"])
+        if feat == "lluvia_periodo_critico_mm":
+            return DEFAULT_LLUVIA_CRITICA_MM
+        raise KeyError(f"Falta la feature '{feat}' y no hay valor por defecto")
+
+    def _fila(self, vec: Mapping[str, Any], crop: str, campana: Campaign) -> list[float]:
+        fila = [float(vec[c]) if c in vec and vec[c] is not None else self._default(c, campana) for c in self._numeric_cols]
+        return fila + [float(self.crops_catalog["by_name"][crop]["id"])]
 
     def predict_hydroclimatic_batch(
         self,
         features: dict[str, float],
         campana: Campaign,
+        *,
+        fecha_corte: date | None = None,
+        oni_actual: float | None = None,
     ) -> dict[str, float]:
-        """Predice S_hidroclimatico (acotado a [0.0, 100.0]) en un único batch para la campaña."""
-        crops = get_crops_for_campaign(campana)
-        base_row = [float(features[col]) for col in NUMERIC_FEATURES]
+        """Predice S_hidroclimatico (acotado a [0.0, 100.0]) en un único batch para la campaña.
 
+        ``features`` trae las actuales y las del período crítico; ``dias_hasta_siembra`` se
+        calcula por cultivo con ``fecha_corte`` (hoy si no se pasa).
+        """
+        fecha = fecha_corte or datetime.now(timezone.utc).date()
+        crops = get_crops_for_campaign(campana)
+        base = dict(features)
+        if oni_actual is not None:
+            base["oni_actual"] = oni_actual
         X_batch = np.asarray(
-            [
-                base_row + [float(self.crops_catalog["by_name"][crop_id]["id"])]
-                for crop_id in crops
-            ],
+            [self._fila({**base, **self._contexto_cultivo(c, campana, fecha)}, c, campana) for c in crops],
             dtype=float,
         )
         clipped_preds = self._predict_clipped(X_batch)
-
-        return {
-            crop_id: round(float(score), 1)
-            for crop_id, score in zip(crops, clipped_preds)
-        }
+        return {crop_id: round(float(score), 1) for crop_id, score in zip(crops, clipped_preds)}
 
     def _predict_clipped(self, X: np.ndarray) -> np.ndarray:
         """Inferencia cruda del modelo acotada a [0, 100] (compartida por batch y ensemble)."""
@@ -646,28 +708,39 @@ class AgroPredictor:
     def predict_ensemble(
         self,
         features_actuales: Mapping[str, Any],
-        escenarios_historicos: Sequence[Mapping[str, Any]],
+        escenarios_historicos: Sequence[Mapping[str, Any]] | Mapping[str, Sequence[Mapping[str, Any]]],
         campana: Campaign,
         *,
         pesos: Sequence[float] | None = None,
         umbral_desfavorable: float = DEFAULT_UMBRAL_DESFAVORABLE,
         simulacion_what_if: Mapping[str, float | None] | None = None,
+        fecha_corte: date | None = None,
+        oni_actual: float | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """Ensemble de años análogos de la ventana futura (ML-5).
+        """Ensemble de años análogos (ML-5, por cultivo desde ML-7).
 
-        Para cada escenario histórico fija las 8 ``features_actuales``, reemplaza las 3 de la
-        ventana futura por las de ese año y predice todos los cultivos de la campaña en un
-        único batch. Devuelve, por cultivo, la distribución del puntaje hidroclimático:
-        ``promedio`` (score principal), ``p10`` ("año malo"), ``p90`` ("año bueno"),
-        ``anios_desfavorables`` (escenarios con score < ``umbral_desfavorable``),
-        ``anios_evaluados``, ``umbral_desfavorable`` y ``peor_escenario``.
+        ``escenarios_historicos`` puede ser:
+        - una lista común a todos los cultivos (ML-5), con ``pesos`` opcionales; o
+        - un dict ``{cultivo: [escenario, ...]}`` con los años análogos del **período crítico**
+          de cada cultivo (``ml/escenarios.py``); cada escenario puede traer su ``peso`` (ONI).
 
-        ``simulacion_what_if`` se aplica al vector completo de cada escenario. Los escenarios
-        con peso 0 se descartan.
+        Para cada escenario fija las ``features_actuales``, reemplaza las del período crítico por
+        las de ese año, agrega ``dias_hasta_siembra`` (desde ``fecha_corte``) y ``oni_actual`` y
+        predice. Devuelve, por cultivo: ``promedio`` (ponderado), ``p10``, ``p90``,
+        ``anios_desfavorables``, ``anios_evaluados``, ``umbral_desfavorable`` y ``peor_escenario``.
         """
-        escenarios, weights = _validate_ensemble_inputs(
-            features_actuales, escenarios_historicos, pesos
-        )
+        fecha = fecha_corte or datetime.now(timezone.utc).date()
+        crops = get_crops_for_campaign(campana)
+        por_cultivo: dict[str, tuple[list[Mapping[str, Any]], np.ndarray | None]] = {}
+        if isinstance(escenarios_historicos, Mapping):
+            for crop in crops:
+                lista = list(escenarios_historicos.get(crop, []))
+                w = [float(e.get("peso", 1.0)) for e in lista] if lista else None
+                por_cultivo[crop] = _validate_ensemble_inputs(features_actuales, lista, w)
+        else:
+            validados = _validate_ensemble_inputs(features_actuales, escenarios_historicos, pesos)
+            por_cultivo = {crop: validados for crop in crops}
+
         override_humedad = None
         variacion_lluvia = None
         if simulacion_what_if:
@@ -675,29 +748,37 @@ class AgroPredictor:
             variacion_lluvia = simulacion_what_if.get("variacion_lluvia_esperada_pct")
         apply_sim = override_humedad is not None or bool(variacion_lluvia)
 
-        crops = get_crops_for_campaign(campana)
-        crop_ids = [float(self.crops_catalog["by_name"][c]["id"]) for c in crops]
         current = {f: float(features_actuales[f]) for f in CURRENT_FEATURES}
+        if oni_actual is not None:
+            current["oni_actual"] = float(oni_actual)
+        elif "oni_actual" in features_actuales:
+            current["oni_actual"] = float(features_actuales["oni_actual"])
 
         rows: list[list[float]] = []
-        for esc in escenarios:
-            vec: dict[str, float] = {**current, **{f: float(esc[f]) for f in FUTURE_FEATURES}}
-            if apply_sim:
-                vec = apply_what_if_simulation(
-                    base_features=vec,
-                    override_humedad_radicular_pct=override_humedad,
-                    variacion_lluvia_esperada_pct=variacion_lluvia,
-                )
-            base_row = [vec[col] for col in NUMERIC_FEATURES]
-            rows.extend(base_row + [cid] for cid in crop_ids)
+        cortes: list[tuple[str, int, int]] = []
+        for crop in crops:
+            escenarios, _ = por_cultivo[crop]
+            contexto = self._contexto_cultivo(crop, campana, fecha)
+            desde = len(rows)
+            for esc in escenarios:
+                vec: dict[str, float] = {**current, **{f: float(esc[f]) for f in FUTURE_FEATURES if f in esc}, **contexto}
+                if "lluvia_periodo_critico_mm" not in vec:
+                    vec["lluvia_periodo_critico_mm"] = self._default("lluvia_periodo_critico_mm", campana)
+                if apply_sim:
+                    vec = apply_what_if_simulation(
+                        base_features=vec,
+                        override_humedad_radicular_pct=override_humedad,
+                        variacion_lluvia_esperada_pct=variacion_lluvia,
+                    )
+                rows.append(self._fila(vec, crop, campana))
+            cortes.append((crop, desde, len(rows)))
 
-        preds = self._predict_clipped(np.asarray(rows, dtype=float)).reshape(
-            len(escenarios), len(crops)
-        )
+        preds = self._predict_clipped(np.asarray(rows, dtype=float))
 
         result: dict[str, dict[str, Any]] = {}
-        for j, crop in enumerate(crops):
-            scores = preds[:, j]
+        for crop, desde, hasta in cortes:
+            escenarios, weights = por_cultivo[crop]
+            scores = preds[desde:hasta]
             promedio = float(np.average(scores, weights=weights))
             worst_idx = int(np.argmin(scores))
             worst = escenarios[worst_idx]
@@ -711,7 +792,7 @@ class AgroPredictor:
                 "peor_escenario": {
                     "anio": worst.get("anio"),
                     "score": round(float(scores[worst_idx]), 1),
-                    **{f: int(round(float(worst[f]))) for f in FUTURE_FEATURES},
+                    **{f: int(round(float(worst[f]))) for f in REQUIRED_FUTURE_FEATURES},
                 },
             }
         return result
@@ -956,8 +1037,11 @@ class AgroPredictor:
         fecha_ultimo_dato_valido: str = "2026-11-08",
         ubicacion: dict[str, float] | None = None,
         simulacion_what_if: dict[str, float | None] | None = None,
-        escenarios_historicos: Sequence[Mapping[str, Any]] | None = None,
+        escenarios_historicos: Sequence[Mapping[str, Any]] | Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
         umbral_desfavorable: float = DEFAULT_UMBRAL_DESFAVORABLE,
+        *,
+        fecha_corte: date | None = None,
+        oni_actual: float | None = None,
     ) -> dict[str, Any]:
         """Ejecuta el pipeline completo de decisión (ML + Matriz Agronómica + Anomalías).
 
@@ -970,7 +1054,12 @@ class AgroPredictor:
         el P10 cae en zona crítica y la respuesta agrega ``distribucion_hidroclimatica`` y los
         campos del ensemble en ``ranking_cultivos``. Sin escenarios, el comportamiento y el
         contrato son los de ML-4.
+
+        ML-7: ``escenarios_historicos`` puede ser ``{cultivo: [...]}`` (período crítico de cada
+        cultivo, con ``peso`` por ONI). ``fecha_corte`` (por defecto ``fecha_ultimo_dato_valido``)
+        define ``dias_hasta_siembra`` y el flag ``fuera_de_ventana_siembra`` de cada cultivo.
         """
+        fecha = fecha_corte or date.fromisoformat(str(fecha_ultimo_dato_valido)[:10])
         override_humedad = None
         variacion_lluvia = None
         if simulacion_what_if:
@@ -987,12 +1076,18 @@ class AgroPredictor:
                 campana=campana,
                 umbral_desfavorable=umbral_desfavorable,
                 simulacion_what_if=simulacion_what_if,
+                fecha_corte=fecha,
+                oni_actual=oni_actual,
             )
             hydro_scores = {crop: dist["promedio"] for crop, dist in ensemble.items()}
             # Vector representativo (mediana de los escenarios) para anomalías y explicación
             base_vector: dict[str, float] = {
                 **{f: float(features[f]) for f in CURRENT_FEATURES},
-                **representative_scenario(escenarios_historicos),
+                **representative_scenario(
+                    [e for lista in escenarios_historicos.values() for e in lista]
+                    if isinstance(escenarios_historicos, Mapping)
+                    else escenarios_historicos
+                ),
             }
         else:
             base_vector = dict(features)
@@ -1003,7 +1098,9 @@ class AgroPredictor:
             variacion_lluvia_esperada_pct=variacion_lluvia,
         )
         if ensemble is None:
-            hydro_scores = self.predict_hydroclimatic_batch(effective_features, campana=campana)
+            hydro_scores = self.predict_hydroclimatic_batch(
+                effective_features, campana=campana, fecha_corte=fecha, oni_actual=oni_actual
+            )
 
         # 3. Evaluación determinística de S_suelo y cobertura 12m (Pilar 2 - ML-3)
         pendiente = float(effective_features["pendiente_terreno_pct"])
@@ -1127,6 +1224,7 @@ class AgroPredictor:
                 "cultivo": item["cultivo"],
                 "score_final": item["score_final"],
                 "riesgo": item["riesgo"],
+                "fuera_de_ventana_siembra": self.fuera_de_ventana_siembra(item["cultivo"], campana, fecha),
             }
             if ensemble is not None:
                 dist = ensemble[item["cultivo"]]
@@ -1244,8 +1342,11 @@ def run_recommendation(
     fecha_ultimo_dato_valido: str = "2026-11-08",
     ubicacion: dict[str, float] | None = None,
     simulacion_what_if: dict[str, float | None] | None = None,
-    escenarios_historicos: Sequence[Mapping[str, Any]] | None = None,
+    escenarios_historicos: Sequence[Mapping[str, Any]] | Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     umbral_desfavorable: float = DEFAULT_UMBRAL_DESFAVORABLE,
+    *,
+    fecha_corte: date | None = None,
+    oni_actual: float | None = None,
 ) -> dict[str, Any]:
     """Función de alto nivel lista para ser invocada desde ``simulation_service.py``.
 
@@ -1265,4 +1366,6 @@ def run_recommendation(
         simulacion_what_if=simulacion_what_if,
         escenarios_historicos=escenarios_historicos,
         umbral_desfavorable=umbral_desfavorable,
+        fecha_corte=fecha_corte,
+        oni_actual=oni_actual,
     )
