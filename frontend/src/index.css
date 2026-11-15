@@ -1,111 +1,165 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* ==========================================================================
+     PALETA OFICIAL SHARK ATTACK (NASA FIELD SHIFT)
+     ========================================================================== */
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* 1. Letras destacadas, Títulos y Botones Primarios (#4B5B2D + variantes) */
+  --color-primary: #4B5B2D;
+  --color-primary-dark: #35421E;
+  --color-primary-darker: #252F14;
+  --color-primary-light: #687D40;
+  --color-primary-lighter: #8AA15B;
+  --color-primary-soft: #E8EFE0;
+  --color-primary-border: rgba(75, 91, 45, 0.28);
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  /* 2. Fondo Principal (#A8BC82, variante más clara de #8AA15B) y Superficies */
+  --color-bg: #A8BC82;
+  --color-bg-elevated: #FFFBF2;
+  --color-bg-card: #FFFDF8;
+  --color-bg-muted: #F5E6C8;
+  --color-bg-subtle: #EFE0BE;
+
+  /* 3. Texto General, Header (#FFF5E0) y Tonos Tierra / Terracota */
+  --color-header-bg: #FFF5E0;
+  --color-text: #22181C;
+  --color-text-secondary: #5A463F;
+  --color-text-muted: #7D675E;
+  --color-earth-brown: #8C5A3C;
+  --color-earth-brown-dark: #633D26;
+  --color-earth-brown-soft: #F3E6DC;
+  --color-terracotta: #9E472A;
+  --color-terracotta-dark: #7A331C;
+  --color-terracotta-darker: #592311;
+  --color-folder-pane: #EAD9C0;
+  --color-folder-tab-inactive: #C5A882;
+  --color-folder-tab-hover: #D6BE9E;
+  --color-border: #DECBB1;
+  --color-border-strong: #C7B090;
+
+  /* 3b. Mapa plano de regiones (selector de provincias) */
+  --color-region-available: rgba(138, 161, 91, 0.62);
+  --color-region-top: #D9733A;
+  --color-region-top-hover: #F08A4B;
+  --color-region-locked: #E4D6BA;
+  --color-region-locked-hover: #D9C7A2;
+  --color-region-locked-border: #C7B090;
+
+  /* 4. Calor, Estrés Térmico y Gráficos de Suelo (#F05D23 + variantes) */
+  --color-heat-soil: #F05D23;
+  --color-heat-soil-dark: #C44310;
+  --color-heat-soil-light: #FF824F;
+  --color-heat-soil-soft: #FDE8DF;
+  --color-heat-soil-border: rgba(240, 93, 35, 0.32);
+
+  /* 5. Humedad del Suelo, Lluvias e Hidrología NASA (#4A7B9D + variantes) */
+  --color-water-rain: #4A7B9D;
+  --color-water-rain-dark: #325873;
+  --color-water-rain-light: #6FA0C2;
+  --color-water-rain-darker: #1F3D52;
+  --color-water-rain-soft: #E2EFF7;
+  --color-water-rain-border: rgba(74, 123, 157, 0.32);
+
+  /* 6. Amarillos, Ocres y Semáforo de Riesgo Agronómico */
+  --color-gold-yellow: #D99B26;
+  --color-gold-yellow-dark: #AD7712;
+  --color-gold-yellow-soft: #FBF1D8;
+  --color-risk-low: #3F6A2B;
+  --color-risk-low-bg: #E5F1DF;
+  --color-risk-medium: #C98A1B;
+  --color-risk-medium-bg: #FCF0D5;
+  --color-risk-high: #E05A22;
+  --color-risk-high-bg: #FDE6DC;
+  --color-risk-critical: #B8292F;
+  --color-risk-critical-bg: #FADCE0;
+
+  /* Sombras y Radios */
+  --shadow-sm: 0 2px 6px rgba(34, 24, 28, 0.06);
+  --shadow-md: 0 6px 18px rgba(34, 24, 28, 0.09);
+  --shadow-lg: 0 12px 28px rgba(34, 24, 28, 0.14);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* Tipografía: Fraunces para marca, Newsreader para títulos y Plus Jakarta Sans para texto regular */
+  --font-brand: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-heading: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--color-text);
+  background-color: var(--color-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--font-heading);
+  color: var(--color-primary);
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
 p {
   margin: 0;
+  color: var(--color-text);
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+button,
+input,
+select {
+  font-family: inherit;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+/* Scrollbar personalizada cálida */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
 }

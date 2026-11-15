@@ -18,6 +18,7 @@ Para no construir código descartable en la hackathon pero tampoco bloquear el e
 ### 2.1. Tech Stack Base
 - **Frontend:** React + TypeScript + Vite (UI/UX enfocada en el productor, mapa interactivo con Leaflet / Mapbox GL superponiendo capas satelitales WMTS/WMS de la NASA).
 - **Backend:** Python + FastAPI (Arquitectura modular dividida en `routers/`, `services/`, `providers/` y `ml/`).
+- **Base de Datos y Auth:** Supabase (PostgreSQL + Supabase Auth + Row Level Security) conectado desde FastAPI mediante `supabase-py` (`backend/sql/schema.sql`).
 - **Data/ML:** `scikit-learn` (`HistGradientBoostingRegressor` / `RandomForestRegressor`) + `Pandas`/`Polars` para series temporales climáticas y motor híbrido de decisión multicriterio (MCDA).
 - **Despliegue (Deploy):** Frontend en Vercel | Backend en Render/Railway.
 - **Puertos Locales Habituales:** Frontend `:5173` (o `:3000`) | Backend `:8000`.
@@ -144,14 +145,14 @@ Todas las features se calculan de forma determinística a partir de las respuest
   2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm, `GWETTOP * 100`) en el día $t$ para viabilidad de emergencia en siembra y detección de desacople con la raíz.
   3. `tendencia_humedad_15d_pct`: Variación neta de humedad superficial/radicular en los últimos 15 días válidos (`[t - 14, t]`, mide la velocidad de secado o recarga reciente del perfil).
   4. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días (`[t - 89, t]`) respecto a la climatología histórica de 20 años (2006–2025) de NASA POWER en esa coordenada. Los años análogos sí arrancan en 1981 (ML-13), pero esta climatología no cambia, para que la feature sea la misma con la que se entrenó.
-  8. `indice_aridez_evaporativa`: Relación entre precipitación acumulada y demanda evaporativa (`PRECTOTCORR / EVPTRNS`) en los 90 días previos (`[t - 89, t]`) que explica cómo llegó el perfil hídrico al día $t$.
+  5. `indice_aridez_evaporativa`: Relación entre precipitación acumulada y demanda evaporativa (`PRECTOTCORR / EVPTRNS`) en los 90 días previos (`[t - 89, t]`) que explica cómo llegó el perfil hídrico al día $t$.
 
 - **B. Período Crítico del Cultivo (Riesgos Meteorológicos durante el Ciclo; desde ML-7 reemplaza a la ventana `[t + 1, t + 90]`):**
   *(ML-7: las features se miden en una ventana de 90 días que empieza `OFFSET` días después del inicio de siembra de cada cultivo (`ml/calendario_siembra.py`). Cubre la floración y el llenado en verano, y la espigazón y el llenado en los cereales de invierno, que es la etapa que define el rinde. En el entrenamiento se usa la ventana observada de esa campaña. En producción se usan los **años análogos** de esa misma ventana (`ml/escenarios.py`), **filtrados por fase ENSO** (ML-12): solo entran los años cuya fase (La Niña si ONI ≤ −0,5, El Niño si ONI ≥ +0,5, neutro en el medio; ONI de NOAA publicado en la misma fecha de cada año, `providers/enso.py`) coincide con la de hoy, todos con el mismo peso. Si la fase tiene menos de 5 años en el histórico, se completa con los de ONI más parecido. Se agregan tres features: `lluvia_periodo_critico_mm` (lluvia acumulada en el período crítico), `dias_hasta_siembra` (desde t hasta el inicio de siembra) y `oni_actual`. El modelo pasa a tener 15 features.)*
   *(Distribución, no un número: el ML (`predict_ensemble`) corre el modelo una vez por año análogo y cultivo y devuelve el **promedio** (score principal), el **P10** ("año malo"), el **P90** ("año bueno"), la cantidad de años bajo el umbral desfavorable y el peor año análogo. Es la lógica del "Ensemble Streamflow Prediction" hidrológico: no se pronostica el clima, se usa lo que ya ocurrió en esa coordenada y en esas fechas, usando solo los años con la misma fase ENSO. Promedio, P10, P90, conteo de años desfavorables y peor escenario salen del mismo conjunto de años.)*
-  5. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia torrencial (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en el período crítico del cultivo — indicador de riesgo de escorrentía y erosión durante el ciclo.
-  6. `frecuencia_estres_termico`: Días con `T2M_MAX > 34°C` en el período crítico (golpes de calor en floración y llenado). El modelo es **monótono**: más días de calor nunca suben el puntaje.
-  7. `frecuencia_riesgo_helada`: Días con `T2M_MIN < 2°C` en el período crítico (también monótono).
+  6. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia torrencial (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en el período crítico del cultivo — indicador de riesgo de escorrentía y erosión durante el ciclo.
+  7. `frecuencia_estres_termico`: Días con `T2M_MAX > 34°C` en el período crítico (golpes de calor en floración y llenado). El modelo es **monótono**: más días de calor nunca suben el puntaje.
+  8. `frecuencia_riesgo_helada`: Días con `T2M_MIN < 2°C` en el período crítico (también monótono).
 
 - **C. Variables Topográficas, Edáficas y de Cultivo:**
   9. `pendiente_terreno_pct`: Pendiente topográfica local (%) obtenida de **NASA SRTM (30m)** (modifica la infiltración efectiva del agua de lluvia y el riesgo de erosión).
@@ -201,7 +202,7 @@ $$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\te
 - **Fase Online (`POST /api/v1/simulate` en `< 1.5s`):**
   1. FastAPI recibe `coordenadas`, `campana`, `cultivo_anterior`, `objetivo_productor` y (opcionalmente) `simulacion_what_if`.
   2. Consulta en paralelo **NASA POWER API** (filtrando lags `-999.0`), **OpenTopoData SRTM API** (con fallback a la elevación de NASA POWER) e **ISRIC SoilGrids API**.
-  3. Calcula las 8 features actuales (`BACK-6`), el ONI publicado y, para cada cultivo de la campaña, los **años análogos de su período crítico ponderados por ENSO** (`ml/escenarios.py`), más `dias_hasta_siembra`.
+  3. Calcula las 8 features actuales (`BACK-12`), el ONI publicado y, para cada cultivo de la campaña, los **años análogos de su período crítico ponderados por ENSO** (`ml/escenarios.py`), más `dias_hasta_siembra`.
      - Evalúa las alertas de anomalías físicas en curso, sin forzar predicciones sin sustento.
      - Ejecuta en memoria el ensemble `predict_ensemble` (`ML-5`/`ML-7`) en un único batch de `años × cultivos`. Así obtiene $S_{\text{hidroclimatico}}$ (promedio ponderado) y su distribución (P10, P90 y años desfavorables).
      - Puntúa los cultivos sin rinde MAGyP relativo a los que sí tienen, y descuenta la demanda hídrica si el perfil está seco (ML-10, §4.5).
@@ -361,12 +362,12 @@ Formato estándar de comunicación entre el Frontend y el Backend.
     ],
     "recomendacion_experto": "Validar agua útil real con muestreo de barreno a 1 metro y consultar al ingeniero agrónomo local antes de definir la densidad de siembra."
   },
-  // BACK-7: además vienen "cobertura_12_meses" y "comparacion_estrategias" (ML-3; ver Swagger en /docs)
+  // BACK-13: además vienen "cobertura_12_meses" y "comparacion_estrategias" (ML-3; ver Swagger en /docs)
   "advertencias": [] // avisos de calidad de dato (fallback regional de SoilGrids/SRTM, propiedades faltantes)
 }
 ```
 
-> **Notas de implementación (BACK-7):**
+> **Notas de implementación (BACK-13):**
 > - `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` muestran el **dato satelital real**, sin los topes del modelo ni el What-If. El What-If solo cambia los scores, el ranking, las anomalías y la explicación.
 > - **ML-12:** `anios_evaluados` es la cantidad de años análogos de la misma fase ENSO (desde ML-13, entre 10 y 22 según la fase y la fecha; los años disponibles son 1981–2024). En verano, `telemetria_nasa.riesgo_termico_verano` se calcula con los días de calor de esos mismos años, no con el promedio histórico. La `explicacion` dice qué fase rige.
 > - **ML-14:** en verano, `secuencia_sugerida` y `secuencia_anual` empiezan por el invierno que realmente hubo (el antecesor si es de invierno, o `barbecho`). Si el perfil del cultivo sugiere otro invierno, se agrega como `; próximo ciclo: ...`.
@@ -376,28 +377,34 @@ Formato estándar de comunicación entre el Frontend y el Backend.
 ---
 
 ## 6. Flujo del Usuario (User Journey)
-El proceso que cumple el productor o asesor al utilizar la herramienta sigue cuatro pasos ágiles y accionables:
+El proceso que cumple el productor o asesor al utilizar la herramienta sigue cinco pasos ágiles y accionables:
 
-1. **Selección del lote y detección satelital automática:** Entra a la web, activa las capas visuales de la NASA (Humedad SMAP o Verdor NDVI) y marca su lote en el mapa. El sistema consulta automáticamente a la NASA y al mapa edáfico, mostrándole en pantalla el estado hídrico y térmico actual de su campo sin que tenga que tipear datos complejos.
-2. **Configuración de contexto y objetivo:** Indica de qué cultivo viene el lote (ej. *"Vengo de Soja de 1ra"*), qué campaña va a planificar (*"Campaña de Verano"*) y cuál es su prioridad (*"Resiliencia hidroclimática"*, *"Conservación del suelo"* o *"Equilibrio"*).
-3. **Recepción de la decisión explicada:** El dashboard ejecuta el modelo híbrido y le devuelve el ranking de cultivos y la secuencia de rotación sugerida con una explicación transparente:
+1. **Autenticación y Selección de región (Región Pampeana):** Tras iniciar sesión o entrar en modo demo, la app presenta un mapa 3D interactivo de Argentina para filtrar las provincias habilitadas de trabajo (Buenos Aires, Córdoba, Entre Ríos, La Pampa y Santa Fe). En usuarios registrados, la selección se guarda en `profiles.provincias` (si ya está guardada, ingresa directo al tablero y puede reeditarla desde la pastilla del header); en modo demo vive solo en memoria.
+2. **Selección del lote y detección satelital automática:** Ya en el tablero climático (`Planificación de campaña`), visualiza o delimita lotes dentro de las provincias seleccionadas. El sistema consulta automáticamente a la NASA y al mapa edáfico, mostrándole en pantalla el estado hídrico y térmico actual de su campo sin que tenga que tipear datos complejos.
+3. **Configuración de contexto y objetivo:** Indica de qué cultivo viene el lote (ej. *"Vengo de Soja de 1ra"*), qué campaña va a planificar (*"Campaña de Verano"*) y cuál es su prioridad (*"Resiliencia hidroclimática"*, *"Conservación del suelo"* o *"Equilibrio"*).
+4. **Recepción de la decisión explicada:** El dashboard ejecuta el modelo híbrido y le devuelve el ranking de cultivos y la secuencia de rotación sugerida con una explicación transparente:
    > *"Recomendación: Sembrar Sorgo o Girasol (y evitar repetir Soja o Maíz Temprano). La telemetría de la NASA muestra una saturación radicular del 34% y una anomalía de lluvias de -24%. El Sorgo presenta un 87% de aptitud integral: resiste el estrés hídrico proyectado y aporta el carbono y rastrojo que tu lote necesita después de la Soja."*
-4. **Simulación "What-If" (Opcional):** El productor puede mover un control deslizante (ej. *"¿Qué cambia si llueven 80 mm antes de la siembra?"*) para ver en tiempo real cómo se reacomoda el ranking y planificar su compra de insumos con anticipación.
+5. **Simulación "What-If" (Opcional):** El productor puede mover un control deslizante (ej. *"¿Qué cambia si llueven 80 mm antes de la siembra?"*) para ver en tiempo real cómo se reacomoda el ranking y planificar su compra de insumos con anticipación.
 
 ---
 
 ## 7. Guía Rápida de Instalación (Setup del Equipo)
 
-Pasos para dejar el entorno local listo después de clonar o hacer `git pull` del repositorio. No se requiere ningún motor de base de datos externo.
+Pasos para dejar el entorno local listo después de clonar o hacer `git pull` del repositorio. El backend se conecta a **Supabase** (PostgreSQL + Auth) mediante variables de entorno.
 
 ### 7.1. Estructura del Repositorio
 ```text
 shark-attack-nasa/
 ├── backend/
 │   ├── ml/                # Entrenamiento (train_baseline.py), predictor y TASKS_ML.md
-│   ├── providers/         # Clientes HTTP (NASA POWER API, NASA SRTM / OpenTopoData, ISRIC SoilGrids API)
-│   ├── routers/           # Endpoints FastAPI (/api/v1/simulate)
+│   ├── providers/         # Clientes externos (supabase_client.py, NASA POWER, SRTM, SoilGrids)
+│   ├── routers/           # Endpoints FastAPI (auth.py, fields.py, campaigns.py, simulate.py)
 │   ├── services/          # Lógica de negocio y matriz de rotación agronómica
+│   ├── sql/               # Esquema PostgreSQL y políticas RLS para Supabase (schema.sql)
+│   ├── config.py          # Configuración con pydantic-settings (.env)
+│   ├── main.py            # Entrypoint FastAPI, CORS, /health y registro de routers
+│   ├── schemas.py         # Modelos Pydantic de request/response
+│   ├── .env.example       # Plantilla de variables de entorno (SUPABASE_URL, SUPABASE_KEY)
 │   ├── requirements.txt   # Dependencias de Python
 │   └── TASKS_BACKEND.md   # Tablero y protocolo de tareas atómicas de Backend
 ├── frontend/              # Aplicación React + TypeScript + Vite + Leaflet
@@ -406,7 +413,19 @@ shark-attack-nasa/
 └── CONTEXT.md             # Documentación de arquitectura, contratos y metodología
 ```
 
-### 7.2. Levantar el Frontend (`React + TypeScript + Vite`)
+### 7.2. Configurar Base de Datos y Auth en Supabase
+1. Crear un proyecto en **Supabase** (categoría *B2B SaaS application*) y copiar `SUPABASE_URL` (URL base del proyecto, sin `/rest/v1/`) y `SUPABASE_KEY` (anon/publishable key).
+2. Copiar `backend/.env.example` a `backend/.env` y completar las credenciales.
+   - *Estado actual del entorno:* Proyecto Supabase creado (`https://kjiddadksvosdaoyapfu.supabase.co`) y archivo local `backend/.env` configurado con `SUPABASE_URL`, `SUPABASE_KEY` y `CORS_ORIGINS`.
+3. Ejecutar el script [`backend/sql/schema.sql`](./backend/sql/schema.sql) en el **SQL Editor** de Supabase para crear las tablas `profiles` (incluyendo la columna `provincias text[]`), `fields` y `campaigns` (incluye trigger de alta automática de perfil y políticas **RLS** por usuario).
+4. **Endpoints disponibles en Backend (`/docs`):**
+   - **Auth (`/api/v1/auth`):** `POST /register`, `POST /login`, `GET /me`, `PATCH /me/provinces` (Bearer JWT).
+   - **Campos (`/api/v1/fields`):** `GET /`, `POST /`, `GET /{field_id}`, `PATCH /{field_id}`, `DELETE /{field_id}`.
+   - **Campañas e Historial (`/api/v1/fields/{field_id}/campaigns`):** `GET /`, `POST /`, `PATCH /{campaign_id}`, `DELETE /{campaign_id}` (guarda `campana`, `cultivo`, `fecha_inicio`, `fecha_fin`, `rinde_kg_ha`, `resultado_notas` y `simulacion_json`).
+   - **Simulación:** `POST /api/v1/simulate`.
+   - **Healthcheck:** `GET /health`.
+
+### 7.3. Levantar el Frontend (`React + TypeScript + Vite`)
 ```bash
 cd frontend
 npm install
@@ -414,7 +433,7 @@ npm run dev
 ```
 - El servidor de desarrollo quedará corriendo en `http://localhost:5173`.
 
-### 7.3. Configurar y Levantar el Backend (`Python + FastAPI`)
+### 7.4. Configurar y Levantar el Backend (`Python + FastAPI`)
 ```bash
 cd backend
 
