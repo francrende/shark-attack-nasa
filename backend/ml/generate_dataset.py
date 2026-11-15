@@ -50,6 +50,8 @@ ML_DIR = Path(__file__).resolve().parent
 DATA_DIR = ML_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 CACHE_NASA_DIR = DATA_DIR / "cache" / "nasa"
+# ML-13: años 1981–2005 (solo lluvia y temperaturas) para los escenarios de años análogos.
+CACHE_NASA_ANALOGOS_DIR = DATA_DIR / "cache" / "nasa_analogos_1981"
 MAGYP_CRUDO = RAW_DIR / "estimaciones_agricolas.csv"
 MAGYP_PAMPA = DATA_DIR / "magyp_pampa.csv"
 DEPARTAMENTOS_JSON = DATA_DIR / "departamentos_pampa.json"
@@ -67,6 +69,8 @@ ANIOS_TENDENCIA = range(2006, 2025)
 NASA_INICIO = date(2005, 10, 1)  # 100 días antes de la primera ventana (feb-2006)
 NASA_FIN = date(2025, 12, 31)
 NASA_PARAMETROS = ["GWETROOT", "GWETTOP", "PRECTOTCORR", "T2M_MAX", "T2M_MIN", "EVPTRNS"]
+ANALOGOS_INICIO = date(1981, 1, 1)  # = providers.nasa_telemetry.ANALOGOS_START
+ANALOGOS_FIN = NASA_INICIO - timedelta(days=1)
 DIAS_SERIE_RECIENTE = 100  # igual que VENTANA_RECIENTE_DIAS del backend
 TIMEOUT_CELDA_S = 240.0
 REINTENTOS_RED = 3
@@ -248,18 +252,33 @@ async def completar_estaticos(deps: dict[str, dict[str, Any]], client: Any) -> N
 # ---------------------------------------------------------------------------
 
 
-def _ruta_celda(clave: str) -> Path:
-    return CACHE_NASA_DIR / f"{clave.replace(',', '_')}.json.gz"
+def _ruta_celda(clave: str, directorio: Path = CACHE_NASA_DIR) -> Path:
+    return directorio / f"{clave.replace(',', '_')}.json.gz"
 
 
-def leer_serie_celda(clave: str) -> Any | None:
+def _leer_gz(ruta: Path) -> Any | None:
     from providers.nasa_power import dict_a_serie
 
-    ruta = _ruta_celda(clave)
     if not ruta.exists():
         return None
     with gzip.open(ruta, "rt", encoding="utf-8") as f:
         return dict_a_serie(json.load(f))
+
+
+def leer_serie_celda(clave: str) -> Any | None:
+    """Serie 2005-10 → 2025-12 de la celda, con 1981–2005 antepuesto si está descargado (ML-13)."""
+    from providers.nasa_power import NasaPowerDailySeries
+
+    serie = _leer_gz(_ruta_celda(clave))
+    if serie is None:
+        return None
+    previa = _leer_gz(_ruta_celda(clave, CACHE_NASA_ANALOGOS_DIR))
+    if previa is None:
+        return serie
+    series = {p: {**previa.series.get(p, {}), **vals} for p, vals in serie.series.items()}
+    return NasaPowerDailySeries(
+        lat=serie.lat, lon=serie.lon, start=previa.start, end=serie.end, series=series, elevacion_m=serie.elevacion_m
+    )
 
 
 async def descargar_celdas(deps: dict[str, dict[str, Any]], client: Any) -> None:
@@ -293,6 +312,40 @@ async def descargar_celdas(deps: dict[str, dict[str, Any]], client: Any) -> None
         print(f"  celda {n}/{len(pendientes)} {clave} ({time.monotonic() - t0:.1f}s)")
 
 
+async def descargar_celdas_analogos(deps: dict[str, dict[str, Any]], client: Any) -> None:
+    """ML-13: 1981 → 2005-09 de cada celda (lluvia y temperaturas), para los años análogos."""
+    from providers.cache import clave_celda_power
+    from providers.nasa_power import fetch_daily_range, serie_a_dict
+    from providers.nasa_telemetry import HIST_PARAMETROS
+
+    CACHE_NASA_ANALOGOS_DIR.mkdir(parents=True, exist_ok=True)
+    celdas: dict[str, tuple[float, float]] = {}
+    for dep in deps.values():
+        celdas.setdefault(clave_celda_power(dep["lat"], dep["lon"]), (dep["lat"], dep["lon"]))
+    pendientes = [(k, v) for k, v in celdas.items() if not _ruta_celda(k, CACHE_NASA_ANALOGOS_DIR).exists()]
+    print(f"NASA POWER 1981–2005 (análogos): {len(celdas)} celdas, {len(pendientes)} por descargar", flush=True)
+    for n, (clave, (lat, lon)) in enumerate(pendientes, 1):
+        t0 = time.monotonic()
+        for intento in range(REINTENTOS_RED):
+            try:
+                serie = await asyncio.wait_for(
+                    fetch_daily_range(lat, lon, ANALOGOS_INICIO, ANALOGOS_FIN, HIST_PARAMETROS, client=client),
+                    TIMEOUT_CELDA_S,
+                )
+                break
+            except Exception as exc:  # noqa: BLE001 - red: reintentar y seguir
+                print(f"  celda {clave} intento {intento + 1} falló: {exc}", flush=True)
+                await asyncio.sleep(10.0 * (intento + 1))
+        else:
+            continue
+        destino = _ruta_celda(clave, CACHE_NASA_ANALOGOS_DIR)
+        tmp = destino.with_suffix(".tmp")
+        with gzip.open(tmp, "wt", encoding="utf-8") as f:
+            json.dump(serie_a_dict(serie), f)
+        tmp.replace(destino)
+        print(f"  análogos {n}/{len(pendientes)} {clave} ({time.monotonic() - t0:.1f}s)", flush=True)
+
+
 # ---------------------------------------------------------------------------
 # 4. Filas (funciones puras)
 # ---------------------------------------------------------------------------
@@ -313,10 +366,10 @@ def recortar_serie(serie: Any, desde: date, hasta: date) -> Any:
 
 
 def referencia_historica(serie: Any) -> Any:
-    """Climatología + calendario de eventos sobre 2006–2025, igual que el precálculo del backend."""
-    from providers.nasa_telemetry import HIST_END, HIST_PARAMETROS, HIST_START, calcular_referencia
+    """Igual que el precálculo del backend: climatología 2006–2025 y análogos desde 1981 (ML-13)."""
+    from providers.nasa_telemetry import ANALOGOS_START, HIST_END, HIST_PARAMETROS, calcular_referencia
 
-    hist = recortar_serie(serie, HIST_START, HIST_END)
+    hist = recortar_serie(serie, max(ANALOGOS_START, serie.start), HIST_END)
     hist = type(hist)(
         lat=hist.lat, lon=hist.lon, start=hist.start, end=hist.end,
         series={p: hist.series[p] for p in HIST_PARAMETROS},
@@ -546,7 +599,10 @@ async def descargas(ids: set[str]) -> dict[str, dict[str, Any]]:
     async with httpx.AsyncClient() as client:
         deps = await cargar_centroides(ids, client)
         resultados = await asyncio.gather(
-            completar_estaticos(deps, client), descargar_celdas(deps, client), return_exceptions=True
+            completar_estaticos(deps, client),
+            descargar_celdas(deps, client),
+            descargar_celdas_analogos(deps, client),
+            return_exceptions=True,
         )
         for r in resultados:
             if isinstance(r, BaseException):

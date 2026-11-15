@@ -74,9 +74,11 @@ class TestRotationMatrix(unittest.TestCase):
         )
         self.assertEqual(sorgo.s_suelo, 95.0)
         self.assertEqual(sorgo.condicion_rotacion_previa, "deficit_rastrojo_por_soja")
+        # ML-14: tras soja de primera el invierno fue barbecho; la vicia queda para el próximo ciclo.
         self.assertEqual(
             sorgo.secuencia_sugerida,
-            "vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
+            "barbecho (invierno) -> sorgo (verano); "
+            "próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
         )
         self.assertEqual(soja_repeat.s_suelo, 15.0)
 
@@ -154,6 +156,21 @@ class TestRotationMatrix(unittest.TestCase):
         self.assertGreater(
             penalizacion_demanda_hidrica("trigo", 25.0), penalizacion_demanda_hidrica("trigo", 35.0)
         )
+
+    def test_secuencia_real_respeta_el_invierno_que_ya_paso(self) -> None:
+        """ML-14: en verano la secuencia empieza por el invierno real (antecesor o barbecho)."""
+        from backend.services.rotation_matrix import secuencia_real
+
+        self.assertEqual(
+            secuencia_real("verano", "trigo", "sorgo"),
+            "trigo (invierno) -> sorgo (verano); próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
+        )
+        self.assertEqual(secuencia_real("verano", "trigo", "soja_segunda"), "trigo (invierno) -> soja_segunda (verano)")
+        self.assertEqual(secuencia_real("verano", "vicia_cobertura", "maiz_tardio"), "vicia_cobertura (invierno) -> maiz_tardio (verano)")
+        self.assertTrue(secuencia_real("verano", None, "girasol").startswith("barbecho (invierno) -> girasol (verano)"))
+        self.assertEqual(secuencia_real("invierno", "soja_primera", "trigo"), CROP_PROFILES["trigo"].secuencia_sugerida)
+        for estrategia in compare_rotation_strategies("verano", "trigo")[1:]:
+            self.assertTrue(estrategia.secuencia_anual.startswith("trigo (invierno) -> "), estrategia.secuencia_anual)
 
 
 if __name__ == "__main__":

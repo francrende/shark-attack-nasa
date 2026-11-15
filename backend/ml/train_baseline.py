@@ -2,7 +2,11 @@
 
 Uso (desde ``backend/``)::
 
-    python -m ml.train_baseline
+    python -m ml.train_baseline                 # búsqueda por CV + entrenamiento + evaluación
+    python -m ml.train_baseline --solo-evaluar  # reevalúa el modelo guardado (~1 min), sin reentrenar
+
+``--solo-evaluar`` sirve cuando cambia algo de la evaluación y no del modelo (por ejemplo, cómo se
+eligen los años análogos): conserva el modelo, los hiperparámetros y la CV del bundle.
 
 1. Dataset de ML-6 (15 features: estado actual, período crítico del cultivo, días hasta la
    siembra y ONI; label = rinde vs. tendencia de largo plazo; ``sample_weight``). Desde ML-10
@@ -20,6 +24,7 @@ Uso (desde ``backend/``)::
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import time
@@ -377,7 +382,10 @@ def chequeos(model: Any, catalog: dict[str, Any], test: pd.DataFrame) -> dict[st
 # ---------------------------------------------------------------------------
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Entrenamiento y evaluación del modelo S_hidroclimatico")
+    parser.add_argument("--solo-evaluar", action="store_true", help="reevaluar el modelo guardado sin reentrenar")
+    args = parser.parse_args(argv)
     print("=" * 78)
     print("ML-7 | Entrenamiento con rindes reales MAGyP (período crítico + ENSO)")
     print("=" * 78)
@@ -394,13 +402,25 @@ def main() -> int:
     print(f"train+val={len(tv)} ({len(tv_real)} reales, {tv['anio_campana'].nunique()} campañas) | test={len(test)}")
 
     print("\n[1/5] Búsqueda por validación cruzada dejando una campaña afuera:")
-    params, n_iter, comparacion = buscar_loso(tv)
-    cv_base = cv_base_anio_normal(tv)
-    print(f"  => {params}, {n_iter} iteraciones (CV MAE año normal: {cv_base})")
+    if args.solo_evaluar:
+        previo = joblib.load(MODEL_PATH)
+        model = previo["model"]
+        params = {k: v for k, v in previo["model_params"].items() if k not in ("max_iter", "monotonic_cst")}
+        n_iter = int(previo["model_params"]["max_iter"])
+        comparacion = previo["model_comparison_val"]
+        cv_base = previo["metrics"]["cv_loso"]["base_anio_normal"]
+        trained_at = previo["trained_at"]
+        print(f"  (--solo-evaluar) modelo del {trained_at}: {params}, {n_iter} iteraciones")
+        print("\n[2/5] Evaluación en test con el modelo guardado:")
+    else:
+        params, n_iter, comparacion = buscar_loso(tv)
+        cv_base = cv_base_anio_normal(tv)
+        print(f"  => {params}, {n_iter} iteraciones (CV MAE año normal: {cv_base})")
 
-    print("\n[2/5] Refit con train + val y evaluación en test:")
-    X_tv, y_tv, w_tv = to_xyw(tv)
-    model = nuevo_modelo(params, n_iter).fit(X_tv, y_tv, sample_weight=w_tv)
+        print("\n[2/5] Refit con train + val y evaluación en test:")
+        X_tv, y_tv, w_tv = to_xyw(tv)
+        model = nuevo_modelo(params, n_iter).fit(X_tv, y_tv, sample_weight=w_tv)
+        trained_at = datetime.now(timezone.utc).isoformat()
     exp_oni = expandir_ensemble(test, escenarios, ponderar_oni=True)
     exp_uni = exp_oni.assign(_peso=1.0)
     X_exp = np.column_stack([exp_oni[NUMERIC_FEATURES].to_numpy(float), exp_oni["cultivo_id"].to_numpy(float)])
@@ -452,7 +472,8 @@ def main() -> int:
     bundle = {
         "bundle_version": "2.0.0",
         "model_version": MODEL_VERSION,
-        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "trained_at": trained_at,
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
         "sklearn_version": sklearn.__version__,
         "model": model,
         "model_name": "hist_gradient_boosting_monotonic",

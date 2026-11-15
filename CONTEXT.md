@@ -31,7 +31,7 @@ Para no construir código descartable en la hackathon pero tampoco bloquear el e
 | **Topografía y Terreno** | **NASA SRTM (30m)** vía **OpenTopoData API** (con fallback a la elevación embebida en `NASA POWER`) para pendiente y escorrentía. | Modelo Digital de Elevación (DEM) intralote de alta resolución para mapas de flujo de agua y microcuencas de anegamiento. |
 | **Datos de Suelo** | **ISRIC SoilGrids API** (o fallback regional pre-cacheado de la Pampa Húmeda) para textura, pH y carbono orgánico. | Integración con cartas de suelo locales (**GeoINTA** en Argentina / **USDA SSURGO & WSS** en EE.UU.) + análisis de laboratorio. |
 | **Imágenes Satelitales** | Capas globales **NASA GIBS** (MODIS / VIIRS / SMAP / IMERG) vía WMTS directo en el mapa. | Recorte por lote en alta resolución (10m–30m) usando **NASA HLS (Landsat 8/9 + Copernicus Sentinel-2)** vía STAC/COG para mapeo de suelo desnudo (*bare soil*) y variabilidad intralote. |
-| **Entrenamiento del ML** | Modelo entrenado con **rindes reales departamentales de MAGyP** (169 departamentos pampeanos, 2006/07–2024/25) + **NASA POWER**, **SRTM**, **SoilGrids** y el índice **ENSO (ONI de NOAA)**. FAO GAEZ v4 / FAO-56 queda para la sensibilidad del What-If y, vía el factor `Ky`, para puntuar los cultivos sin rinde MAGyP fuera del modelo (ML-10). | Re-entrenamiento continuo con **rindes a escala de lote** (mapas de rinde, seguros), más campañas (1990+), NDVI en la campaña y feedback real de cosecha. |
+| **Entrenamiento del ML** | Modelo entrenado con **rindes reales departamentales de MAGyP** (170 departamentos pampeanos, 2006/07–2024/25) + **NASA POWER**, **SRTM**, **SoilGrids** y el índice **ENSO (ONI de NOAA)**. FAO GAEZ v4 / FAO-56 queda para la sensibilidad del What-If y, vía el factor `Ky`, para puntuar los cultivos sin rinde MAGyP fuera del modelo (ML-10). | Re-entrenamiento continuo con **rindes a escala de lote** (mapas de rinde, seguros), más campañas (1990+), NDVI en la campaña y feedback real de cosecha. |
 | **Unidad de Recomendación** | Ranking de cultivos por campaña (`invierno` vs `verano`, fecha temprana/tardía) y comparación de secuencias anuales (incluyendo la rotación actual). | Planificador plurianual (rotación a 3–5 años) con balance acumulado de Carbono, Nitrógeno, Fósforo, huella hídrica y margen de mercado. |
 
 ---
@@ -125,11 +125,11 @@ Para evitar el error agronómico de comparar cultivos de invierno contra cultivo
   1. **Fase 1 (ML-1/ML-2, reemplazada en ML-6/ML-7):** el target salía de las curvas FAO GAEZ v4 / FAO-56 aplicadas a 15 localidades. El modelo solo imitaba la fórmula (R² 0,99 contra ella), y contra rindes reales predecía peor que decir "año normal". La fórmula queda en `ml/fao_labels.py`, solo para las filas What-If y como línea base.
   2. **Fase 2 (implementada en ML-6/ML-7, `generate_dataset.py` + `train_baseline.py`):**
      - **Cultivos que entran al modelo (ML-10):** solo los 8 con rinde MAGyP (`trigo`, `cebada`, `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda`, `girasol`, `sorgo`). `vicia_cobertura`, `avena_cobertura` y `camelina` se puntúan fuera del modelo (§4.5).
-     - **Label:** rinde real departamental de **MAGyP** en 169 departamentos pampeanos, campañas 2006/07–2024/25. El rinde se ajusta por la superficie abandonada respecto de la típica del departamento y se compara contra su tendencia de largo plazo (Theil–Sen): `puntaje = 50 + 100 × (rinde/tendencia − 1)`. **50 es un año normal** y 30 es un rinde 20% bajo la tendencia.
+     - **Label:** rinde real departamental de **MAGyP** en 170 departamentos pampeanos, campañas 2006/07–2024/25. El rinde se ajusta por la superficie abandonada respecto de la típica del departamento y se compara contra su tendencia de largo plazo (Theil–Sen): `puntaje = 50 + 100 × (rinde/tendencia − 1)`. **50 es un año normal** y 30 es un rinde 20% bajo la tendencia.
      - **Features:** las mismas fórmulas que producción (`providers/features.py`). El suelo sale de SoilGrids y la topografía de SRTM, por departamento.
      - **Elección del modelo:** HistGradientBoosting con monotonía en calor y heladas, elegido por validación cruzada dejando una campaña afuera.
      - **Resultado en test 2022–2024 (MAE):**
-       - Producción con años análogos de la misma fase ENSO (ML-12): 17.9 (17.9 con el peso gaussiano de ML-7/ML-10).
+       - Producción con años análogos de la misma fase ENSO desde 1981 (ML-12/ML-13): 17.85. Con los mismos años sin filtrar por fase: 18.18.
        - What-If con el clima del período crítico observado: 14.9.
        - Línea base "año normal": 18.4. Línea base FAO: 23.5.
      - **Detección de años malos:** AUC 0.76, contra 0.52 de "año normal".
@@ -143,7 +143,7 @@ Todas las features se calculan de forma determinística a partir de las respuest
   1. `gwetroot_saturacion_pct`: Índice de humedad en zona radicular en el día $t$ (`GWETROOT * 100`, de NASA POWER / SMAP-GLDAS, o valor simulado en modo *What-If*).
   2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm, `GWETTOP * 100`) en el día $t$ para viabilidad de emergencia en siembra y detección de desacople con la raíz.
   3. `tendencia_humedad_15d_pct`: Variación neta de humedad superficial/radicular en los últimos 15 días válidos (`[t - 14, t]`, mide la velocidad de secado o recarga reciente del perfil).
-  4. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días (`[t - 89, t]`) respecto a la climatología histórica de 20 años de NASA POWER en esa coordenada.
+  4. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días (`[t - 89, t]`) respecto a la climatología histórica de 20 años (2006–2025) de NASA POWER en esa coordenada. Los años análogos sí arrancan en 1981 (ML-13), pero esta climatología no cambia, para que la feature sea la misma con la que se entrenó.
   8. `indice_aridez_evaporativa`: Relación entre precipitación acumulada y demanda evaporativa (`PRECTOTCORR / EVPTRNS`) en los 90 días previos (`[t - 89, t]`) que explica cómo llegó el perfil hídrico al día $t$.
 
 - **B. Período Crítico del Cultivo (Riesgos Meteorológicos durante el Ciclo; desde ML-7 reemplaza a la ventana `[t + 1, t + 90]`):**
@@ -175,7 +175,7 @@ En su lugar, el backend combina la telemetría de los últimos 90 días con la e
    - El sistema reporta la frecuencia estadística histórica de golpes de calor y heladas en esa coordenada.
    - **No se genera un pronóstico estacional propio.** Se usa el **estado ENSO ya observado y publicado por NOAA** (ONI): el ensemble usa solo los años análogos con la misma fase (La Niña / Neutro / El Niño). Es evidencia, no adivinación: las sequías 2008/09, 2017/18 y 2022/23 fueron años La Niña.
    - Para evaluar qué pasaría si la campaña resulta atípicamente seca o húmeda, se proveen **Presets Climáticos en el simulador *What-If***, para que el productor o su agrónomo evalúen la sensibilidad de cada rotación bajo cada escenario.
-   - **Límite honesto (ML-7):** antes de sembrar, el rinde es poco predecible, porque depende del clima del período crítico. El modelo mejora un 2–3% sobre "año normal" en producción y un 19% con el clima conocido (What-If) (ver §4.7). Por eso la respuesta muestra un **rango** (P10–P90, años desfavorables) y no un número único.
+   - **Límite honesto (ML-7):** antes de sembrar, el rinde es poco predecible, porque depende del clima del período crítico. El modelo mejora un 3% sobre "año normal" en producción y un 19% con el clima conocido (What-If) (ver §4.7). Por eso la respuesta muestra un **rango** (P10–P90, años desfavorables) y no un número único.
 
 ### 4.5. Los 2 Pilares del Puntaje, Viabilidad de Mercado y Fórmula Dinámica
 Para mantener la transparencia matemática, el sistema separa el cálculo en **2 pilares cuantitativos** complementados con metadatos de riesgo, mercado y validación local:
@@ -230,21 +230,21 @@ Esta sección registra qué hace bien el modelo, qué no, y qué se puede mejora
 **Qué quedó validado (test 2022/23–2024/25 y validación cruzada por campaña):**
 - **Campaña correcta:** el predictor solo evalúa los cultivos de la campaña pedida y el backend rechaza la campaña que no corresponde a la fecha. No depende del modelo.
 - **Reacción al estado del suelo:** con perfil seco bajan todos los cultivos y más los sensibles. En verano el orden es agronómicamente razonable (girasol y sorgo arriba, sojas abajo).
-- **Detección de años malos:** AUC 0,76 en producción, contra 0,52 de la línea base "año normal".
-- **Contra la fórmula FAO:** el modelo es un 24% mejor. La fórmula sola predice peor que decir "año normal".
+- **Detección de años malos:** AUC 0,78 en producción, contra 0,52 de la línea base "año normal".
+- **Contra la fórmula FAO:** el modelo es un 23% mejor. La fórmula sola predice peor que decir "año normal".
 
 **Problemas conocidos:**
 
 | Problema | Evidencia | Consecuencia |
 | :--- | :--- | :--- |
-| Antes de sembrar, el rinde es poco predecible | En producción el MAE es 17,9 contra 18,4 de "año normal" (2,3%). Con el clima del período crítico conocido baja a 14,9 | La respuesta muestra un rango (P10–P90), no un número. No se debe prometer "predicción de rinde" |
+| Antes de sembrar, el rinde es poco predecible | En producción el MAE es 17,85 contra 18,36 de "año normal" (2,8%). Con el clima del período crítico conocido baja a 14,9 | La respuesta muestra un rango (P10–P90), no un número. No se debe prometer "predicción de rinde" |
 | Pocas campañas independientes | El rinde de un año está muy correlacionado entre departamentos: son 16 campañas, no 200 mil filas. Las 4 configuraciones probadas dan el mismo MAE | Cambiar hiperparámetros no ayuda; hacen falta más años |
 | El test depende de un solo año | Casi toda la ganancia viene de la sequía 2022/23. En validación cruzada, con clima observado, la mejora es 6% | Con 3 años de test no se distingue 3% de 5% |
 | En producción la predicción se achata | En 2022/23 el puntaje real fue 22 y el predicho 44 | Anticipa la dirección, no la magnitud |
 | Ranking débil entre cultivos del mismo año | Spearman 0,05. `maiz_temprano` y `maiz_tardio` comparten el rinde "maíz" | El orden fino entre cultivos lo deciden el pilar suelo y las reglas de §4.5 |
 | Features gruesas del período crítico | `indice_aridez_evaporativa` usa `EVPTRNS` (evapotranspiración real, no demanda) y casi no aporta; calendario único para toda la región; un solo umbral de calor (34 °C) | El techo con clima conocido es bajo (R² 0,30) |
 | El ONI funciona en parte como "identificador de año" | La curva de respuesta al ONI (`ml/reports/05_curvas_respuesta_verano.png`) es irregular, con saltos entre −1,5 y 0: con 16 campañas, cada valor de ONI corresponde casi a un año puntual | Sobreajuste posible en la ponderación por ENSO. Con más campañas (hoja de ruta 4) o con el ONI agrupado en fases (Niña / Neutro / Niño) se suaviza |
-| Pocos años análogos por fase | Con 19 años de histórico, cada fase ENSO tiene entre 5 y 8 años. El P10 de 5 años es poco más que el peor año | El rango P10–P90 es orientativo. Se resuelve con más años análogos (hoja de ruta 3: NASA POWER desde 1981) |
+| Años análogos viejos con otro clima (ML-13) | Desde 1981 hay entre 10 y 22 años por fase (antes 5 a 8). Pero los veranos de los 80 y 90 tuvieron menos días de calor que los actuales, y la lluvia anterior a 2000 es de reanálisis, sin el satélite GPM | Los años viejos pueden subestimar el calor. Mejora posible: ajustar los días de calor por la tendencia de cada celda |
 | Filas What-If con fórmula FAO | Cerca del 4% del peso de entrenamiento todavía sale de la fórmula | Falta medir si conviene quitarlas (ablación) |
 
 **Qué se corrigió en ML-10:** las coberturas tenían label de fórmula FAO y en sequía caían a 6–8 puntos, lo que dejaba al trigo primero aunque fuera el más demandante. Ahora se puntúan relativo a los cultivos reales (FAO-56 `Ky`) y se descuenta la demanda hídrica con perfil seco (§4.5).
@@ -252,7 +252,7 @@ Esta sección registra qué hace bien el modelo, qué no, y qué se puede mejora
 **Hoja de ruta, en orden de costo/beneficio:**
 1. **Medir en el régimen correcto:** validación cruzada dejando una campaña afuera sobre las 19 campañas y con años análogos (producción), con el resultado por año. Hoy la selección usa clima observado.
 2. **Modelo directo para producción:** un segundo modelo entrenado solo con lo conocido al decidir (estado actual, ONI, cultivo, días a siembra). El actual queda para el What-If.
-3. **Más años análogos:** NASA POWER llega a 1981. Pasar de 19 a unos 44 años análogos mejora el P10 y la ponderación por ENSO, sin depender de MAGyP.
+3. ~~**Más años análogos:**~~ Hecho en ML-13 (1981–2025). Con el filtro por fase, producción pasó de 17,91 a 17,85 de MAE y el AUC de años malos de 0,77 a 0,78.
 4. **Más campañas con rinde (ML-9, 1990+):** con tendencia flexible en lugar de lineal (siembra directa, soja RR), asignando el rinde "maíz" anterior a 2010 solo a `maiz_temprano`, y verificando desde cuándo MAGyP separa soja de primera y de segunda.
 5. **Mejores features del período crítico:** lluvia menos demanda (ET0 por Hargreaves), `GWETROOT` y temperatura máxima media dentro del período, sub-ventanas de 30 días, umbral de calor por cultivo y calendario corrido por latitud.
 6. **Ponderar por superficie sembrada:** hoy un departamento con 1.000 ha pesa igual que uno con 200.000 ha.
@@ -368,7 +368,8 @@ Formato estándar de comunicación entre el Frontend y el Backend.
 
 > **Notas de implementación (BACK-7):**
 > - `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` muestran el **dato satelital real**, sin los topes del modelo ni el What-If. El What-If solo cambia los scores, el ranking, las anomalías y la explicación.
-> - **ML-12:** `anios_evaluados` es la cantidad de años análogos de la misma fase ENSO (entre 5 y 8 con el histórico actual), no los 19 disponibles. En verano, `telemetria_nasa.riesgo_termico_verano` se calcula con los días de calor de esos mismos años, no con el promedio histórico. La `explicacion` dice qué fase rige.
+> - **ML-12:** `anios_evaluados` es la cantidad de años análogos de la misma fase ENSO (desde ML-13, entre 10 y 22 según la fase y la fecha; los años disponibles son 1981–2024). En verano, `telemetria_nasa.riesgo_termico_verano` se calcula con los días de calor de esos mismos años, no con el promedio histórico. La `explicacion` dice qué fase rige.
+> - **ML-14:** en verano, `secuencia_sugerida` y `secuencia_anual` empiezan por el invierno que realmente hubo (el antecesor si es de invierno, o `barbecho`). Si el perfil del cultivo sugiere otro invierno, se agrega como `; próximo ciclo: ...`.
 > - **ML-10:** el contrato no cambia. `sub_scores.hidroclimatico`, la distribución y el ranking ya incluyen el descuento por demanda hídrica; cuando aplica, `explicacion` termina con una oración que lo dice.
 > - **Errores:** `422` para un request inválido (campaña u objetivo desconocidos, `cultivo_anterior` fuera de los 11 cultivos o de `ninguno`/`barbecho`/`sin_cultivo`/`null`, rangos del What-If, campos extra, o **campaña que no corresponde a la fecha** según la regla de §4.1: el backend también la rechaza, además del bloqueo del frontend). `503` si un provider no tiene datos.
 

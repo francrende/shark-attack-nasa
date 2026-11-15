@@ -272,7 +272,7 @@ def _handler(registro: list[str], *, suelo_ok: bool = True):
     def h(req):
         host = req.url.host
         if "power.larc" in host:
-            es_hist = req.url.params["start"] == "20060101"
+            es_hist = req.url.params["start"] == "19810101"  # ML-13: análogos desde 1981
             registro.append("nasa_hist" if es_hist else "nasa_reciente")
             return httpx.Response(200, json=_payload_nasa(_historico() if es_hist else _reciente(corte)))
         if "isric" in host:

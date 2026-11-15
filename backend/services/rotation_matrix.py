@@ -419,6 +419,26 @@ def motivo_lote_ocupado(campana: Campaign, cultivo_anterior: str | None, cultivo
     )
 
 
+def secuencia_real(campana: Campaign, cultivo_anterior: str | None, cultivo_candidato: str) -> str:
+    """Secuencia del ciclo actual, con la del perfil como sugerencia para el próximo (ML-14).
+
+    En verano el invierno ya pasó: fue el antecesor si es de invierno, o barbecho si no. La
+    secuencia del perfil (por ejemplo "vicia_cobertura (invierno) -> sorgo (verano)") se mantiene
+    como sugerencia para el próximo ciclo cuando propone otro invierno. En invierno la secuencia del
+    perfil empieza por el propio candidato y mira hacia adelante, así que se usa tal cual.
+    """
+    candidato = get_crop_profile(cultivo_candidato)
+    if campana != "verano":
+        return candidato.secuencia_sugerida
+    prev_id = _normalize_previous_crop(cultivo_anterior)
+    invierno = prev_id if prev_id is not None and CROP_PROFILES[prev_id].campana == "invierno" else "barbecho"
+    actual = f"{invierno} (invierno) -> {candidato.id} (verano)"
+    invierno_perfil = candidato.secuencia_sugerida.split(" (invierno)")[0]
+    if invierno in [c.strip() for c in invierno_perfil.split("/")]:
+        return actual
+    return f"{actual}; próximo ciclo: {candidato.secuencia_sugerida}"
+
+
 def penalizacion_demanda_hidrica(cultivo: str, humedad_radicular_pct: float) -> float:
     """Puntos que se restan a S_hidroclimatico por sembrar un cultivo demandante con perfil seco.
 
@@ -836,7 +856,7 @@ def evaluate_soil_and_rotation(
         ajuste_ph=round(adj_ph, 2),
         riesgo_erosion_suelo=erosion_risk,
         condicion_rotacion_previa=condicion,
-        secuencia_sugerida=candidate.secuencia_sugerida,
+        secuencia_sugerida=secuencia_real(candidate.campana, cultivo_anterior, candidate.id),
         perfil_mercado=candidate.perfil_mercado,
         meses_suelo_desnudo=bare_months,
         calendario_12m=calendario,

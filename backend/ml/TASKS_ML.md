@@ -47,6 +47,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `ML-10` | Cultivos sin rinde MAGyP fuera del modelo (puntaje relativo por `Ky` de FAO-56) y penalización por demanda hídrica con perfil seco | `backend/ml/train_baseline.py`, `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-7` | `[x]` |
 | `ML-11` | Lote ocupado por el antecesor de invierno: en verano, tras trigo, cebada o camelina, solo cultivos de segunda; campo `motivo_no_sembrable`; testigo trigo → soja de segunda | `backend/services/rotation_matrix.py`, `backend/ml/predictor.py`, `backend/schemas.py`, `backend/ml/test_predictor.py`, `backend/routers/test_simulate.py`, `CONTEXT.md` | `ML-8` | `[x]` |
 | `ML-12` | Años análogos filtrados por fase ENSO (en lugar del peso gaussiano) y riesgo térmico de verano calculado con esos mismos años | `backend/providers/enso.py`, `backend/ml/escenarios.py`, `backend/ml/predictor.py`, `backend/services/simulation_service.py`, tests, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-11` | `[x]` |
+| `ML-13` | Años análogos desde 1981 (climatología y días de calor siguen en 2006–2025); `train_baseline --solo-evaluar` | `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/ml/generate_dataset.py`, `backend/ml/train_baseline.py`, `backend/ml/data/*`, `backend/ml/modelo_agro.joblib`, tests, `CONTEXT.md` | `ML-12` | `[x]` |
+| `ML-14` | Secuencias de rotación que respetan el invierno que ya pasó (antecesor o barbecho) y dejan la del perfil como "próximo ciclo" | `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `CONTEXT.md` | `ML-11` | `[x]` |
 
 ---
 
@@ -508,4 +510,40 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - Marcos Juárez, verano, antecesor trigo: Soja de Segunda 72,7, riesgo bajo; 0 de 5 años análogos desfavorables; peor escenario 2023 (El Niño, 19 días de calor) con 51; riesgo térmico `bajo`.
   - Test 2022–2024 en producción con el filtro por fase: MAE 17.9 (mejora 2,4% sobre "año normal"; con peso gaussiano era 17.93 y 2.3%), AUC de años malos 0,77. Sequía 2022/23: real 22.2, predicho 43.6 (antes 43.9). El modelo es el mismo de ML-10: solo cambia cómo se eligen los años análogos.
 - **Límite que queda:** entre 5 y 8 años por fase son pocos; el P10 es casi el peor año. No se verificó el pronóstico del SMN que cita el revisor: el sistema no usa pronósticos, solo la fase ENSO ya observada.
+
+---
+
+### `[x]` ML-13: Años análogos desde 1981
+- **Objetivo:** Con 19 años de histórico, cada fase ENSO tenía 5 a 8 años análogos y el P10 era casi el peor año. NASA POWER tiene clima diario desde 1981.
+- **Decisión (propuesta por el agente, aprobada por el desarrollador el 2026-11-15):** solo el calendario de años análogos se extiende a 1981–2025. La climatología de lluvia (feature `anomalia_lluvia_90d_pct`) y el promedio de días de calor siguen en 2006–2025: así ninguna feature del modelo cambia y no hace falta reentrenar por este motivo.
+- **Implementación:**
+  - `providers/nasa_telemetry.py`: `ANALOGOS_START = 1981-01-01`; `calcular_referencia` calcula la climatología y los días de calor sobre 2006–2025 (`recortar_serie`) y los calendarios sobre toda la serie. `VERSION_CALCULO = "telemetria-v4"` invalida las cachés viejas. El cálculo en vivo pide 1981–2025.
+  - `providers/generar_precache.py` regenera las 299 celdas de `climatologia_pampa.json` desde 1981 (7,5 → 15,8 MB; carga en 0,4 s).
+  - `ml/generate_dataset.py`: descarga aparte 1981 → 2005-09 de las 140 celdas de departamentos (`data/cache/nasa_analogos_1981/`, solo lluvia y temperaturas) y la antepone a la serie de cada celda.
+  - `ml/train_baseline.py --solo-evaluar`: reevalúa el modelo guardado en ~40 s, sin la búsqueda por CV ni el reentrenamiento (útil cuando cambia la evaluación y no el modelo).
+- **Verificación de que las features no cambian:** el dataset regenerado tiene las 284.500 filas anteriores con features y label idénticos (comparación numérica fila por fila). Test nuevo `test_referencia_desde_1981_no_cambia_climatologia_ni_dias_de_calor`. Marcos Juárez: 31,5 días de calor, igual que antes.
+- **Cambio no buscado:** al regenerar, San Vicente (06778) entró al dataset: estaba excluido porque SoilGrids no había respondido, y la corrida de descargas reintentó con éxito. 170 departamentos, 575 filas más en train y 46 en test. Por eso se reentrenó completo en lugar de usar `--solo-evaluar`: mismos hiperparámetros, 735 iteraciones (antes 708).
+- **Resultado de la Verificación (2026-11-15):**
+  - Años análogos para noviembre: El Niño 5 → 12 (se suman 1982, 1986, 1987, 1991, 1997, 2002, 2004), La Niña 6 → 10, neutro 8 → 22.
+  - Test 2022–2024:
+
+    | Producción | MAE | AUC años malos |
+    | :--- | :---: | :---: |
+    | Misma fase ENSO, 2006–2024 (ML-12) | 17.91 | 0.766 |
+    | **Misma fase ENSO, 1981–2024 (ML-13)** | **17.85** | **0.784** |
+    | Todos los años 1981–2024 sin filtrar | 18.18 | 0.748 |
+    | Línea base "año normal" | 18.36 | 0.516 |
+
+    Con más años, filtrar por fase ENSO ayuda de forma clara (17,85 contra 18,18 sin filtrar). Aceptación: producción contra "año normal" 2,8% (sigue debajo del 5%); FAO 23,0% ✅; What-If 19,1% ✅.
+  - Marcos Juárez (verano, tras trigo, 15/11): Soja de Segunda 72,1, riesgo bajo, 0 de 12 años El Niño desfavorables; riesgo térmico `medio` (antes `bajo` con 5 años).
+  - `pytest -q`: 250 en verde.
+- **Límite:** los veranos de los 80 y 90 tuvieron menos días de calor y la lluvia anterior a 2000 no tiene GPM; documentado en CONTEXT §4.7.
+
+---
+
+### `[x]` ML-14: Secuencias que respetan el invierno que ya pasó
+- **Objetivo:** La secuencia sugerida salía fija del perfil de cada cultivo. Tras trigo, la estrategia defensiva decía "vicia_cobertura (invierno) -> sorgo (verano)" aunque ese invierno ya había sido trigo.
+- **Implementación:** `rotation_matrix.secuencia_real(campana, cultivo_anterior, candidato)`. En verano la secuencia empieza por el invierno real: el antecesor si es de invierno, o `barbecho` si no lo es o no hay antecesor. Si el perfil propone otro invierno, se agrega `; próximo ciclo: <secuencia del perfil>`. En invierno la secuencia del perfil empieza por el propio candidato y se usa tal cual. La usan `secuencia_sugerida` y las estrategias defensiva y regenerativa.
+- **Ejemplo:** tras trigo, defensiva = "trigo (invierno) -> sorgo (verano); próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)".
+- **Verificación:** test nuevo `test_secuencia_real_respeta_el_invierno_que_ya_paso`; `pytest -q` 250 en verde.
 
