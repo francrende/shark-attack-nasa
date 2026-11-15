@@ -344,7 +344,7 @@ def test_build_telemetria_punta_a_punta():
     assert starts == ["20060101", (HOY - timedelta(days=99)).strftime("%Y%m%d")]
     hist_call = next(p for p in llamadas if p["start"] == "20060101")
     assert hist_call["end"] == "20251231"
-    assert hist_call["parameters"] == "PRECTOTCORR,T2M_MAX"
+    assert hist_call["parameters"] == "PRECTOTCORR,T2M_MAX,T2M_MIN"  # T2M_MIN desde BACK-6
 
     # Serializa con las claves exactas del contrato
     assert set(telemetria.model_dump()) == {

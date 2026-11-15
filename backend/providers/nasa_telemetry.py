@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 
 from providers.cache import clave_celda_power, obtener_cache
+from providers.features import calendario_eventos
 from providers.nasa_power import (
     NasaPowerDailySeries,
     NasaPowerUnavailable,
@@ -39,7 +40,7 @@ PARAMS_CORTE = ("PRECTOTCORR", "GWETROOT", "GWETTOP")
 
 HIST_START = date(2006, 1, 1)
 HIST_END = date(2025, 12, 31)
-HIST_PARAMETROS = ["PRECTOTCORR", "T2M_MAX"]
+HIST_PARAMETROS = ["PRECTOTCORR", "T2M_MAX", "T2M_MIN"]  # T2M_MIN: heladas (BACK-6)
 
 # Constantes de generate_dataset.py
 HIST_LLUVIA_MIN_MM = 25.0
@@ -61,7 +62,9 @@ RIESGO_MEDIO_HASTA = 25.0  # [15, 25) -> medio
 RIESGO_ALTO_HASTA = 40.0  # [25, 40] -> alto ; > 40 -> critico
 
 # Caché (BACK-4): clave = celda de la grilla de NASA POWER (0,5° × 0,625°)
-VERSION_CALCULO = "telemetria-v1"  # cambiar si cambia el cálculo de la climatología o los días de calor
+# Cambiar si cambia el cálculo de la climatología, los días de calor o el calendario de eventos.
+# v2 (BACK-6): agrega T2M_MIN y el calendario de eventos diarios para los escenarios del ensemble.
+VERSION_CALCULO = "telemetria-v2"
 ESPACIO_HIST = "nasa_hist"
 ESPACIO_RECIENTE = "nasa_reciente"
 TTL_RECIENTE_S = 6 * 3600.0
@@ -232,12 +235,24 @@ def clasificar_riesgo_termico(dias: float) -> RiesgoTermico:
 class ReferenciaHistorica:
     clim_por_doy: dict[int, float]
     dias_calor_verano_promedio: float
+    # año -> un carácter por día con los bits tormenta/calor/helada (providers.features)
+    calendario_eventos: dict[int, str] = field(default_factory=dict)
 
 
 def calcular_referencia(serie_hist: NasaPowerDailySeries) -> ReferenciaHistorica:
+    lluvia = serie_hist.series.get("PRECTOTCORR", {})
+    tmax = serie_hist.series.get("T2M_MAX", {})
+    tmin = serie_hist.series.get("T2M_MIN", {})
+    fechas = sorted(lluvia)
     return ReferenciaHistorica(
         clim_por_doy=climatologia_lluvia_90d_por_doy(serie_hist),
         dias_calor_verano_promedio=dias_calor_verano_promedio(serie_hist),
+        calendario_eventos=calendario_eventos(
+            fechas,
+            [lluvia.get(d) for d in fechas],
+            [tmax.get(d) for d in fechas],
+            [tmin.get(d) for d in fechas],
+        ),
     )
 
 
@@ -251,6 +266,7 @@ def referencia_a_dict(ref: ReferenciaHistorica) -> dict[str, Any]:
         "dias_calor_verano_promedio": round(ref.dias_calor_verano_promedio, 2),
         # Solo referencia: al leer se reclasifica con los umbrales vigentes.
         "riesgo_termico_verano": clasificar_riesgo_termico(ref.dias_calor_verano_promedio),
+        "calendario_eventos": {str(anio): texto for anio, texto in sorted(ref.calendario_eventos.items())},
     }
 
 
@@ -265,6 +281,7 @@ def dict_a_referencia(datos: Any) -> ReferenciaHistorica | None:
         return ReferenciaHistorica(
             clim_por_doy={doy: float(v) for doy, v in enumerate(lista, start=1) if v is not None},
             dias_calor_verano_promedio=float(datos["dias_calor_verano_promedio"]),
+            calendario_eventos={int(a): str(t) for a, t in datos.get("calendario_eventos", {}).items()},
         )
     except (KeyError, TypeError, ValueError):
         return None

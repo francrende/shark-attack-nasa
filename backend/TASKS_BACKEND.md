@@ -43,6 +43,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | BACK-3 | Provider ISRIC SoilGrids (0–30 cm ponderado, vecinos ante `null`, fallback GeoINTA, caché) | `backend/providers/soilgrids.py`, `backend/providers/test_soilgrids.py`, `backend/providers/check_soilgrids_live.py` | — | `[x]` |
 | BACK-4 | Resiliencia y latencia: caché en capas, caché de NASA por celda de grilla, climatología pampeana precalculada, corte automático de SoilGrids, lotes de ejemplo | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | BACK-2, BACK-3 | `[x]` |
 | BACK-5 | Provider SRTM (OpenTopoData): elevación + pendiente con grilla 3×3 a 300 m (Horn), cascada de fallback, caché y corte automático | `backend/providers/srtm.py`, `backend/providers/regional.py`, `backend/providers/resiliencia.py`, `backend/providers/soilgrids.py`, `backend/providers/nasa_power.py`, `backend/providers/test_srtm.py`, `backend/providers/check_srtm_live.py` | BACK-4 | `[x]` |
+| BACK-6 | Constructor de features del ML: features actuales (ventana pasada + topografía + suelo) y escenarios históricos por año de la ventana futura (calendario de eventos por celda) | `backend/providers/features.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/providers/test_features.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_features_live.py` | BACK-2, BACK-3, BACK-4, BACK-5 | `[x]` |
 
 ---
 
@@ -407,6 +408,92 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Definition of Done (Comando de Verificación):**
   - `cd backend && python -m pytest providers/ -v`: todos en verde.
   - (Con red) `cd backend && python -m providers.check_srtm_live`: Pergamino con pendiente baja (menos de 1,5 %) y Tandil o Paraná con pendiente mayor.
+
+### `[x]` BACK-6: Constructor de features del ML
+> **Verificación (14/11/2026):**
+> - **Tests:** pasan los 155 de `providers/` (22 nuevos, incluida la paridad con pandas de los escenarios).
+> - **Precálculo:** `generar_precache nasa` regeneró 299/299 celdas en `telemetria-v2`, sin errores (2,9 MB, 20 años de calendario por celda).
+> - **En vivo, Pergamino** (corte 11/11, 5,75 s; el primer pedido a SoilGrids tarda unos 5 s):
+>   - Features actuales: humedad radicular 46,0, humedad superficial 35,0, tendencia −4,4, anomalía −37,38, aridez **0,752**, pendiente 0,82, elevación 69,0, arcilla 23,4.
+>   - **19 escenarios**: calor de 1 a 45 días (51 recortado por el tope del entrenamiento), mediana 21; tormentas de 0 a 2; heladas 0.
+>   - Suelo y topografía con dato real.
+- **Objetivo:** A partir de un `lat`/`lon`, entregar todo lo que el predictor necesita, usando los providers:
+  1. Las **features actuales**: las 8 de la ventana pasada, la topografía y el suelo, con los mismos topes que el entrenamiento.
+  2. La **lista de escenarios históricos** de la ventana futura `[corte+1, corte+90]`: los valores reales de cada año.
+
+  Con un único módulo de fórmulas puras (`features.py`) que `generate_dataset.py` pueda importar, para que entrenamiento y producción calculen igual. Sin correr el modelo y sin endpoint (eso es BACK-7).
+- **Archivos Permitidos:**
+  - `backend/providers/features.py` (nuevo): las fórmulas y `construir_insumos_ml`.
+  - `backend/providers/nasa_telemetry.py`: el histórico cacheado gana el calendario de eventos y `T2M_MIN`, y sube `VERSION_CALCULO`.
+  - `backend/providers/generar_precache.py`: regenera las 299 celdas.
+  - `backend/providers/data/climatologia_pampa.json`: regenerado.
+  - Tests: `backend/providers/test_features.py` (nuevo) y `test_nasa_telemetry.py`.
+  - `backend/providers/check_features_live.py` (nuevo).
+- **Hallazgos con datos reales (Pergamino, corte 11/11/2026):**
+  - Aridez de la ventana pasada: 152 mm de lluvia contra 202 mm de evapotranspiración, **0,752**. `EVPTRNS` viene completo.
+  - Ventana futura del 12/11 al 9/2, en 19 años: tormentas de 0 a 2 (promedio 0,42), días de calor **de 1 a 51** (promedio 22,6), heladas 0.
+  - El histórico con 3 parámetros tarda 2,2 s.
+- **Decisiones Acordadas con el Desarrollador:**
+  - **La ventana futura no se resume en un valor: es un ensemble por año.**
+    - El backend arma la **lista de escenarios**: por cada año con la ventana completa en 2006–2025 (19 o 20, según la fecha), los **valores reales de ese año**, con tormentas, calor y heladas **juntos** para conservar la relación entre ellas.
+    - El backend **no** promedia features ni corre el modelo varias veces.
+    - El ML corre el modelo una vez por escenario y agrega los resultados: el promedio es el score principal, P10 representa un "año malo", y se cuenta cuántos años quedan debajo de un umbral.
+    - El What-If pasa **un solo escenario** elegido en lugar de toda la lista.
+  - **Inicio de la ventana futura:** `fecha de corte + 1`, igual que en el entrenamiento (la ventana futura arranca donde termina la pasada).
+  - ⚠️ **Avisar al track de ML (va en el lote final):**
+    - Exponer en `backend/ml/predictor.py` `predict_ensemble(features_actuales, escenarios_historicos)`. Para cada escenario fija las features actuales, reemplaza solo `frecuencia_tormentas_extremas`, `frecuencia_estres_termico` y `frecuencia_riesgo_helada` por las del año, corre el modelo y agrega (promedio, P10, cantidad de años bajo umbral).
+    - Agregar al contrato §5 los campos nuevos (por ejemplo `score_p10` y `anios_desfavorables`).
+    - Que `generate_dataset.py` importe las fórmulas de `providers/features.py` en lugar de mantener su copia.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Almacenamiento: un calendario de eventos diarios por celda**, en lugar de escenarios precalculados.
+    - Por cada año 2006–2025 se guarda un texto con un carácter por día (`'0'`–`'7'`): el bit 0 indica tormenta (`PRECTOTCORR > 50`), el bit 1 calor (`T2M_MAX > 34`) y el bit 2 helada (`T2M_MIN < 2`).
+    - Son unos 7 KB por celda (unos 2,2 MB más en el JSON) y sirven para **cualquier ventana**: si ML adopta ventanas por calendario de cultivo, no hay que regenerar nada.
+    - Guardar los escenarios ya calculados para los 366 días posibles de inicio serían unos 22 MB.
+    - Antes de marcar los eventos, la serie se rellena con `ffill`/`bfill`, igual que en el entrenamiento.
+  - **`VERSION_CALCULO` pasa a `"telemetria-v2"`.** El histórico agrega `T2M_MIN` y el calendario de eventos, y se regeneran las 299 celdas (unos 10 minutos). Las entradas v1 que queden en caché se descartan solas.
+  - **Años válidos:** los que tienen la ventana `[corte+1, corte+90]` completa dentro de 2006-01-01 → 2025-12-31. Si la fecha de corte es el 29/2 y el año no es bisiesto, se usa el 28/2.
+  - **Topes de las features (los mismos que en `generate_dataset.py`):**
+    - Humedad radicular y superficial: [5, 99].
+    - Tendencia: [−40, 40].
+    - Anomalía de lluvia: [−80, 140].
+    - Aridez: [0,08; 3,0], con 3 decimales.
+    - Tormentas: [0, 12]; calor: [0, 45]; heladas: [0, 55].
+    - Pendiente: [0,10; 8,2]; elevación: [6, 580]; arcilla: [9, 52] (los rangos del entrenamiento con variación espacial).
+    - `telemetria_nasa` sigue mostrando el valor **sin recortar**: los topes son solo para la entrada del modelo.
+  - **Aridez:** igual que el entrenamiento. Se suma `EVPTRNS` de la ventana pasada (cada día con un mínimo de 0,1). Si la suma da menos de 45 mm, se usa la aproximación de Hargreaves `Σ clip(0,16·Tmedia, 1,2, 6,5)`. Resultado: `lluvia / max(30, evapotranspiración)`.
+  - **Salida de `construir_insumos_ml(lat, lon, *, client=None, today=None)`:** `InsumosML` con:
+    - `features_actuales`: dict con las 8 features que no dependen de la ventana futura, con topes.
+    - `escenarios_historicos`: lista de `{anio, frecuencia_tormentas_extremas, frecuencia_estres_termico, frecuencia_riesgo_helada}`, con topes.
+    - `telemetria`, `perfil_suelo` y `topografia`: los objetos de los providers, para que `/simulate` arme la respuesta sin volver a pedirlos.
+    - `advertencias`: la unión de las advertencias de los providers.
+    - Las tres consultas a los providers se hacen en paralelo.
+  - **Arcilla de la feature:** la del perfil de suelo, sea real o del fallback regional, con su advertencia.
+- **Especificación Técnica:**
+  1. `features.py`, funciones puras sin E/S (las que importaría `generate_dataset.py`):
+     - `indice_aridez(lluvia, evptrns, tmax, tmin)`
+     - `codificar_eventos(prectotcorr, t2m_max, t2m_min) -> str`
+     - `escenarios_ventana_futura(calendario, corte) -> list[dict]`
+     - `aplicar_topes(features) -> dict`
+     - Constantes `UMBRAL_TORMENTA_MM`, `UMBRAL_CALOR_C`, `UMBRAL_HELADA_C` y `TOPES`.
+  2. `nasa_telemetry.py`:
+     - `HIST_PARAMETROS` agrega `T2M_MIN`.
+     - `ReferenciaHistorica` gana `calendario_eventos: dict[int, str]`.
+     - Se serializa en la caché y en el JSON.
+     - Se expone `obtener_referencia_historica` (ya existe) para `features.py`.
+  3. `features.py`: `async construir_insumos_ml(...)`. Hace en paralelo `build_telemetria_nasa` (que ya reutiliza la caché), `fetch_perfil_suelo` y `fetch_topografia`. Con la ventana reciente y la referencia cacheadas arma las features actuales y los escenarios.
+  4. `generar_precache.py nasa`: regenera con v2 y es reanudable.
+  5. Tests mínimos:
+     - Aridez con `EVPTRNS` normal, con suma menor a 45 (Hargreaves) y en los topes.
+     - Codificación de eventos: bits, umbrales estrictos y relleno de huecos.
+     - Escenarios: cantidad de años (19 o 20), cruce de año, 29/2, y que tormentas, calor y heladas sean del **mismo** año.
+     - Topes.
+     - `construir_insumos_ml` de punta a punta con mocks: 8 features actuales y N escenarios, los providers en paralelo y las advertencias combinadas.
+     - Una entrada v1 en caché se recalcula.
+     - Paridad con pandas: el conteo de eventos de una ventana coincide con `(win_future[...] > 34).sum()` sobre la serie rellenada.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest providers/ -v`: todos en verde.
+  - `cd backend && python -m providers.generar_precache nasa`: 299/299 celdas en v2.
+  - (Con red) `cd backend && python -m providers.check_features_live`: Pergamino da aridez de unos 0,75, 19 escenarios con calor de 1 a 51 días, y las 8 features actuales completas.
 
 ---
 
