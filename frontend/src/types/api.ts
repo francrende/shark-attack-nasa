@@ -186,7 +186,7 @@ export interface UserField {
   lon: number
   hectareas: number | null
   created_at?: string
-  polygon?: [number, number][]
+  polygon?: [number, number][] | null
 }
 
 export interface FieldCreateRequest {
@@ -194,4 +194,5 @@ export interface FieldCreateRequest {
   lat: number
   lon: number
   hectareas?: number | null
+  polygon?: [number, number][] | null
 }

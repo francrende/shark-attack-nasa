@@ -56,6 +56,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-23** | Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-22` | `[x]` |
 | **FRONT-24** | Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL` | `frontend/.env.example`, `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx` | `FRONT-18`, `FRONT-23` | `[x]` |
 | **FRONT-25** | Actualización de Credenciales Demo (`demoereia@gmail.com`) para Autenticación Real en Supabase | `frontend/.env.example`, `frontend/src/services/fieldsClient.ts` | `FRONT-24` | `[x]` |
+| **FRONT-26** | Envío y Persistencia de Polígono Dibujado en `/api/v1/fields` (`BACK-6`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `FRONT-24` | `[x]` |
 
 ---
 
@@ -613,5 +614,20 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `frontend/src/services/fieldsClient.ts`
 - **Decisiones Acordadas con el Desarrollador:**
   - El Modo Demo se autentica contra `/api/v1/auth/login` con `demoereia@gmail.com` / `contraseñadedemo` (sobrescribible vía `VITE_DEMO_EMAIL` y `VITE_DEMO_PASSWORD`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-26: Envío y Persistencia de Polígono Dibujado en `/api/v1/fields` (`BACK-6`)
+- **Objetivo:** Enviar el polígono dibujado (`polygon: [number, number][]`) al crear un campo en `POST /api/v1/fields` y priorizar el polígono devuelto por el backend al listar los campos en `GET /api/v1/fields`.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/fieldsClient.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - `FieldCreateRequest` y `UserField` incluyen `polygon?: [number, number][] | null`.
+  - `attachCachedPolygons` prioriza el `polygon` proveniente de Supabase y usa `localStorage` solo como respaldo para campos antiguos sin geometría en BD.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

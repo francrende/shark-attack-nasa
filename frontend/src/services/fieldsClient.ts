@@ -33,10 +33,13 @@ export function saveFieldPolygon(
 export function attachCachedPolygons(fields: UserField[]): UserField[] {
   const cache = readPolygonCache()
   return fields.map((field) => {
+    if (Array.isArray(field.polygon) && field.polygon.length >= 3) {
+      return field
+    }
     const cached = cache[field.id]
     return Array.isArray(cached) && cached.length >= 3
       ? { ...field, polygon: cached }
-      : field
+      : { ...field, polygon: undefined }
   })
 }
 
