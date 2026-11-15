@@ -66,10 +66,10 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-33** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
 | **FRONT-34** | Conexión de `Info general` a `GET /api/v1/telemetry` al Seleccionar Campo, Fallback de Suelo, Fix de Riesgo Térmico y Último Cultivo desde BD (`BACK-20`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `BACK-20` | `[x]` |
 | **FRONT-35** | Datos Propios de Suelo/Topografía por Campo (`UserField`), Materia Orgánica en `%` y Consulta Dinámica de NASA POWER con `field_id` (`BACK-21..23`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-34`, `BACK-21`, `BACK-22`, `BACK-23` | `[x]` |
-| **FRONT-36** | Panel de recomendación en lenguaje de productor: riesgo de año malo como frecuencia ("3 de cada 10 campañas"), rinde en qq/ha contra el normal de la zona, rango año malo / año bueno, detalle técnico desplegable y estados sin backend (último resultado real guardado, nunca datos de ejemplo) | `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `BACK-27` | `[~]` |
-| **FRONT-37** | Registrar siembra y vista de seguimiento de campaña: avance del período que define el rinde, evolución semanal del riesgo, qué pasó con el clima desde la siembra y rinde esperado actualizado | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/RegistrarSiembraForm.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx` (nuevo), `frontend/src/utils/lenguajeProductor.ts`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-36`, `BACK-29` | `[~]` |
-| **FRONT-38** | Cerrar la campaña en curso (fecha de cosecha, rinde cosechado en qq/ha y notas) y borrarla con confirmación | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/AccionesCampana.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-37`, `BACK-30` | `[~]` |
-| **FRONT-39** | *Información histórica* con datos reales (BACK-31): lluvia y agua en raíces por campaña con gráfico contra lo normal, cosechas del lote, rinde de la zona; sin datos inventados; el mapa colorea solo el lote seleccionado | `frontend/src/data/historicalData.ts`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/types/api.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `BACK-31` | `[~]` |
+| **FRONT-36** | Panel de recomendación en lenguaje de productor: riesgo de año malo como frecuencia ("3 de cada 10 campañas"), rinde en qq/ha contra el normal de la zona, rango año malo / año bueno, detalle técnico desplegable y estados sin backend (último resultado real guardado, nunca datos de ejemplo) | `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `BACK-27` | `[x]` |
+| **FRONT-37** | Registrar siembra y vista de seguimiento de campaña: avance del período que define el rinde, evolución semanal del riesgo, qué pasó con el clima desde la siembra y rinde esperado actualizado | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/RegistrarSiembraForm.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx` (nuevo), `frontend/src/utils/lenguajeProductor.ts`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-36`, `BACK-29` | `[x]` |
+| **FRONT-38** | Cerrar la campaña en curso (fecha de cosecha, rinde cosechado en qq/ha y notas) y borrarla con confirmación | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/AccionesCampana.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-37`, `BACK-30` | `[x]` |
+| **FRONT-39** | *Información histórica* con datos reales (BACK-31): lluvia y agua en raíces por campaña con gráfico contra lo normal, cosechas del lote, rinde de la zona; sin datos inventados; el mapa colorea solo el lote seleccionado | `frontend/src/data/historicalData.ts`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/types/api.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `BACK-31` | `[x]` |
 
 ---
 
@@ -714,7 +714,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
-### `[~]` FRONT-36: Panel de recomendación en lenguaje de productor (riesgo de año malo y rinde en qq/ha)
+### `[x]` FRONT-36: Panel de recomendación en lenguaje de productor (riesgo de año malo y rinde en qq/ha)
 - **Objetivo:** Mostrar lo que el modelo sabe de una forma que el productor argentino, su asesor o una empresa (aseguradora, acopio, financiera) entiendan sin explicación: **cuántas campañas de cada 10 salen mal, cuántos quintales se esperan contra lo normal de la zona y cuánto se cae en un año malo**. Hoy el panel muestra un anillo "/100" que se lee como nota de examen (53/100 parece malo, pero significa "un poco mejor que un año normal"), y no muestra ni el rango ni los años malos que la API ya devuelve.
 - **Archivos Permitidos:** `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/App.tsx` (solo el flujo de carga y error de la simulación), `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md`.
 - **Decisiones Acordadas con el Desarrollador (2026-11-15):**
@@ -813,17 +813,17 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     - `503` simulado de NASA POWER: "No pudimos consultar los datos satelitales de NASA…".
     - Respuesta demorada más de 5 s (por ejemplo, con *throttling* en DevTools): aparece "Despertando el servidor…".
     - `USE_SIMULATED_MODE` activado: aviso fijo de modo demostración, sin frecuencias ni qq/ha.
-- **Resultado de la Verificación (2026-11-15):** `[~]` hasta la revisión visual del desarrollador.
+- **Resultado de la Verificación (2026-11-15):** revisado visualmente por el desarrollador.
   - `npx tsc -b`, `npm run build` y `npm run lint` sin errores (el lint solo tiene las advertencias `set-state-in-effect` que ya existían en el proyecto).
   - Implementado: `utils/lenguajeProductor.ts` (tabla de traducción), `formatQq` / `kgHaAQq`, `RiesgoRindeResumen.tsx` (riesgo, rinde, barra de rango, "Comparamos con…" y fuente), `RecommendationPanel.tsx` (sin anillo "/100"; fila compacta "80 qq/ha · 2 de cada 10 con rinde bajo"; aporte al suelo en palabras; "Ver detalle técnico"), `ultimoResultado.ts`, `AvisoEstadoDatos.tsx`, `SimulacionError` y timeout de 75 s en `apiClient.ts`, y en `App.tsx` solo el flujo de la simulación (sin datos de ejemplo por error, aviso de "despertando" a los 5 s, último resultado guardado, Reintentar, What-If deshabilitado sin conexión).
   - **Agregado respecto de la especificación:** `/simulate` ahora manda `field_id` y el token cuando el usuario tiene sesión, para usar el suelo, la topografía (servicio único de datos del lote, BACK-24) y el departamento guardados (BACK-28). Los 401/404/422 de ese `field_id` se muestran con el mensaje del backend, no como "sin conexión".
   - Datos reales verificados contra el backend (Pergamino, 15/11/2026, El Niño ONI +2,46): maíz tardío 2 de cada 10 contra 1 de cada 4 habitual, 79,5 qq/ha contra 77 normal; girasol y sorgo solo con la frecuencia habitual y el rinde normal.
   - **Decisión de presentación:** cuando hay frecuencia de año malo, la fila compacta no muestra el badge de categoría ("Riesgo alto"), que mezcla clima y suelo. El problema de suelo se sigue viendo en "Aporte al suelo: Malo" (rojo). Sin frecuencia (respuestas viejas), el badge queda como antes.
-  - **Pendiente:** revisión visual con los casos de la Definition of Done.
+  - **Revisión visual del desarrollador (2026-11-15): OK.**
 
 ---
 
-### `[~]` FRONT-37: Registrar siembra y seguimiento de la campaña
+### `[x]` FRONT-37: Registrar siembra y seguimiento de la campaña
 - **Objetivo:** Que el productor registre qué sembró y cuándo, y que después, cada vez que entra, vea **cómo viene la campaña**: en qué parte del período que define el rinde está, si el riesgo subió o bajó desde que sembró y por qué (cuánto llovió, cuántos días de calor hubo), y el rinde esperado actualizado. Para una empresa, es la misma vista en el lote de cada cliente.
 - **Archivos Permitidos:** `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/RegistrarSiembraForm.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx` (nuevo), `frontend/src/components/RiesgoRindeResumen.tsx`, `frontend/src/utils/lenguajeProductor.ts`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md`.
 - **Decisiones Acordadas con el Desarrollador (2026-11-15):**
@@ -866,12 +866,12 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build && npm run lint`
   - Revisión visual de las tres etapas con datos reales de una campaña de prueba.
-- **Resultado de la Verificación (2026-11-15):** `[~]` hasta la revisión visual del desarrollador.
+- **Resultado de la Verificación (2026-11-15):** revisado visualmente por el desarrollador.
   - `npx tsc -b`, `npm run build` y `npm run lint` sin errores (solo las advertencias `set-state-in-effect` que ya tenía el proyecto).
   - Implementado: tipos de BACK-29 y `CampaignCreateRequest`; `createCampaign`, `fetchSeguimiento` y `SeguimientoError` en `fieldsClient.ts`; `RegistrarSiembraForm.tsx`; `SeguimientoCampana.tsx` (encabezado, etapa y semana, barra de avance, evolución del riesgo con flecha, "por qué" desde `observado`, `RiesgoRindeResumen` con el último punto, gráfico SVG semanal con banda de qq/ha y líneas de lo habitual, letra chica, detalle técnico); textos en `lenguajeProductor.ts` (`textoEtapa`, `textoEvolucion`, `textoPorQue`, `comparacionLluvia`, `textoUltimoDato`); en `App.tsx` la campaña en curso (sin fecha de fin, sembrada hace menos de 9 meses, cultivo con rinde), su consulta y el formulario, arriba de la planificación.
   - **Cambio respecto de la especificación:** el formulario ofrece **los 8 cultivos con rinde**, agrupados por campaña, y no solo los de la campaña vigente: en noviembre (verano vigente) un trigo sembrado en junio está justo en su período crítico. La campaña sale del cultivo.
   - Estados: cargando ("Consultando datos satelitales…"), `503` con el nombre de la fuente y Reintentar, `422` con el mensaje del backend, sin conexión con Reintentar. En modo demo: "Registrate y guardá tu lote para seguir la campaña semana a semana."
-  - **Pendiente:** revisión visual de las tres etapas con una campaña de prueba (requiere las columnas de BACK-28 en Supabase).
+  - **Revisión visual del desarrollador (2026-11-15): OK.**
   - **Correcciones tras la primera revisión visual (2026-11-15):**
     - *Info general* tomaba la siembra en curso como "último cultivo" (antecesor). Ahora `App.tsx` guarda todas las campañas del lote: la más reciente sin fecha de fin y con seguimiento es la **campaña en curso**, y el "último cultivo" es la más reciente que no es esa.
     - Las frecuencias se escriben en una sola escala (ver FRONT-36) y la flecha de evolución sigue a lo que se lee: si las dos frecuencias se escriben igual, "se mantiene".
@@ -879,7 +879,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
-### `[~]` FRONT-38: Cerrar y borrar la campaña en curso
+### `[x]` FRONT-38: Cerrar y borrar la campaña en curso
 - **Objetivo:** Sin esto, una siembra seguía apareciendo como campaña en curso hasta 9 meses después aunque ya se hubiera cosechado, y no había forma de corregir una carga errónea.
 - **Archivos:** `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/AccionesCampana.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`.
 - **Decisiones (2026-11-15, pedido del desarrollador):**
@@ -887,11 +887,11 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Cerrar campaña (ya cosechada):** fecha de cosecha (entre la siembra y hoy), rinde cosechado en **qq/ha** opcional (se guarda en kg/ha × 100) con la aclaración "Con el rinde real de tu lote el sistema puede comparar lo que esperaba con lo que pasó y aprender de tu campo", y notas opcionales. Al cerrar, la campaña deja de estar en curso, pasa a ser el "último cultivo" de Info general y vuelve a aparecer "Registrar siembra".
   - **Borrar siembra:** confirmación en línea ("¿Borrar la siembra de Soja de 1ra del 13/11? Se borra también su seguimiento. No se puede deshacer."), con botón en rojo.
   - Los errores del backend (fechas inválidas) se muestran tal cual, en el idioma del productor.
-- **Verificación (2026-11-15):** `npx tsc -b`, `npm run build` y `npm run lint` sin errores. **Pendiente:** revisión visual.
+- **Verificación (2026-11-15):** `npx tsc -b`, `npm run build` y `npm run lint` sin errores. Revisión visual del desarrollador (2026-11-15): OK.
 
 ---
 
-### `[~]` FRONT-39: Información histórica con datos reales
+### `[x]` FRONT-39: Información histórica con datos reales
 - **Objetivo:** La pestaña mostraba rotaciones y clima inventados (copiados del lote demo más cercano). Ahora muestra solo datos reales de BACK-31.
 - **Decisiones (2026-11-15, con el desarrollador):** campaña agrícola desde 2006/07; tres datos: *Cosechas del lote y rinde de la zona*, *Lluvia por campaña*, *Agua en las raíces*; se quitan temperatura, evaporación y materia orgánica por año.
 - **Implementación:**
@@ -899,4 +899,4 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `HistoricalPanel.tsx`: control de campaña y reproducción, resumen de la campaña (lluvia contra lo normal, agua en raíces con el mes más seco, cosechas del lote), tabla "Cómo le fue a la zona" en qq/ha contra lo normal, gráfico SVG por campaña (lluvia o agua en raíces) con la línea de lo normal, lista de cosechas por campaña y fuentes al pie.
   - `MapView.tsx`: el color histórico es el del **lote seleccionado** (con datos reales); los demás campos quedan con su color normal.
   - `App.tsx`: pide el historial al abrir la pestaña o cambiar de lote (y al cerrar o registrar una campaña), con los avisos de FRONT-36 si falla.
-- **Verificación (2026-11-15):** `npx tsc -b`, `npm run build` y `npm run lint` sin errores. **Pendiente:** revisión visual.
+- **Verificación (2026-11-15):** `npx tsc -b`, `npm run build` y `npm run lint` sin errores. Revisión visual del desarrollador (2026-11-15): OK.
