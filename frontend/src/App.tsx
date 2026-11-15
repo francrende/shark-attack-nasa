@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Compass,
   History,
@@ -592,7 +592,7 @@ export function App() {
     })
   }
 
-  const handleSelectSearchLocation = (result: MapSearchResult) => {
+  const handleSelectSearchLocation = useCallback((result: MapSearchResult) => {
     setMapSearchTarget((prev) => ({
       label: result.label,
       coords: result.coords,
@@ -601,7 +601,7 @@ export function App() {
       polygons: result.polygons,
       requestId: (prev?.requestId ?? 0) + 1,
     }))
-  }
+  }, [])
 
   const handleStartDrawing = () => {
     setEditingPolygonField(null)
