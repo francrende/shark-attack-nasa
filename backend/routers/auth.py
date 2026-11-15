@@ -1,5 +1,6 @@
 """Router y dependencias de autenticación con Supabase Auth."""
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,7 @@ try:
         AuthLoginRequest,
         AuthRegisterRequest,
         AuthResponse,
+        ProfileProvincesUpdate,
         UserProfileResponse,
     )
 except ImportError:
@@ -27,9 +29,11 @@ except ImportError:
         AuthLoginRequest,
         AuthRegisterRequest,
         AuthResponse,
+        ProfileProvincesUpdate,
         UserProfileResponse,
     )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -52,6 +56,58 @@ def _extract_user_profile(user_obj: Any) -> UserProfileResponse:
         nombre=metadata.get("nombre") or None,
         created_at=getattr(user_obj, "created_at", None),
     )
+
+
+def _fallback_profile(current_user: AuthenticatedUser) -> UserProfileResponse:
+    return UserProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        nombre=current_user.nombre,
+    )
+
+
+def _profile_from_row(
+    row: dict[str, Any], fallback: UserProfileResponse
+) -> UserProfileResponse:
+    """Construye el perfil desde una fila de ``public.profiles`` con fallback seguro.
+
+    Los valores nulos/ausentes de la fila (p. ej. ``provincias`` si la migración aún
+    no se aplicó o el usuario no completó el filtro) no pisan el fallback.
+    """
+    provincias = row.get("provincias")
+    return UserProfileResponse(
+        id=row.get("id") or fallback.id,
+        email=row.get("email") or fallback.email,
+        nombre=row.get("nombre") or fallback.nombre,
+        provincias=list(provincias) if provincias else None,
+        created_at=row.get("created_at") or fallback.created_at,
+    )
+
+
+def _load_user_profile(
+    access_token: str, fallback: UserProfileResponse
+) -> UserProfileResponse:
+    """Lee ``public.profiles`` (RLS del usuario) y devuelve ``UserProfileResponse``.
+
+    Si la consulta falla o la fila no existe, devuelve ``fallback``.
+    """
+    try:
+        client = get_authenticated_supabase_client(access_token)
+        result = (
+            client.table("profiles")
+            .select("id, email, nombre, provincias, created_at")
+            .eq("id", str(fallback.id))
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        logger.warning("No se pudo leer public.profiles; se usa el perfil de respaldo.", exc_info=True)
+        return fallback
+
+    row = getattr(result, "data", None) if result is not None else None
+    if not row:
+        return fallback
+    return _profile_from_row(row, fallback)
 
 
 def get_current_user(
@@ -155,7 +211,9 @@ def login(payload: AuthLoginRequest) -> AuthResponse:
     return AuthResponse(
         access_token=response.session.access_token,
         refresh_token=response.session.refresh_token,
-        user=_extract_user_profile(response.user),
+        user=_load_user_profile(
+            response.session.access_token, _extract_user_profile(response.user)
+        ),
         requiere_confirmacion_email=False,
     )
 
@@ -163,19 +221,37 @@ def login(payload: AuthLoginRequest) -> AuthResponse:
 @router.get("/me", response_model=UserProfileResponse)
 def get_me(current_user: AuthenticatedUser = Depends(get_current_user)) -> UserProfileResponse:
     """Devuelve el perfil del usuario autenticado."""
-    client = get_authenticated_supabase_client(current_user.access_token)
-    result = (
-        client.table("profiles")
-        .select("id, email, nombre, created_at")
-        .eq("id", current_user.id)
-        .maybe_single()
-        .execute()
+    return _load_user_profile(
+        current_user.access_token, _fallback_profile(current_user)
     )
-    if result.data:
-        return UserProfileResponse(**result.data)
 
-    return UserProfileResponse(
-        id=current_user.id,
-        email=current_user.email,
-        nombre=current_user.nombre,
-    )
+
+@router.patch("/me/provinces", response_model=UserProfileResponse)
+def update_my_provinces(
+    payload: ProfileProvincesUpdate,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> UserProfileResponse:
+    """Guarda el filtro inicial de provincias (Región Pampeana) del usuario."""
+    fallback = _fallback_profile(current_user)
+    try:
+        client = get_authenticated_supabase_client(current_user.access_token)
+        result = (
+            client.table("profiles")
+            .update({"provincias": payload.provincias})
+            .eq("id", current_user.id)
+            .execute()
+        )
+    except Exception as exc:
+        logger.exception("Error al actualizar provincias del perfil.")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No fue posible guardar las provincias en el perfil.",
+        ) from exc
+
+    rows = getattr(result, "data", None) or []
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró el perfil del usuario para actualizar.",
+        )
+    return _profile_from_row(rows[0], fallback)

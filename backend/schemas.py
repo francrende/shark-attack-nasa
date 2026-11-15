@@ -43,11 +43,45 @@ class AuthLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+PAMPEAN_PROVINCE_IDS = (
+    "buenos_aires",
+    "cordoba",
+    "santa_fe",
+    "entre_rios",
+    "la_pampa",
+)
+
+
 class UserProfileResponse(BaseModel):
     id: UUID
     email: EmailStr | None = None
     nombre: str | None = None
+    # None = el usuario aún no completó el filtro inicial de provincias.
+    provincias: list[str] | None = None
     created_at: datetime | None = None
+
+
+class ProfileProvincesUpdate(BaseModel):
+    """Body de ``PATCH /api/v1/auth/me/provinces`` (Región Pampeana habilitada)."""
+
+    provincias: list[str]
+
+    @field_validator("provincias")
+    @classmethod
+    def check_provincias(cls, value: list[str]) -> list[str]:
+        unique = list(dict.fromkeys(value))  # deduplica preservando orden
+        if not unique:
+            raise ValueError("Debe seleccionar al menos una provincia.")
+        invalid = [p for p in unique if p not in PAMPEAN_PROVINCE_IDS]
+        if invalid:
+            raise ValueError(
+                "Provincias no habilitadas: "
+                + ", ".join(invalid)
+                + ". Habilitadas: "
+                + ", ".join(PAMPEAN_PROVINCE_IDS)
+                + "."
+            )
+        return unique
 
 
 class AuthResponse(BaseModel):

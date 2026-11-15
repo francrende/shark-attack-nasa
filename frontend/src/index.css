@@ -36,6 +36,14 @@
   --color-border: #DECBB1;
   --color-border-strong: #C7B090;
 
+  /* 3b. Mapa plano de regiones (selector de provincias) */
+  --color-region-available: rgba(138, 161, 91, 0.62);
+  --color-region-top: #D9733A;
+  --color-region-top-hover: #F08A4B;
+  --color-region-locked: #E4D6BA;
+  --color-region-locked-hover: #D9C7A2;
+  --color-region-locked-border: #C7B090;
+
   /* 4. Calor, Estrés Térmico y Gráficos de Suelo (#F05D23 + variantes) */
   --color-heat-soil: #F05D23;
   --color-heat-soil-dark: #C44310;
@@ -47,6 +55,7 @@
   --color-water-rain: #4A7B9D;
   --color-water-rain-dark: #325873;
   --color-water-rain-light: #6FA0C2;
+  --color-water-rain-darker: #1F3D52;
   --color-water-rain-soft: #E2EFF7;
   --color-water-rain-border: rgba(74, 123, 157, 0.32);
 

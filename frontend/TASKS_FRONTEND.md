@@ -57,6 +57,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-24** | Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL` | `frontend/.env.example`, `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx` | `FRONT-18`, `FRONT-23` | `[x]` |
 | **FRONT-25** | Actualización de Credenciales Demo (`demoereia@gmail.com`) para Autenticación Real en Supabase | `frontend/.env.example`, `frontend/src/services/fieldsClient.ts` | `FRONT-24` | `[x]` |
 | **FRONT-26** | Envío y Persistencia de Polígono Dibujado en `/api/v1/fields` (`BACK-6`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `FRONT-24` | `[x]` |
+| **FRONT-27** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
 
 ---
 
@@ -631,3 +632,28 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `attachCachedPolygons` prioriza el `polygon` proveniente de Supabase y usa `localStorage` solo como respaldo para campos antiguos sin geometría en BD.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-27: Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento
+- **Objetivo:** Incorporar una pantalla previa de selección de provincias argentinas (Región Pampeana habilitada: Buenos Aires, Córdoba, Entre Ríos, La Pampa y Santa Fe) con mapa SVG 3D interactivo, persistencia en `profiles.provincias` para cuentas registradas (solo en memoria en modo demo), filtrado de lotes y validación de vértices en `MapView`, y optimizaciones de rendimiento sin alterar la estética.
+- **Archivos Permitidos:**
+  - `frontend/src/data/argentinaProvinces.json`
+  - `frontend/src/utils/geo.ts`
+  - `frontend/src/components/ProvinceSelectorScreen.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/types/api.ts`
+  - `frontend/src/theme/mapColors.ts`
+  - `frontend/src/index.css`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+  - `frontend/SKILLS_FRONTEND.md`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Mapa 3D de Argentina (`ProvinceSelectorScreen`):** Proyección inclinada de las 24 jurisdicciones oficiales (IGN simplificado con topología compartida), con elevación coplanar en hover/selección para las 5 habilitadas, hover diferenciado en Islas Malvinas (`¡Son argentinas!`) y tooltip `"Próximamente — Región en expansión"` en jurisdicciones bloqueadas.
+  - **Sidebar alineado al tablero:** Reutiliza `.right-analysis-pane` y el ritmo/paleta cálida de tarjetas de `Planificación de campaña` (cajas crema/elevadas con borde punteado `--color-border-strong`, chips en `--color-earth-brown-dark`, contador en marrón tierra y botón terracota con texto `--color-bg-card`), además de una línea separadora `border-bottom: 1.5px solid var(--color-border-strong)` en `.top-navbar`.
+  - **Flujo Demo vs. BD y GIS:** Usuarios registrados persisten en `PATCH /api/v1/auth/me/provinces` y pueden reeditar desde `.header-province-pill`; en modo demo no se llama al endpoint. `App.tsx` filtra `visibleFields` y `MapView.tsx` ajusta `fitBounds` y valida clics de dibujo contra las provincias elegidas.
+  - **Optimización sin cambios visuales:** Tooltip posicionado vía `ref` + `translate3d` sin re-renders de React en `onMouseMove`, blur agrupado en `MapBaseRelief`, menos capas redundantes de extrusión 3D, `key={field.id}` estable en capas Leaflet y `React.lazy` para `MapView` y `HistoricalPanel`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npm run build && npm run lint`

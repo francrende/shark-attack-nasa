@@ -1,23 +1,32 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import {
   Compass,
   History,
   Info,
   LogOut,
+  MapPin,
   User,
 } from 'lucide-react'
 import './App.css'
 import { AuthScreen } from './components/AuthScreen'
 import { BrandBlock } from './components/BrandBlock'
 import { FieldsSubheader } from './components/FieldsSubheader'
-import { HistoricalPanel } from './components/HistoricalPanel'
-import { MapView } from './components/MapView'
+import { ProvinceSelectorScreen } from './components/ProvinceSelectorScreen'
 import { RecommendationPanel } from './components/RecommendationPanel'
 import {
   CampaignConfigPanel,
   WhatIfPanel,
 } from './components/SimulationControls'
 import { TelemetryCards } from './components/TelemetryCards'
+
+const HistoricalPanel = lazy(() =>
+  import('./components/HistoricalPanel').then((m) => ({
+    default: m.HistoricalPanel,
+  }))
+)
+const MapView = lazy(() =>
+  import('./components/MapView').then((m) => ({ default: m.MapView }))
+)
 import { DEMO_FIELDS } from './data/demoFields'
 import {
   getHistoricalSeriesForCoords,
@@ -31,6 +40,7 @@ import {
   clearStoredAuthToken,
   fetchCurrentUser,
   getStoredAuthToken,
+  updateUserProvinces,
 } from './services/authClient'
 import {
   createUserField,
@@ -48,10 +58,29 @@ import type {
   UserField,
   UserProfile,
 } from './types/api'
-import { calculateCentroid, calculatePolygonAreaHa } from './utils/geo'
+import {
+  PAMPEAN_PROVINCE_IDS,
+  calculateCentroid,
+  calculatePolygonAreaHa,
+  getProvincesBounds,
+  getProvincesLabel,
+  isPointInProvinces,
+} from './utils/geo'
 
 export type NavTabId = 'planificacion' | 'info_general' | 'historico'
 type AuthStatus = 'checking' | 'authenticated' | 'demo' | 'unauthenticated'
+
+/** Filtra los ids de provincias persistidos dejando solo los habilitados (Región Pampeana). */
+function sanitizeProvinceIds(ids: string[] | null | undefined): string[] {
+  const allowed: readonly string[] = PAMPEAN_PROVINCE_IDS
+  return Array.from(new Set(ids ?? [])).filter((id) => allowed.includes(id))
+}
+
+/** Centro geográfico (lat/lon) de las provincias seleccionadas. */
+function getProvincesCenter(provinceIds: string[]): Coordenadas {
+  const [[south, west], [north, east]] = getProvincesBounds(provinceIds)
+  return { lat: (south + north) / 2, lon: (west + east) / 2 }
+}
 
 export function App() {
   const defaultField = DEMO_FIELDS[0]
@@ -59,6 +88,31 @@ export function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>('checking')
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
   const [activeToken, setActiveToken] = useState<string | null>(null)
+
+  // Filtro previo de provincias (Región Pampeana)
+  const [selectedProvinces, setSelectedProvinces] = useState<string[]>([])
+  const [isProvinceFilterApplied, setIsProvinceFilterApplied] =
+    useState<boolean>(false)
+  const [isEditingProvinces, setIsEditingProvinces] = useState<boolean>(false)
+  const [isSavingProvinces, setIsSavingProvinces] = useState<boolean>(false)
+  const [provincesError, setProvincesError] = useState<string | null>(null)
+
+  /**
+   * Usuario registrado: si el perfil ya trae provincias, salta el selector.
+   * (El modo demo nunca lee provincias de BD: siempre arranca en el selector.)
+   */
+  const initProvincesFromProfile = (user: UserProfile) => {
+    const saved = sanitizeProvinceIds(user.provincias)
+    if (saved.length > 0) {
+      setSelectedProvinces(saved)
+      setIsProvinceFilterApplied(true)
+    } else {
+      setSelectedProvinces([])
+      setIsProvinceFilterApplied(false)
+    }
+    setIsEditingProvinces(false)
+    setProvincesError(null)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -71,6 +125,7 @@ export function App() {
     fetchCurrentUser(token)
       .then((user) => {
         if (cancelled) return
+        initProvincesFromProfile(user)
         setCurrentUser(user)
         setActiveToken(token)
         setAuthStatus('authenticated')
@@ -232,10 +287,35 @@ export function App() {
     return found?.gibsDate ?? '2024-11-08'
   }, [selectedCoords, historicalYear])
 
-  const selectedUserField = useMemo(
-    () => userFields.find((f) => f.id === selectedFieldId) ?? null,
-    [userFields, selectedFieldId]
+  // Solo los campos que caen dentro de las provincias seleccionadas
+  const visibleFields = useMemo(
+    () =>
+      userFields.filter((f) => isPointInProvinces(f.lat, f.lon, selectedProvinces)),
+    [userFields, selectedProvinces]
   )
+
+  const selectedUserField = useMemo(
+    () => visibleFields.find((f) => f.id === selectedFieldId) ?? null,
+    [visibleFields, selectedFieldId]
+  )
+
+  // Reconciliar el campo seleccionado con el filtro de provincias (carga de campos y al aplicar):
+  // nunca autoselecciona un campo fuera de las provincias elegidas.
+  useEffect(() => {
+    if (!isProvinceFilterApplied) return
+    if (selectedFieldId && visibleFields.some((f) => f.id === selectedFieldId)) {
+      return
+    }
+    if (visibleFields.length > 0) {
+      const first = visibleFields[0]
+      setSelectedFieldId(first.id)
+      setSelectedCoords({ lat: first.lat, lon: first.lon })
+      return
+    }
+    // Sin campos en las provincias elegidas: MapView encuadra la región completa
+    setSelectedFieldId(null)
+    setSelectedCoords(getProvincesCenter(selectedProvinces))
+  }, [isProvinceFilterApplied, visibleFields, selectedFieldId, selectedProvinces])
 
   const currentLoteLabel = useMemo(() => {
     if (isDrawingNewField) {
@@ -278,12 +358,7 @@ export function App() {
         const fields = await listUserFields(token)
         if (cancelled) return
         setUserFields(fields)
-        if (fields.length > 0) {
-          setSelectedFieldId(fields[0].id)
-          setSelectedCoords({ lat: fields[0].lat, lon: fields[0].lon })
-        } else {
-          setSelectedFieldId(null)
-        }
+        // La selección de campo la resuelve el efecto de filtro por provincias
       } catch (err) {
         if (cancelled) return
         setFieldsError(
@@ -329,6 +404,8 @@ export function App() {
         lat: selectedUserField.lat,
         lon: selectedUserField.lon,
       })
+    } else {
+      setSelectedCoords(getProvincesCenter(selectedProvinces))
     }
   }
 
@@ -412,15 +489,70 @@ export function App() {
     whatIf.variacion_lluvia_esperada_pct !== 0
 
   const handleAuthenticated = (user: UserProfile, token: string) => {
-    setCurrentUser(user)
-    setActiveToken(token)
-    setAuthStatus('authenticated')
+    const finish = (profile: UserProfile) => {
+      initProvincesFromProfile(profile)
+      setCurrentUser(profile)
+      setActiveToken(token)
+      setAuthStatus('authenticated')
+    }
+
+    // Si el login no informó provincias (undefined), se consulta el perfil en BD
+    if (user.provincias !== undefined) {
+      finish(user)
+      return
+    }
+    fetchCurrentUser(token)
+      .then((profile) => finish({ ...user, provincias: profile.provincias ?? null }))
+      .catch(() => finish({ ...user, provincias: null }))
   }
 
   const handleEnterDemo = () => {
     setCurrentUser(null)
     setActiveToken(null)
+    // Demo: la selección vive solo en memoria y siempre arranca en el selector
+    setSelectedProvinces([])
+    setIsProvinceFilterApplied(false)
+    setIsEditingProvinces(false)
+    setProvincesError(null)
     setAuthStatus('demo')
+  }
+
+  const commitProvinces = (provinceIds: string[]) => {
+    setIsDrawingNewField(false)
+    setCustomPolygon([])
+    setFieldsError(null)
+    setSelectedProvinces(provinceIds)
+    setIsProvinceFilterApplied(true)
+    setIsEditingProvinces(false)
+  }
+
+  const handleApplyProvinces = async (provinceIds: string[]) => {
+    setProvincesError(null)
+
+    // Modo demo (cuenta compartida): NUNCA se persiste en BD
+    if (authStatus !== 'authenticated' || !activeToken) {
+      commitProvinces(provinceIds)
+      return
+    }
+
+    setIsSavingProvinces(true)
+    try {
+      const updated = await updateUserProvinces(activeToken, provinceIds)
+      const saved = sanitizeProvinceIds(updated.provincias)
+      const finalIds = saved.length > 0 ? saved : provinceIds
+      setCurrentUser((prev) =>
+        prev ? { ...prev, provincias: finalIds } : prev
+      )
+      commitProvinces(finalIds)
+    } catch (err) {
+      setProvincesError(
+        err instanceof Error
+          ? err.message
+          : 'No fue posible guardar las provincias seleccionadas.'
+      )
+    } finally {
+      setIsSavingProvinces(false)
+    }
   }
 
   const handleLogout = () => {
@@ -429,6 +561,10 @@ export function App() {
     setActiveToken(null)
     setUserFields([])
     setSelectedFieldId(null)
+    setSelectedProvinces([])
+    setIsProvinceFilterApplied(false)
+    setIsEditingProvinces(false)
+    setProvincesError(null)
     setAuthStatus('unauthenticated')
   }
 
@@ -457,6 +593,29 @@ export function App() {
     )
   }
 
+  // Filtro previo: mapa plano de Argentina (primera vez, demo, o al reeditar desde el header)
+  if (!isProvinceFilterApplied || isEditingProvinces) {
+    return (
+      <ProvinceSelectorScreen
+        initialSelected={selectedProvinces}
+        isSaving={isSavingProvinces}
+        errorMsg={provincesError}
+        isDemo={authStatus === 'demo'}
+        userLabel={currentUser?.nombre || currentUser?.email}
+        onApply={handleApplyProvinces}
+        onCancel={
+          isProvinceFilterApplied
+            ? () => {
+                setProvincesError(null)
+                setIsEditingProvinces(false)
+              }
+            : undefined
+        }
+        onLogout={handleLogout}
+      />
+    )
+  }
+
   return (
     <div className="app-shell">
       {/* HEADER SUPERIOR SÓLIDO (#3A0C00) */}
@@ -465,6 +624,19 @@ export function App() {
           <BrandBlock />
 
           <div className="header-session-bar">
+            <button
+              type="button"
+              className="header-province-pill"
+              onClick={() => {
+                setProvincesError(null)
+                setIsEditingProvinces(true)
+              }}
+              title="Cambiar provincias seleccionadas"
+              aria-label={`Provincias: ${getProvincesLabel(selectedProvinces)}. Cambiar selección`}
+            >
+              <MapPin size={14} aria-hidden="true" />
+              <span>{getProvincesLabel(selectedProvinces)}</span>
+            </button>
             {authStatus === 'authenticated' && currentUser ? (
               <>
                 <span className="header-user-pill">
@@ -501,7 +673,7 @@ export function App() {
       <main className="split-dashboard">
         <section className="left-map-pane">
           <FieldsSubheader
-            fields={userFields}
+            fields={visibleFields}
             selectedFieldId={selectedFieldId}
             isLoading={isFieldsLoading}
             isSaving={isSavingField}
@@ -517,21 +689,25 @@ export function App() {
             onClearPolygon={handleClearPolygon}
             onSaveField={handleSaveNewField}
           />
-          <MapView
-            selectedCoords={selectedCoords}
-            userFields={userFields}
-            selectedFieldId={selectedFieldId}
-            isDrawingNewField={isDrawingNewField}
-            customPolygon={customPolygon}
-            historicalMode={{
-              active: activeTab === 'historico',
-              year: historicalYear,
-              metric: historicalMetric,
-              gibsDateIso: currentHistoricalGibsDate,
-            }}
-            onSelectUserField={handleSelectUserField}
-            onUpdateCustomPolygon={handleUpdateCustomPolygon}
-          />
+          <Suspense fallback={<div className="map-wrapper" />}>
+            <MapView
+              selectedCoords={selectedCoords}
+              userFields={visibleFields}
+              selectedFieldId={selectedFieldId}
+              isDrawingNewField={isDrawingNewField}
+              customPolygon={customPolygon}
+              historicalMode={{
+                active: activeTab === 'historico',
+                year: historicalYear,
+                metric: historicalMetric,
+                gibsDateIso: currentHistoricalGibsDate,
+              }}
+              selectedProvinces={selectedProvinces}
+              onOutsideProvinceClick={setFieldsError}
+              onSelectUserField={handleSelectUserField}
+              onUpdateCustomPolygon={handleUpdateCustomPolygon}
+            />
+          </Suspense>
         </section>
 
         <aside className="right-analysis-pane">
@@ -642,14 +818,24 @@ export function App() {
             )}
 
             {activeTab === 'historico' && (
-              <HistoricalPanel
-                ubicacion={selectedCoords}
-                loteLabel={currentLoteLabel}
-                selectedYear={historicalYear}
-                selectedMetric={historicalMetric}
-                onChangeYear={setHistoricalYear}
-                onChangeMetric={setHistoricalMetric}
-              />
+              <Suspense
+                fallback={
+                  <section className="panel-section skeleton-card" aria-busy="true">
+                    <div className="skeleton-line short" />
+                    <div className="skeleton-line title" />
+                    <div className="skeleton-box" />
+                  </section>
+                }
+              >
+                <HistoricalPanel
+                  ubicacion={selectedCoords}
+                  loteLabel={currentLoteLabel}
+                  selectedYear={historicalYear}
+                  selectedMetric={historicalMetric}
+                  onChangeYear={setHistoricalYear}
+                  onChangeMetric={setHistoricalMetric}
+                />
+              </Suspense>
             )}
           </div>
         </aside>

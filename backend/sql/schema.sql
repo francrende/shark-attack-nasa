@@ -6,8 +6,13 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text,
   nombre text,
+  -- Provincias elegidas en el filtro inicial (Región Pampeana). NULL = aún no completó el filtro.
+  provincias text[],
   created_at timestamptz not null default now()
 );
+
+-- Migración idempotente para bases ya existentes
+alter table public.profiles add column if not exists provincias text[];
 
 alter table public.profiles enable row level security;
 
