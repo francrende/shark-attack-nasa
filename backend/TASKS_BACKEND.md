@@ -44,6 +44,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | BACK-4 | Resiliencia y latencia: caché en capas, caché de NASA por celda de grilla, climatología pampeana precalculada, corte automático de SoilGrids, lotes de ejemplo | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | BACK-2, BACK-3 | `[x]` |
 | BACK-5 | Provider SRTM (OpenTopoData): elevación + pendiente con grilla 3×3 a 300 m (Horn), cascada de fallback, caché y corte automático | `backend/providers/srtm.py`, `backend/providers/regional.py`, `backend/providers/resiliencia.py`, `backend/providers/soilgrids.py`, `backend/providers/nasa_power.py`, `backend/providers/test_srtm.py`, `backend/providers/check_srtm_live.py` | BACK-4 | `[x]` |
 | BACK-6 | Constructor de features del ML: features actuales (ventana pasada + topografía + suelo) y escenarios históricos por año de la ventana futura (calendario de eventos por celda) | `backend/providers/features.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/providers/test_features.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_features_live.py` | BACK-2, BACK-3, BACK-4, BACK-5 | `[x]` |
+| BACK-7 | Endpoint `POST /api/v1/simulate`: BACK-6 → ensemble ML-5 → contrato §5, app FastAPI con CORS y carga del modelo al arrancar | `backend/main.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/schemas.py`, `backend/routers/test_simulate.py` | BACK-6, ML-5 | `[x]` |
 
 ---
 
@@ -265,7 +266,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 > **Pendiente:** `generar_precache suelo` no se pudo correr porque ISRIC sigue sin responder. Correrlo cuando vuelva, y confirmar los 4 lotes de ejemplo con el frontend.
 >
 > **Para coordinar tras el pull de `main` (ML-4):**
-> - `predictor.py` trae su propio `classify_summer_thermal_risk` (días en una ventana de 90 días, cortes 3,5/7, sin `critico`) y `classify_soil_texture` (solo arcilla). Se superponen con `riesgo_termico_verano` (dic–feb, 15/25/40) y con la clasificación USDA de este track. Hay que acordar cuál llena el contrato.
+> - `predictor.py` trae su propio `classify_summer_thermal_risk` (días en una ventana de 90 días, cortes 3,5/7, sin `critico`) y `classify_soil_texture` (solo arcilla). Se superponen con `riesgo_termico_verano` (dic–feb, 15/25/40) y con la clasificación USDA de este track. Hay que acordar cuál llena el contrato. **Resuelto (15/11/2026):** `telemetria_nasa` la llena BACK-2 (BACK-7) y el ML usa la misma escala 15/25/40 con `critico` (`THERMAL_RISK_THRESHOLDS`, test de paridad en `routers/test_simulate.py`); la anomalía `estres_termico_critico` aparece solo con riesgo alto (severidad media) o crítico (alta).
 > - En el ML, las tormentas, el estrés térmico y las heladas pasaron a la **ventana futura** `[t+1, t+90]`. En producción hay que calcularlas como el promedio histórico de esos 90 días. `frecuencia_tormentas_extremas_90d` de la telemetría (90 días pasados) **no** es esa feature.
 - **Objetivo:** Que cualquier jurado, en cualquier punto y en cualquier momento, reciba respuesta rápida, y que una caída de ISRIC no deje datos aproximados guardados para siempre. Sin Supabase (lo implementa otro compañero), pero con la caché lista para enchufarlo.
 - **Contexto:** los jurados prueban la app **solos, sin guía y en puntos arbitrarios**. Por eso una pre-caché de puntos fijos sirve poco, y el foco pasa a la **caché por celda de grilla** y al **precálculo regional**.
@@ -494,6 +495,34 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m pytest providers/ -v`: todos en verde.
   - `cd backend && python -m providers.generar_precache nasa`: 299/299 celdas en v2.
   - (Con red) `cd backend && python -m providers.check_features_live`: Pergamino da aridez de unos 0,75, 19 escenarios con calor de 1 a 51 días, y las 8 features actuales completas.
+
+### `[x]` BACK-7: Endpoint `POST /api/v1/simulate`
+> **Verificación (15/11/2026):**
+> - **Tests:** 22 nuevos en `routers/test_simulate.py`, incluido uno de punta a punta con los providers reales y HTTP mockeado. La suite completa del backend da 203 en verde.
+> - **En vivo, Pergamino** (corte 11/11): 200 OK, 19 años análogos, gana sorgo (88,2, riesgo bajo, P10 81,2). Primer pedido con caché vacía 1,96 s; los siguientes 0,18 s.
+- **Objetivo:** Exponer el pipeline online de CONTEXT §4.6: request §5 → `construir_insumos_ml` (BACK-6) → `run_recommendation` con `escenarios_historicos` (ML-5) → respuesta §5.
+- **Archivos Permitidos:** `backend/main.py` (nuevo), `backend/routers/simulate.py` (nuevo), `backend/services/simulation_service.py` (nuevo), `backend/schemas.py`, `backend/routers/test_simulate.py` (nuevo).
+- **Decisiones Acordadas con el Desarrollador:**
+  - El track de ML hace también el cableado del backend (ML-5 ya expone `predict_ensemble` y `run_recommendation(escenarios_historicos=...)`).
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Bloques descriptivos con dato real:** `telemetria_nasa` es el objeto de BACK-2 tal cual (sin topes ni What-If; `frecuencia_tormentas_extremas_90d` es la de los 90 días pasados). `topografia_srtm` muestra elevación y pendiente reales sin el tope del modelo. `perfil_suelo` usa la textura USDA, la arcilla y el carbono de SoilGrids. Los scores sí usan las features con topes y con el What-If.
+  - **What-If sobre todo el ensemble:** el override de humedad y la variación de lluvia se aplican a cada año análogo (no se elige un único escenario, porque el request §5 no tiene campo para elegirlo).
+  - **Validación estricta (422):** `campana`, `objetivo_productor` y `cultivo_anterior` cerrados (los 11 cultivos de la matriz o `ninguno`/`barbecho`/`sin_cultivo`/`null`; un typo ya no se trata en silencio como "sin cultivo anterior"); rangos del What-If de §5; campos desconocidos rechazados.
+  - **Campaña no vigente → `422`** (corregido el 15/11/2026 con el desarrollador): el frontend bloquea el botón, pero el backend también valida con la regla de §4.1 (`campana_vigente`: mes de hoy + 45 días en abril–septiembre → invierno), **antes** de consultar los providers. El mensaje indica la fecha en que se habilita la campaña pedida. Antes se aceptaban ambas y una llamada directa a la API evaluaba invierno con el clima del verano.
+  - **Errores:** provider sin datos (`NasaPowerUnavailable`, `SoilGridsUnavailable`, `SrtmUnavailable`) o sin años análogos completos → `503` con el mensaje del provider.
+  - **Campo nuevo `advertencias`** (lista, sin duplicados) con los avisos de calidad de dato de SoilGrids y SRTM (fallbacks, propiedades faltantes).
+  - **Extras de ML-3** (`cobertura_12_meses`, `comparacion_estrategias`) se mantienen en la respuesta.
+  - **App:** CORS para `http://localhost:5173` (configurable con `CORS_ORIGINS`, separado por comas), el modelo se carga en el `lifespan` y hay `GET /health`.
+  - **`response_model` Pydantic completo** (`SimulateResponse`) para que Swagger documente el contrato al frontend.
+- **Especificación Técnica:**
+  1. `schemas.py`: `SimulateRequest` (con `Coordenadas` y `SimulacionWhatIf`) y `SimulateResponse` con todos los bloques; los campos del ensemble son opcionales.
+  2. `services/simulation_service.py`: `armar_respuesta(insumos, request)` (puro) y `async simular(request, *, construir=construir_insumos_ml, today=None)`.
+  3. `routers/simulate.py`: `POST /api/v1/simulate`, con el constructor de insumos como dependencia (`get_constructor_insumos`) sobreescribible en tests.
+  4. `main.py`: app FastAPI, CORS, `lifespan` y `/health`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q`: todos en verde.
+  - (Con red) `cd backend && uvicorn main:app --port 8000` y `POST /api/v1/simulate` con el body de §5: 200 con `distribucion_hidroclimatica`.
+- **Pendiente:** el primer pedido con caché vacía supera el objetivo de 1,5 s (SoilGrids/SRTM en frío); con el precálculo de las 299 celdas, NASA ya viene cacheado.
 
 ---
 
