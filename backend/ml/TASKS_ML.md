@@ -39,6 +39,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `ML-2` | Entrenamiento, Selección de Modelo (`HistGradientBoosting` vs `RandomForest`), Importancias por Permutación y Validación Agronómica | `backend/ml/train_baseline.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json` | `ML-1` | `[x]` |
 | `ML-3` | Matriz de Rotación Agronómica, Salud del Suelo ($S_{\text{suelo}}$) y Cobertura 12 Meses (*Bare-Field Periods*) | `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py` | — | `[x]` |
 | `ML-4` | Motor de Inferencia Online (`predictor.py`), Fusión Multicriterio (MCDA), Detector de Anomalías y Explicabilidad | `backend/ml/predictor.py`, `backend/ml/test_predictor.py` | `ML-2`, `ML-3` | `[x]` |
+| `ML-5` | Ensemble de años análogos para la ventana futura (`predict_ensemble`): promedio, P10/P90, años desfavorables y escalón de riesgo (Tarea C.1, coordinada con `BACK-6`) | `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `CONTEXT.md` | `ML-4`, `BACK-6` | `[x]` |
 
 ---
 
@@ -170,3 +171,63 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - 14/14 tests unitarios y de integración (`test_predictor.py` + `test_rotation_matrix.py`) en verde (`OK`).
   - Caso testigo de `CONTEXT.md` reproducido con ranking exacto (`sorgo` ganador con `s_suelo = 95.0`, `maiz_tardio` segundo, `soja_primera` última con `score_final = 31.0` tras penalización Opción B) y niveles de riesgo bidimensionales idénticos (`sorgo: bajo`, `maiz_tardio: medio`, `girasol: bajo`, `maiz_temprano: critico`, `soja_primera: alto`).
   - Latencia p95 del pipeline completo (inferencia ML + matriz agronómica + detector de anomalías + explicabilidad) `< 15 ms`.
+
+---
+
+### `[x]` ML-5: Ensemble de años análogos para la ventana futura (`predict_ensemble`)
+- **Objetivo:** Dejar de resumir la ventana futura `[corte+1, corte+90]` en un único valor. El backend (`BACK-6`, `construir_insumos_ml`) entrega las 8 features actuales y la lista de **escenarios históricos por año** (los valores reales de `frecuencia_tormentas_extremas`, `frecuencia_estres_termico` y `frecuencia_riesgo_helada` de cada año 2006–2025 con la ventana completa, normalmente 19 o 20). El ML corre el modelo una vez por escenario y por cultivo de la campaña, y agrega los resultados en una **distribución** del score hidroclimático por cultivo: el promedio es el score principal, P10 representa un "año malo" y P90 un "año bueno".
+- **Por qué:** en entrenamiento el modelo aprende con el futuro **observado** de cada ventana. En producción el futuro no se conoce. Pasarle un promedio climatológico le daría valores suavizados que nunca vio. Pasarle los futuros que realmente ocurrieron en esa coordenada y en esas fechas mantiene la misma distribución que en entrenamiento, y además cuantifica el riesgo sin inventar pronósticos (CONTEXT.md §4.4).
+- **Archivos Permitidos:** `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/ml/TASKS_ML.md`, `CONTEXT.md` (§4.1, §4.3, §4.6 y §5).
+- **Independiente del label:** funciona con el modelo actual (label FAO) y con el reentrenamiento con rindes MAGyP, sin cambiar la interfaz. Solo cambia el valor por defecto del umbral (ver abajo).
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Umbral de "año desfavorable":** parámetro `umbral_desfavorable` configurable, con valor por defecto `50.0`, que coincide con el corte `critico` de `classify_crop_risk`. Se recalibra al reentrenar con MAGyP, donde 50 = año normal, sin cambiar el contrato.
+  2. **Agregados por cultivo:** promedio (score principal), P10, P90, cantidad de años desfavorables (`score < umbral`), cantidad de años evaluados y el **peor escenario** (año análogo, score y sus 3 features futuras), para que la explicación pueda citarlo.
+  3. **Riesgo:** se clasifica con el promedio, como hoy (`classify_crop_risk`), y **se sube un nivel** (`bajo → medio → alto → critico`) si el P10 cae en la zona crítica (`P10 < 50.0`, el mismo corte `critico` de S_hidro). Así, un cultivo con buen promedio pero años muy malos no queda como `bajo`.
+  4. **Ponderación de años:** todos pesan lo mismo. La función acepta `pesos` opcionales para sumar más adelante la ponderación por fase ENSO sin cambiar el contrato (tarea futura).
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Interfaz:**
+    - `AgroPredictor.predict_ensemble(features_actuales, escenarios_historicos, campana, *, pesos=None, umbral_desfavorable=50.0, simulacion_what_if=None) -> dict[cultivo, dict]`.
+    - `features_actuales`: las 8 features de `FEATURES_ACTUALES` de `backend/providers/features.py`, ya con topes.
+    - `escenarios_historicos`: lista de `{anio, frecuencia_tormentas_extremas, frecuencia_estres_termico, frecuencia_riesgo_helada}`, el formato exacto de `InsumosML.escenarios_historicos`.
+    - Parámetros que se sumen más adelante, como `fecha_corte` y `lat` para `dias_hasta_siembra` con el reentrenamiento MAGyP, van **solo por nombre y opcionales**, para no romper a quien ya la llame.
+  - **Cálculo:** se arma una matriz de `N_escenarios × N_cultivos` filas y se predice en **un único batch** (unas 114 filas en verano), igual que `predict_hydroclimatic_batch`. Cada predicción se acota a `[0, 100]` antes de agregar.
+  - **Percentiles:** sin pesos, `numpy.percentile` (método `linear`). Con pesos, percentil ponderado. Todo redondeado a 1 decimal.
+  - **What-If dentro del ensemble:** si viene `simulacion_what_if`, se aplica `apply_what_if_simulation` al vector completo de **cada escenario**, porque la variación de lluvia también ajusta las tormentas. Así el What-If modifica el presente y el futuro sigue siendo incierto. Pasar un solo escenario, como decidió `BACK-6` para el What-If, sigue funcionando: es una lista de un elemento.
+  - **Validaciones:** se lanza `ValueError` si la lista de escenarios está vacía, si a un escenario le falta alguna de las 3 features futuras, si a `features_actuales` le falta alguna de las 8, o si los `pesos` no tienen el largo correcto o suman 0. El ML no vuelve a aplicar topes, porque los aplica el backend.
+  - **Integración en `predict_and_recommend` / `run_recommendation`:** nuevo parámetro opcional `escenarios_historicos`.
+    - **Si viene:** `features` aporta las 8 actuales, `S_hidro` de cada cultivo es el **promedio** del ensemble y alimenta la fusión MCDA, el ranking y las estrategias como hoy. El riesgo aplica el escalón por P10.
+    - **Si no viene:** comportamiento actual con un único vector de 12 features, sin cambios, por compatibilidad con los tests, el What-If de un escenario y los llamadores existentes.
+    - **Escenario representativo** (para `detect_physical_anomalies`, `build_key_ml_factors`, `riesgo_termico_verano` y `riesgo_erosion_escorrentia`): la **mediana por feature** de los escenarios, redondeada a entero.
+  - **Contrato §5 (campos nuevos, sin quitar ni renombrar ninguno):**
+    - `recomendacion_principal.distribucion_hidroclimatica`: `{promedio, p10, p90, anios_desfavorables, anios_evaluados, umbral_desfavorable, peor_escenario: {anio, score, frecuencia_tormentas_extremas, frecuencia_estres_termico, frecuencia_riesgo_helada}}`.
+    - En cada elemento de `ranking_cultivos`: `score_hidroclimatico_p10`, `anios_desfavorables` y `anios_evaluados`.
+    - Sin `escenarios_historicos`, esos campos **no se incluyen**, así el contrato actual queda idéntico.
+  - **Explicación:** si hay ensemble, `explicacion` agrega una oración con el riesgo del ganador, por ejemplo: *"En 3 de 19 años análogos el puntaje hidroclimático quedó por debajo de 50; el peor escenario (calor como en 2008) lo lleva a 24."*
+- **Especificación Técnica:**
+  1. En `backend/ml/predictor.py`:
+     - Constantes `FUTURE_FEATURES` y `CURRENT_FEATURES`, alineadas con `FEATURES_FUTURAS` y `FEATURES_ACTUALES` de `providers/features.py`. Un test verifica la paridad.
+     - Helper de percentil ponderado y helper `escalate_risk_level(riesgo, p10)`.
+     - Método `AgroPredictor.predict_ensemble(...)` según la interfaz de arriba.
+  2. Integrar el ensemble en `predict_and_recommend(...)` y `run_recommendation(...)` mediante el parámetro opcional `escenarios_historicos`, con los campos nuevos del contrato y la oración de riesgo en `explicacion`.
+  3. Actualizar `CONTEXT.md`:
+     - §4.1 y §4.3 B: la ventana futura en producción es un ensemble de años análogos, no la climatología promedio.
+     - §4.6: paso 3 del flujo online.
+     - §5: campos nuevos en el ejemplo de respuesta.
+  4. Tests en `backend/ml/test_predictor.py`:
+     - Con 1 escenario, el ensemble coincide con `predict_hydroclimatic_batch`.
+     - El promedio, P10 y P90 coinciden con `numpy` sobre las predicciones individuales.
+     - El conteo de años desfavorables respeta `umbral_desfavorable`.
+     - El peor escenario es el de menor score.
+     - El escalón de riesgo se aplica solo cuando `P10 < 50`.
+     - Pesos uniformes dan el mismo resultado que sin pesos.
+     - Las validaciones lanzan `ValueError`.
+     - `predict_and_recommend` sin escenarios devuelve exactamente el contrato actual, y con escenarios agrega los campos nuevos.
+     - Paridad de nombres de features con `providers/features.py`.
+     - Latencia del ensemble (6 cultivos × 20 escenarios) con p95 `< 15 ms`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && .venv\Scripts\python.exe -m pytest -q ml/test_predictor.py services/test_rotation_matrix.py providers/test_features.py`
+- **Resultado de la Verificación (2026-11-14):**
+  - DoD: `48 passed`. La suite completa del backend (`cd backend && pytest -q`) da `181 passed`. El comando de ML-4 (`python -m unittest backend/ml/test_predictor.py`) da `19 tests OK`: los 7 de ML-4 pasan sin cambios.
+  - Sin `escenarios_historicos`, la respuesta es idéntica al contrato de ML-4, con las mismas claves y en el mismo orden (test 08).
+  - Ejemplo (caso testigo de sequía + 19 escenarios con calor de 1 a 45 días, como Pergamino al 11/11/2026): `sorgo` gana con promedio `74.1`, P10 `49.7`, P90 `88.3` y `3/19` años desfavorables. El peor escenario es de 45 días de calor (score `45.5`). `maiz_temprano` tiene `17/19` años desfavorables y P10 `0.0`.
+  - **Observación para ML-8:** con el modelo FAO actual, los años de mucho calor bajan fuerte el score. Con el escalón por P10 < 50, en ese ejemplo **todos** los cultivos de verano quedan en `alto` o `critico`, incluido el ganador (`sorgo`, que por promedio sería `medio`). No es un error: refleja la fórmula FAO frente a veranos de 30 a 45 días de calor. Hay que revisar el corte del escalón y `umbral_desfavorable` cuando se reentrene con MAGyP.
