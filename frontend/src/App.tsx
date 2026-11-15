@@ -3,8 +3,6 @@ import {
   Compass,
   History,
   Info,
-  LogOut,
-  User,
 } from 'lucide-react'
 import './App.css'
 import { AuthScreen } from './components/AuthScreen'
@@ -18,6 +16,7 @@ import {
   WhatIfPanel,
 } from './components/SimulationControls'
 import { TelemetryCards } from './components/TelemetryCards'
+import { UserSettingsModal } from './components/UserSettingsModal'
 import { DEMO_FIELDS } from './data/demoFields'
 import {
   getHistoricalSeriesForCoords,
@@ -34,9 +33,12 @@ import {
 } from './services/authClient'
 import {
   createUserField,
+  deleteUserField,
   listUserFields,
   loginDemoAccount,
+  removeCachedFieldPolygon,
   saveFieldPolygon,
+  updateUserField,
 } from './services/fieldsClient'
 import type {
   Campana,
@@ -90,6 +92,7 @@ export function App() {
 
   // Por regla de SKILLS_FRONTEND.md §3 y §4, la app inicia directamente en 'Planificación de campaña'
   const [activeTab, setActiveTab] = useState<NavTabId>('planificacion')
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
 
   // Estado GIS y gestión de campos del usuario desde backend (FRONT-21)
   const [userFields, setUserFields] = useState<UserField[]>([])
@@ -97,8 +100,9 @@ export function App() {
   const [isFieldsLoading, setIsFieldsLoading] = useState<boolean>(false)
   const [isSavingField, setIsSavingField] = useState<boolean>(false)
   const [fieldsError, setFieldsError] = useState<string | null>(null)
-  const [isFieldsBarOpen, setIsFieldsBarOpen] = useState<boolean>(false)
   const [isDrawingNewField, setIsDrawingNewField] = useState<boolean>(false)
+  const [editingPolygonField, setEditingPolygonField] =
+    useState<UserField | null>(null)
   const [selectedCoords, setSelectedCoords] = useState<Coordenadas>(
     defaultField.centroide
   )
@@ -315,13 +319,30 @@ export function App() {
   }
 
   const handleStartDrawing = () => {
+    setEditingPolygonField(null)
     setIsDrawingNewField(true)
     setCustomPolygon([])
     setFieldsError(null)
   }
 
+  const handleStartEditingPolygon = (field: UserField) => {
+    setIsSettingsOpen(false)
+    setIsDrawingNewField(false)
+    setEditingPolygonField(field)
+    setSelectedFieldId(field.id)
+    setFieldsError(null)
+    if (Array.isArray(field.polygon) && field.polygon.length >= 3) {
+      setCustomPolygon(field.polygon)
+      setSelectedCoords(calculateCentroid(field.polygon))
+    } else {
+      setCustomPolygon([])
+      setSelectedCoords({ lat: field.lat, lon: field.lon })
+    }
+  }
+
   const handleCancelDrawing = () => {
     setIsDrawingNewField(false)
+    setEditingPolygonField(null)
     setCustomPolygon([])
     setFieldsError(null)
     if (selectedUserField) {
@@ -369,6 +390,37 @@ export function App() {
     try {
       const centroid = calculateCentroid(customPolygon)
       const areaHa = Math.round(calculatePolygonAreaHa(customPolygon) * 10) / 10
+
+      if (editingPolygonField) {
+        const targetId = editingPolygonField.id
+        const updated = await updateUserField(activeToken, targetId, {
+          nombre,
+          lat: centroid.lat,
+          lon: centroid.lon,
+          hectareas: areaHa,
+          polygon: customPolygon,
+        })
+        saveFieldPolygon(targetId, customPolygon)
+        const updatedWithPolygon: UserField = {
+          ...editingPolygonField,
+          ...updated,
+          polygon:
+            Array.isArray(updated.polygon) && updated.polygon.length >= 3
+              ? updated.polygon
+              : customPolygon,
+        }
+        setUserFields((prev) =>
+          prev.map((field) =>
+            field.id === targetId ? updatedWithPolygon : field
+          )
+        )
+        setSelectedFieldId(targetId)
+        setSelectedCoords(centroid)
+        setEditingPolygonField(null)
+        setCustomPolygon([])
+        return
+      }
+
       const created = await createUserField(activeToken, {
         nombre,
         lat: centroid.lat,
@@ -393,10 +445,55 @@ export function App() {
       setFieldsError(
         err instanceof Error
           ? err.message
-          : 'No fue posible guardar el nuevo campo.'
+          : 'No fue posible guardar el campo.'
       )
     } finally {
       setIsSavingField(false)
+    }
+  }
+
+  const handleRenameField = async (fieldId: string, nombre: string) => {
+    if (!activeToken) {
+      throw new Error(
+        'La sesión no se encuentra activa. Inicie sesión nuevamente.'
+      )
+    }
+    const updated = await updateUserField(activeToken, fieldId, { nombre })
+    setUserFields((prev) =>
+      prev.map((field) => {
+        if (field.id !== fieldId) return field
+        return {
+          ...field,
+          ...updated,
+          polygon:
+            Array.isArray(updated.polygon) && updated.polygon.length >= 3
+              ? updated.polygon
+              : field.polygon,
+        }
+      })
+    )
+  }
+
+  const handleDeleteField = async (fieldId: string) => {
+    if (!activeToken) {
+      throw new Error(
+        'La sesión no se encuentra activa. Inicie sesión nuevamente.'
+      )
+    }
+    await deleteUserField(activeToken, fieldId)
+    removeCachedFieldPolygon(fieldId)
+
+    const remaining = userFields.filter((field) => field.id !== fieldId)
+    setUserFields(remaining)
+
+    if (selectedFieldId === fieldId) {
+      const nextField = remaining[0] ?? null
+      setSelectedFieldId(nextField ? nextField.id : null)
+      setSelectedCoords(
+        nextField
+          ? { lat: nextField.lat, lon: nextField.lon }
+          : defaultField.centroide
+      )
     }
   }
 
@@ -429,6 +526,7 @@ export function App() {
     setActiveToken(null)
     setUserFields([])
     setSelectedFieldId(null)
+    setIsSettingsOpen(false)
     setAuthStatus('unauthenticated')
   }
 
@@ -459,41 +557,10 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* HEADER SUPERIOR SÓLIDO (#3A0C00) */}
+      {/* HEADER SUPERIOR (#FFF5E0) */}
       <header className="top-navbar">
         <div className="top-navbar-left">
           <BrandBlock />
-
-          <div className="header-session-bar">
-            {authStatus === 'authenticated' && currentUser ? (
-              <>
-                <span className="header-user-pill">
-                  <User size={14} aria-hidden="true" />
-                  <span>{currentUser.nombre || currentUser.email}</span>
-                </span>
-                <button
-                  type="button"
-                  className="header-session-btn"
-                  onClick={handleLogout}
-                >
-                  <LogOut size={14} aria-hidden="true" />
-                  <span>Cerrar sesión</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="header-demo-pill">Modo demo</span>
-                <button
-                  type="button"
-                  className="header-session-btn"
-                  onClick={handleLogout}
-                >
-                  <User size={14} aria-hidden="true" />
-                  <span>Iniciar sesión</span>
-                </button>
-              </>
-            )}
-          </div>
         </div>
       </header>
 
@@ -506,10 +573,18 @@ export function App() {
             isLoading={isFieldsLoading}
             isSaving={isSavingField}
             errorMsg={fieldsError}
-            isOpen={isFieldsBarOpen}
-            isDrawing={isDrawingNewField}
+            isDrawing={isDrawingNewField || editingPolygonField !== null}
+            editingField={editingPolygonField}
             customPolygon={customPolygon}
-            onToggleOpen={() => setIsFieldsBarOpen((prev) => !prev)}
+            isDemo={authStatus === 'demo'}
+            isUserSettingsOpen={isSettingsOpen}
+            onUserAction={() => {
+              if (authStatus === 'demo') {
+                handleLogout()
+              } else {
+                setIsSettingsOpen(true)
+              }
+            }}
             onSelectField={handleSelectUserField}
             onStartDrawing={handleStartDrawing}
             onCancelDrawing={handleCancelDrawing}
@@ -521,7 +596,8 @@ export function App() {
             selectedCoords={selectedCoords}
             userFields={userFields}
             selectedFieldId={selectedFieldId}
-            isDrawingNewField={isDrawingNewField}
+            editingFieldId={editingPolygonField?.id ?? null}
+            isDrawingNewField={isDrawingNewField || editingPolygonField !== null}
             customPolygon={customPolygon}
             historicalMode={{
               active: activeTab === 'historico',
@@ -654,6 +730,19 @@ export function App() {
           </div>
         </aside>
       </main>
+
+      <UserSettingsModal
+        isOpen={isSettingsOpen && authStatus === 'authenticated'}
+        user={currentUser}
+        accessToken={activeToken}
+        fields={userFields}
+        onClose={() => setIsSettingsOpen(false)}
+        onUserUpdated={(updatedUser) => setCurrentUser(updatedUser)}
+        onRenameField={handleRenameField}
+        onEditFieldPolygon={handleStartEditingPolygon}
+        onDeleteField={handleDeleteField}
+        onLogout={handleLogout}
+      />
     </div>
   )
 }

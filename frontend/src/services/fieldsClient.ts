@@ -1,4 +1,8 @@
-import type { FieldCreateRequest, UserField } from '../types/api'
+import type {
+  FieldCreateRequest,
+  FieldUpdateRequest,
+  UserField,
+} from '../types/api'
 import { loginUser, requestBackendJson } from './authClient'
 
 const POLYGONS_STORAGE_KEY = 'ereia_field_polygons_v1'
@@ -25,6 +29,19 @@ export function saveFieldPolygon(
     const cache = readPolygonCache()
     cache[fieldId] = polygon
     window.localStorage.setItem(POLYGONS_STORAGE_KEY, JSON.stringify(cache))
+  } catch {
+    // Ignorar si el navegador bloquea almacenamiento local
+  }
+}
+
+export function removeCachedFieldPolygon(fieldId: string): void {
+  if (!fieldId) return
+  try {
+    const cache = readPolygonCache()
+    if (fieldId in cache) {
+      delete cache[fieldId]
+      window.localStorage.setItem(POLYGONS_STORAGE_KEY, JSON.stringify(cache))
+    }
   } catch {
     // Ignorar si el navegador bloquea almacenamiento local
   }
@@ -93,5 +110,39 @@ export async function createUserField(
       body: JSON.stringify(payload),
     },
     'No fue posible guardar el nuevo campo.'
+  )
+}
+
+export async function updateUserField(
+  token: string,
+  fieldId: string,
+  payload: FieldUpdateRequest
+): Promise<UserField> {
+  return requestBackendJson<UserField>(
+    `/api/v1/fields/${fieldId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+    'No fue posible actualizar el campo seleccionado.'
+  )
+}
+
+export async function deleteUserField(
+  token: string,
+  fieldId: string
+): Promise<void> {
+  await requestBackendJson<null>(
+    `/api/v1/fields/${fieldId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    'No fue posible eliminar el campo seleccionado.'
   )
 }

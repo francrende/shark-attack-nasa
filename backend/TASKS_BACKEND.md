@@ -48,6 +48,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | BACK-4 | Resiliencia y latencia: caché en capas, caché de NASA por celda de grilla, climatología pampeana precalculada, corte automático de SoilGrids, lotes de ejemplo | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | BACK-2, BACK-3 | `[x]` |
 | BACK-5 | Provider SRTM (OpenTopoData): elevación + pendiente con grilla 3×3 a 300 m (Horn), cascada de fallback, caché y corte automático | `backend/providers/srtm.py`, `backend/providers/regional.py`, `backend/providers/resiliencia.py`, `backend/providers/soilgrids.py`, `backend/providers/nasa_power.py`, `backend/providers/test_srtm.py`, `backend/providers/check_srtm_live.py` | BACK-4 | `[x]` |
 | BACK-6 | Constructor de features del ML: features actuales (ventana pasada + topografía + suelo) y escenarios históricos por año de la ventana futura (calendario de eventos por celda) | `backend/providers/features.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/providers/test_features.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_features_live.py` | BACK-2, BACK-3, BACK-4, BACK-5 | `[x]` |
+| `BACK-7` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
 
 ---
 
@@ -619,3 +620,28 @@ Cuando el agente y el desarrollador terminen de responder las preguntas de defin
 - **Definition of Done (Comando de Verificación):**
   - `<comando ejecutable para comprobar que funciona>`
 ```
+
+---
+
+## 5. Tareas Pendientes Registradas desde Frontend
+
+### `[ ]` BACK-7: Endpoint `PATCH /api/v1/auth/me` para Edición de Perfil de Usuario (`FRONT-30`)
+- **Objetivo:** Permitir que el usuario autenticado actualice su `nombre`, `email` y/o `password` desde la pestaña **Usuario** del modal de ajustes en el frontend, persistiendo los cambios en Supabase Auth y en la tabla `profiles`.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/routers/auth.py`, `backend/TASKS_BACKEND.md`
+- **Contrato ya conectado desde Frontend (`FRONT-30`):**
+  - Método y ruta: `PATCH /api/v1/auth/me`
+  - Header requerido: `Authorization: Bearer <access_token>` (dependencia `get_current_user`)
+  - Body JSON opcional por campo (`UserUpdateRequest`):
+    - `nombre?: string`
+    - `email?: string`
+    - `password?: string` (mínimo 6 caracteres cuando se envía)
+  - Respuesta esperada (`200 OK`, `UserProfileResponse`): `{ "id": string, "email": string, "nombre": string, "created_at": string | null }`
+- **Pendiente a definir antes de programar (Protocolo Paso 2):**
+  1. Confirmar si para actualizar `email` o `password` se utilizará el cliente autenticado del usuario (`update_user` con JWT) o `service_role` admin (`auth.admin.update_user_by_id`) para evitar bloqueos por confirmación de correo en demo/hackatón.
+  2. Confirmar si al cambiar `nombre` o `email` se debe actualizar también `public.profiles` en la misma petición.
+- **Especificación Técnica Preliminar:**
+  1. Agregar el schema `UserUpdateRequest` en `backend/schemas.py` con validaciones opcionales (`nombre`, `email: EmailStr | None`, `password` mínimo 6 caracteres).
+  2. Implementar `@router.patch("/me", response_model=UserProfileResponse)` en `backend/routers/auth.py` recibiendo `current_user: AuthenticatedUser = Depends(get_current_user)`.
+  3. Rechazar payloads vacíos (`400 Bad Request`) y mapear errores de Supabase Auth (`AuthApiError`) a respuestas HTTP claras en español.
+- **Definition of Done (Comando de Verificación):**
+  - Verificar con `uvicorn` levantado que `PATCH /api/v1/auth/me` responde `200` con el perfil actualizado y que `GET /api/v1/auth/me` refleja los nuevos valores.
