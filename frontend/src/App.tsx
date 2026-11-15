@@ -3,9 +3,13 @@ import {
   Compass,
   History,
   Info,
-  Sprout,
+  LogOut,
+  User,
 } from 'lucide-react'
 import './App.css'
+import { AuthScreen } from './components/AuthScreen'
+import { BrandBlock } from './components/BrandBlock'
+import { FieldsSubheader } from './components/FieldsSubheader'
 import { HistoricalPanel } from './components/HistoricalPanel'
 import { MapView } from './components/MapView'
 import { RecommendationPanel } from './components/RecommendationPanel'
@@ -23,39 +27,82 @@ import {
   generateSimulatedResponse,
   simulateCropRotation,
 } from './services/apiClient'
+import {
+  clearStoredAuthToken,
+  fetchCurrentUser,
+  getStoredAuthToken,
+} from './services/authClient'
+import {
+  createUserField,
+  listUserFields,
+  loginDemoAccount,
+  saveFieldPolygon,
+} from './services/fieldsClient'
 import type {
   Campana,
   Coordenadas,
   CultivoId,
-  DemoField,
-  GibsLayerId,
   ObjetivoProductor,
-  SelectionMode,
   SimulacionWhatIf,
   SimulateResponse,
+  UserField,
+  UserProfile,
 } from './types/api'
-import { calculatePolygonAreaHa } from './utils/geo'
+import { calculateCentroid, calculatePolygonAreaHa } from './utils/geo'
 
 export type NavTabId = 'planificacion' | 'info_general' | 'historico'
+type AuthStatus = 'checking' | 'authenticated' | 'demo' | 'unauthenticated'
 
 export function App() {
   const defaultField = DEMO_FIELDS[0]
 
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking')
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
+  const [activeToken, setActiveToken] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const token = getStoredAuthToken()
+    if (!token) {
+      setAuthStatus('unauthenticated')
+      return
+    }
+
+    fetchCurrentUser(token)
+      .then((user) => {
+        if (cancelled) return
+        setCurrentUser(user)
+        setActiveToken(token)
+        setAuthStatus('authenticated')
+      })
+      .catch(() => {
+        if (cancelled) return
+        clearStoredAuthToken()
+        setCurrentUser(null)
+        setActiveToken(null)
+        setAuthStatus('unauthenticated')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // Por regla de SKILLS_FRONTEND.md §3 y §4, la app inicia directamente en 'Planificación de campaña'
   const [activeTab, setActiveTab] = useState<NavTabId>('planificacion')
 
-  // Estado GIS y selección de lote (persiste entre pestañas)
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('demo')
-  const [selectedDemoFieldId, setSelectedDemoFieldId] = useState<string | null>(
-    defaultField.id
-  )
+  // Estado GIS y gestión de campos del usuario desde backend (FRONT-21)
+  const [userFields, setUserFields] = useState<UserField[]>([])
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
+  const [isFieldsLoading, setIsFieldsLoading] = useState<boolean>(false)
+  const [isSavingField, setIsSavingField] = useState<boolean>(false)
+  const [fieldsError, setFieldsError] = useState<string | null>(null)
+  const [isFieldsBarOpen, setIsFieldsBarOpen] = useState<boolean>(false)
+  const [isDrawingNewField, setIsDrawingNewField] = useState<boolean>(false)
   const [selectedCoords, setSelectedCoords] = useState<Coordenadas>(
     defaultField.centroide
   )
   const [customPolygon, setCustomPolygon] = useState<[number, number][]>([])
-  const [isPolygonClosed, setIsPolygonClosed] = useState<boolean>(false)
-  const [activeGibsLayer, setActiveGibsLayer] =
-    useState<GibsLayerId>('none')
 
   // Estado agronómico y simulación What-If (campaña y cultivo anterior inician sin selección)
   const [campana, setCampana] = useState<Campana | null>(null)
@@ -185,59 +232,167 @@ export function App() {
     return found?.gibsDate ?? '2024-11-08'
   }, [selectedCoords, historicalYear])
 
-  const selectedDemoField = useMemo(
-    () => DEMO_FIELDS.find((f) => f.id === selectedDemoFieldId) ?? null,
-    [selectedDemoFieldId]
+  const selectedUserField = useMemo(
+    () => userFields.find((f) => f.id === selectedFieldId) ?? null,
+    [userFields, selectedFieldId]
   )
 
   const currentLoteLabel = useMemo(() => {
-    if (selectionMode === 'demo' && selectedDemoField) {
-      return selectedDemoField.nombre
-    }
-    if (selectionMode === 'polygon') {
+    if (isDrawingNewField) {
       return customPolygon.length >= 3
-        ? 'Lote delimitado en el mapa'
-        : 'Delimitación de lote en curso'
+        ? 'Nuevo campo delimitado'
+        : 'Delimitación de nuevo campo en curso'
+    }
+    if (selectedUserField) {
+      return selectedUserField.nombre
     }
     return 'Ubicación seleccionada en el mapa'
-  }, [selectionMode, selectedDemoField, customPolygon.length])
+  }, [isDrawingNewField, selectedUserField, customPolygon.length])
 
   const currentSuperficieHa = useMemo(() => {
-    if (selectionMode === 'demo' && selectedDemoField) {
-      return selectedDemoField.superficieHa
-    }
-    if (selectionMode === 'polygon' && customPolygon.length >= 3) {
+    if (isDrawingNewField && customPolygon.length >= 3) {
       return calculatePolygonAreaHa(customPolygon)
     }
+    if (selectedUserField && selectedUserField.hectareas !== null) {
+      return selectedUserField.hectareas
+    }
     return null
-  }, [selectionMode, selectedDemoField, customPolygon])
+  }, [isDrawingNewField, selectedUserField, customPolygon])
 
-  const handleSelectDemoField = (field: DemoField) => {
-    setSelectionMode('demo')
-    setSelectedDemoFieldId(field.id)
-    setSelectedCoords(field.centroide)
+  // Cargar campos del usuario (o usuario demo en BD) al iniciar sesión / entrar en demo
+  useEffect(() => {
+    if (authStatus !== 'authenticated' && authStatus !== 'demo') return
+    let cancelled = false
+
+    const loadFields = async () => {
+      setIsFieldsLoading(true)
+      setFieldsError(null)
+      try {
+        let token = activeToken
+        if (authStatus === 'demo' && !token) {
+          token = await loginDemoAccount()
+          if (cancelled) return
+          setActiveToken(token)
+        }
+        if (!token) return
+        const fields = await listUserFields(token)
+        if (cancelled) return
+        setUserFields(fields)
+        if (fields.length > 0) {
+          setSelectedFieldId(fields[0].id)
+          setSelectedCoords({ lat: fields[0].lat, lon: fields[0].lon })
+        } else {
+          setSelectedFieldId(null)
+        }
+      } catch (err) {
+        if (cancelled) return
+        setFieldsError(
+          err instanceof Error
+            ? err.message
+            : 'No fue posible cargar los campos desde el servidor.'
+        )
+      } finally {
+        if (!cancelled) setIsFieldsLoading(false)
+      }
+    }
+
+    loadFields()
+    return () => {
+      cancelled = true
+    }
+  }, [authStatus, activeToken])
+
+  const handleSelectUserField = (field: UserField) => {
+    setIsDrawingNewField(false)
+    setCustomPolygon([])
+    setSelectedFieldId(field.id)
+    setSelectedCoords({ lat: field.lat, lon: field.lon })
+    setFieldsError(null)
     setWhatIf({
       override_humedad_radicular_pct: null,
       variacion_lluvia_esperada_pct: 0,
     })
   }
 
-  const handleChangeSelectionMode = (mode: SelectionMode) => {
-    setSelectionMode(mode)
-    if (mode === 'demo' && !selectedDemoFieldId) {
-      handleSelectDemoField(DEMO_FIELDS[0])
+  const handleStartDrawing = () => {
+    setIsDrawingNewField(true)
+    setCustomPolygon([])
+    setFieldsError(null)
+  }
+
+  const handleCancelDrawing = () => {
+    setIsDrawingNewField(false)
+    setCustomPolygon([])
+    setFieldsError(null)
+    if (selectedUserField) {
+      setSelectedCoords({
+        lat: selectedUserField.lat,
+        lon: selectedUserField.lon,
+      })
     }
   }
 
   const handleUpdateCustomPolygon = (
     points: [number, number][],
-    isClosed: boolean,
     centroid?: Coordenadas
   ) => {
     setCustomPolygon(points)
-    setIsPolygonClosed(isClosed)
     if (centroid) {
       setSelectedCoords(centroid)
+    }
+  }
+
+  const handleUndoVertex = () => {
+    if (customPolygon.length === 0) return
+    const nextPoints = customPolygon.slice(0, -1)
+    setCustomPolygon(nextPoints)
+    if (nextPoints.length > 0) {
+      setSelectedCoords(calculateCentroid(nextPoints))
+    }
+  }
+
+  const handleClearPolygon = () => {
+    setCustomPolygon([])
+  }
+
+  const handleSaveNewField = async (nombre: string) => {
+    if (!activeToken) {
+      setFieldsError(
+        'No hay una sesión activa contra el backend para guardar el campo.'
+      )
+      return
+    }
+    if (customPolygon.length < 3) return
+
+    setIsSavingField(true)
+    setFieldsError(null)
+    try {
+      const centroid = calculateCentroid(customPolygon)
+      const areaHa = Math.round(calculatePolygonAreaHa(customPolygon) * 10) / 10
+      const created = await createUserField(activeToken, {
+        nombre,
+        lat: centroid.lat,
+        lon: centroid.lon,
+        hectareas: areaHa,
+      })
+      saveFieldPolygon(created.id, customPolygon)
+      const createdWithPolygon: UserField = {
+        ...created,
+        polygon: customPolygon,
+      }
+      setUserFields((prev) => [createdWithPolygon, ...prev])
+      setSelectedFieldId(created.id)
+      setSelectedCoords(centroid)
+      setIsDrawingNewField(false)
+      setCustomPolygon([])
+    } catch (err) {
+      setFieldsError(
+        err instanceof Error
+          ? err.message
+          : 'No fue posible guardar el nuevo campo.'
+      )
+    } finally {
+      setIsSavingField(false)
     }
   }
 
@@ -252,21 +407,88 @@ export function App() {
     whatIf.override_humedad_radicular_pct !== null ||
     whatIf.variacion_lluvia_esperada_pct !== 0
 
+  const handleAuthenticated = (user: UserProfile, token: string) => {
+    setCurrentUser(user)
+    setActiveToken(token)
+    setAuthStatus('authenticated')
+  }
+
+  const handleEnterDemo = () => {
+    setCurrentUser(null)
+    setActiveToken(null)
+    setAuthStatus('demo')
+  }
+
+  const handleLogout = () => {
+    clearStoredAuthToken()
+    setCurrentUser(null)
+    setActiveToken(null)
+    setUserFields([])
+    setSelectedFieldId(null)
+    setAuthStatus('unauthenticated')
+  }
+
+  if (authStatus === 'checking') {
+    return (
+      <div className="auth-checking-shell">
+        <div className="auth-checking-card">
+          <img
+            src="/ereia-icon.png"
+            alt=""
+            className="auth-checking-icon"
+            aria-hidden="true"
+          />
+          <span>Verificando sesión...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (authStatus === 'unauthenticated') {
+    return (
+      <AuthScreen
+        onAuthenticated={handleAuthenticated}
+        onEnterDemo={handleEnterDemo}
+      />
+    )
+  }
+
   return (
     <div className="app-shell">
       {/* HEADER SUPERIOR SÓLIDO (#3A0C00) */}
       <header className="top-navbar">
-        <div className="brand-block">
-          <div className="brand-logo" aria-hidden="true">
-            <Sprout size={20} />
-          </div>
-          <div>
-            <div className="brand-title-row">
-              <h1>Shark Attack</h1>
-            </div>
-            <p className="brand-subtitle">
-              Monitoreo satelital y planificación agronómica de rotaciones
-            </p>
+        <div className="top-navbar-left">
+          <BrandBlock />
+
+          <div className="header-session-bar">
+            {authStatus === 'authenticated' && currentUser ? (
+              <>
+                <span className="header-user-pill">
+                  <User size={14} aria-hidden="true" />
+                  <span>{currentUser.nombre || currentUser.email}</span>
+                </span>
+                <button
+                  type="button"
+                  className="header-session-btn"
+                  onClick={handleLogout}
+                >
+                  <LogOut size={14} aria-hidden="true" />
+                  <span>Cerrar sesión</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="header-demo-pill">Modo demo</span>
+                <button
+                  type="button"
+                  className="header-session-btn"
+                  onClick={handleLogout}
+                >
+                  <User size={14} aria-hidden="true" />
+                  <span>Iniciar sesión</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -274,23 +496,37 @@ export function App() {
       {/* CONTENIDO PRINCIPAL (MAPA ~60% IZQ + CARPETA DERECHA ~40% CON PESTAÑAS SUPERPUESTAS AL HEADER) */}
       <main className="split-dashboard">
         <section className="left-map-pane">
+          <FieldsSubheader
+            fields={userFields}
+            selectedFieldId={selectedFieldId}
+            isLoading={isFieldsLoading}
+            isSaving={isSavingField}
+            errorMsg={fieldsError}
+            isOpen={isFieldsBarOpen}
+            isDrawing={isDrawingNewField}
+            customPolygon={customPolygon}
+            onToggleOpen={() => setIsFieldsBarOpen((prev) => !prev)}
+            onSelectField={handleSelectUserField}
+            onStartDrawing={handleStartDrawing}
+            onCancelDrawing={handleCancelDrawing}
+            onUndoVertex={handleUndoVertex}
+            onClearPolygon={handleClearPolygon}
+            onSaveField={handleSaveNewField}
+          />
           <MapView
             selectedCoords={selectedCoords}
-            selectionMode={selectionMode}
-            selectedDemoFieldId={selectedDemoFieldId}
+            userFields={userFields}
+            selectedFieldId={selectedFieldId}
+            isDrawingNewField={isDrawingNewField}
             customPolygon={customPolygon}
-            isPolygonClosed={isPolygonClosed}
-            activeGibsLayer={activeGibsLayer}
             historicalMode={{
               active: activeTab === 'historico',
               year: historicalYear,
               metric: historicalMetric,
               gibsDateIso: currentHistoricalGibsDate,
             }}
-            onSelectDemoField={handleSelectDemoField}
-            onChangeSelectionMode={handleChangeSelectionMode}
+            onSelectUserField={handleSelectUserField}
             onUpdateCustomPolygon={handleUpdateCustomPolygon}
-            onChangeGibsLayer={setActiveGibsLayer}
           />
         </section>
 

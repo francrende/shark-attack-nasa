@@ -524,6 +524,12 @@ def _compute_base_transition_score(
             f"Secuencia entre gramíneas distintas ({prev_crop.nombre_legible} → {candidate.nombre_legible}): "
             "sostiene alta cobertura pero requiere monitorear disponibilidad de nitrógeno."
         )
+    else:
+        score += 6.0
+        factors.append(
+            f"Alternancia botánica ({prev_crop.nombre_legible} → {candidate.nombre_legible}): "
+            "diversifica especies y corta ciclos sanitarios."
+        )
 
     if candidate.es_cobertura:
         score += 8.0

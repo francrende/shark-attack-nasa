@@ -142,3 +142,56 @@ export interface DemoField {
   }
   sueloBase: PerfilSuelo
 }
+
+// ============================================================================
+// CONTRATOS DE AUTENTICACIÓN (BACK-3: /api/v1/auth/*)
+// ============================================================================
+
+export interface AuthRegisterRequest {
+  email: string
+  password: string
+  nombre: string
+}
+
+export interface AuthLoginRequest {
+  email: string
+  password: string
+}
+
+export interface UserProfile {
+  id: string
+  email: string
+  nombre: string
+  created_at?: string | null
+}
+
+export interface AuthResponse {
+  access_token: string | null
+  refresh_token?: string | null
+  token_type?: string
+  user?: UserProfile
+  profile?: UserProfile
+  requiere_confirmacion_email?: boolean
+}
+
+// ============================================================================
+// CONTRATOS DE GESTIÓN DE CAMPOS / LOTES (BACK-4: /api/v1/fields)
+// ============================================================================
+
+export interface UserField {
+  id: string
+  user_id?: string
+  nombre: string
+  lat: number
+  lon: number
+  hectareas: number | null
+  created_at?: string
+  polygon?: [number, number][]
+}
+
+export interface FieldCreateRequest {
+  nombre: string
+  lat: number
+  lon: number
+  hectareas?: number | null
+}

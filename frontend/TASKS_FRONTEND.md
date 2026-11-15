@@ -48,6 +48,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-15** | Integración de las Pestañas de Carpeta al Componente Derecho Superpuestas sobre el Header | `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-14` | `[x]` |
 | **FRONT-16** | Diferir Estrategia de Rotación hasta Seleccionar Campaña y Cultivo Antecesor (Con Estado Vacío y Carga Asíncrona) | `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-12` | `[x]` |
 | **FRONT-17** | Precarga Automática de Datos Históricos al Completar Campaña/Cultivo y Botón `"Planificar"` | `frontend/src/components/SimulationControls.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-16` | `[x]` |
+| **FRONT-18** | Pantalla de Inicio de Sesión y Registro Conectada a `BACK-3` (Con Modo Demo) | `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-15` | `[x]` |
+| **FRONT-19** | Rebranding a **Ereia** (Fraunces 600, Ícono PNG sin recuadro), Header `#FFF5E0` y Fondo Salvia `#A8BC82` | `frontend/public/ereia-icon.png`, `frontend/index.html`, `frontend/src/index.css`, `frontend/src/components/BrandBlock.tsx`, `frontend/src/components/AuthScreen.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-18` | `[x]` |
+| **FRONT-20** | Refinamiento de Panel Derecho, Pestañas tipo Carpeta y Header (Tonos Arena, Márgenes y Sombras sin Bordes) | `frontend/src/index.css`, `frontend/src/App.css` | `FRONT-19` | `[x]` |
+| **FRONT-21** | Segundo Header Colapsable de Gestión de Lotes del Usuario y Delimitación de Nuevos Campos (`BACK-4`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-20` | `[x]` |
+| **FRONT-22** | Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación | `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.css` | `FRONT-21` | `[x]` |
+| **FRONT-23** | Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-22` | `[x]` |
+| **FRONT-24** | Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL` | `frontend/.env.example`, `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx` | `FRONT-18`, `FRONT-23` | `[x]` |
 
 ---
 
@@ -462,5 +469,136 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - Al completarse `campana` y `cultivoAnterior`, se dispara automáticamente el pedido/precarga de los datos históricos del lote.
   - La tarjeta `RecommendationPanel` (y `WhatIfPanel`) permanece oculta hasta que el usuario presione el botón **`"Planificar"`** en `CampaignConfigPanel`.
   - Si el usuario cambia el objetivo o los sliders *What-If* luego de planificar, la recomendación se actualiza automáticamente.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-18: Pantalla de Inicio de Sesión y Registro Conectada a `BACK-3` (Con Modo Demo)
+- **Objetivo:** Implementar la vista inicial de autenticación (Iniciar sesión / Crear cuenta) alineada con el sistema de diseño *Analogue-Modern Field Journal* (`SKILLS_FRONTEND.md`) y conectada a los endpoints de Supabase Auth en FastAPI (`BACK-3`), permitiendo también ingresar en modo demostración.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/components/AuthScreen.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Flujo de entrada:** Pantalla de acceso al abrir la aplicación con opción de alternar entre **Iniciar sesión** y **Crear cuenta**, más un botón secundario **"Explorar en modo demo"** para acceder al mapa y planificación sin autenticarse.
+  - **Campos del formulario:**
+    - *Iniciar sesión:* Email y Contraseña (con botón para mostrar/ocultar contraseña).
+    - *Crear cuenta:* Nombre completo, Email y Contraseña (con botón para mostrar/ocultar contraseña).
+  - **Persistencia de sesión:** Guardar el `access_token` (JWT) en `localStorage` y validarlo al iniciar la app mediante `GET /api/v1/auth/me`. Mostrar en el header el usuario conectado con acción **"Cerrar sesión"** (o **"Iniciar sesión"** si ingresó en modo demo).
+  - **Conexión y manejo de errores:** Conectar directo a FastAPI (`POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `GET /api/v1/auth/me` usando `VITE_API_URL` o `http://localhost:8000` por defecto). Si el backend no responde, mostrar un aviso claro y respetuoso sugiriendo verificar el servidor o usar el modo demo.
+- **Especificación Técnica:**
+  1. Agregar en `frontend/src/types/api.ts` los contratos `AuthRegisterRequest`, `AuthLoginRequest`, `UserProfile` y `AuthResponse`.
+  2. Crear `frontend/src/services/authClient.ts` con `loginUser`, `registerUser`, `fetchCurrentUser`, y manejo de almacenamiento seguro del token en `localStorage`.
+  3. Crear `frontend/src/components/AuthScreen.tsx` respetando los tokens CSS (`--color-header-bg`, `--color-bg`, `--color-bg-card`, `--color-primary`, `--color-terracotta`, `--color-text`), tipografía `Newsreader` + `Plus Jakarta Sans`, lenguaje formal sin voseo y contraste WCAG AA.
+  4. Integrar el estado de sesión en `frontend/src/App.tsx` y los estilos en `frontend/src/App.css` (incluyendo el indicador de usuario y botón de sesión en `.top-navbar`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-19: Rebranding a **Ereia** (Fraunces 600, Ícono PNG sin recuadro), Header `#FFF5E0` y Fondo Salvia `#A8BC82`
+- **Objetivo:** Reemplazar la marca *Shark Attack* por **Ereia** en tipografía **Fraunces SemiBold (600)** bicolor (`Ere` en `#9E472A` e `ia` en `#4B5B2D`), incorporar el nuevo ícono PNG de brote sin recuadro junto al título, mover *"Soporte para el cultivo"* al costado de **Ereia**, y actualizar el header a `#FFF5E0`, el fondo principal a `#A8BC82` (variante más clara de `#8AA15B`) y la tarjeta de inicio de sesión al mismo color del header (`#FFF5E0`).
+- **Archivos Permitidos:**
+  - `frontend/public/ereia-icon.png`
+  - `frontend/index.html`
+  - `frontend/src/index.css`
+  - `frontend/src/components/BrandBlock.tsx`
+  - `frontend/src/components/AuthScreen.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Marca:** Wordmark **Ereia** en `Fraunces` peso `600` (`40px`), con `"Ere"` en `#9E472A` (`--color-terracotta`) e `"ia"` en `#4B5B2D` (`--color-primary`), sin fondo ni caja alrededor del texto ni del ícono PNG.
+  - **Subtítulo en línea:** *"Soporte para el cultivo"* ubicado al costado de **Ereia** para permitir mayor tamaño del título principal.
+  - **Paleta actualizada:** Header superior y tarjeta `.auth-card` en `#FFF5E0` (`--color-header-bg`), y fondo general de la aplicación en `#A8BC82` (`--color-bg`, tono más claro que `#8AA15B`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-20: Refinamiento de Panel Derecho, Pestañas tipo Carpeta y Header (Tonos Arena, Márgenes y Sombras sin Bordes)
+- **Objetivo:** Unificar cromáticamente la pestaña activa y el panel derecho en tono arena claro (`#EAD9C0`), oscurecer las pestañas inactivas (`#C5A882`), alinear los márgenes laterales de las pestañas con el contenido interno y reemplazar los bordes de separación por sombras sutiles.
+- **Archivos Permitidos:**
+  - `frontend/src/index.css`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Jerarquía de tonos en carpeta derecha:** `--color-folder-pane: #EAD9C0` para `.right-analysis-pane`, `.right-folder-body` y `.nav-tab-btn.active`; `--color-folder-tab-inactive: #C5A882` (y `--color-folder-tab-hover: #D6BE9E`) para pestañas desactivadas.
+  - **Alineación de márgenes:** `.top-nav-tabs` con `padding: 0 24px` para coincidir con el `padding` horizontal de `24px` en `.right-folder-body`.
+  - **Sin bordes, con sombras:** Eliminación de bordes en `.left-map-pane`, `.nav-tab-btn`, `.nav-tab-btn.active`, `.right-folder-body` y `.top-navbar`, usando sombras sutiles en el panel derecho y pestaña activa, y `var(--shadow-md)` en `.top-navbar`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-21: Segundo Header Colapsable de Gestión de Lotes del Usuario y Delimitación de Nuevos Campos (`BACK-4`)
+- **Objetivo:** Reemplazar el selector flotante de `"Lotes de ejemplo"` por una barra superior colapsable ubicada debajo del header principal en el sector del mapa, que liste los campos reales del usuario desde la base de datos (`GET /api/v1/fields`) y permita delimitar y guardar nuevos campos con nombre (`POST /api/v1/fields`).
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/fieldsClient.ts`
+  - `frontend/src/components/FieldsSubheader.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Sin lotes estáticos de ejemplo:** En usuario autenticado se consultan sus campos en `GET /api/v1/fields`; en **Modo demo** se autentica contra el backend con un usuario demo fijo (`VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD`) para cargar los lotes demo desde la base de datos.
+  - **Barra flotante colapsable en el sector del mapa:** En estado colapsado muestra **`Mis campos (N)`** y **`Nuevo campo`**; al desplegar, **`Mis campos`** pasa a **`X`**, aparecen las pills de los campos del usuario hacia la derecha sin barra de fondo (alternando 5 colores de la paleta) y **`Nuevo campo`** se compacta a un botón con solo ícono de lápiz.
+  - **Persistencia de polígono y centroide:** Al guardar un nuevo campo se envía `nombre`, `lat`, `lon` y `hectareas` a `POST /api/v1/fields`, y los vértices del polígono se cachean en `localStorage` por `field_id` para dibujarlo en el mapa.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-22: Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación
+- **Objetivo:** Simplificar las etiquetas y controles de planificación (`Verano`/`Invierno`, `Cultivo`, `Objetivo` con expansión animada al pasar el mouse) y convertir el listado de estrategia de rotación en filas expandibles al hacer clic, con enlace discreto `+ Mas...` sin contenedor.
+- **Archivos Permitidos:**
+  - `frontend/src/components/SimulationControls.tsx`
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Campañas y cultivo antecesor:** Botones **`Verano`** (tooltip `"Campaña gruesa"`, amarillo) e **`Invierno`** (tooltip `"Campaña fina"`, azul) sin borde, con cambio de tono en `:hover` y color más oscuro al seleccionar; selector con placeholder `"Cultivo"` y exactamente la misma altura (`40px`).
+  - **Objetivo:** Renombrado de `"Prioridad de manejo"` a `"Objetivo"`, con las 3 pills del mismo tono tierra sin borde, altura uniforme (`min-height: 56px`) y animación de expansión al hacer `:hover` para mostrar la descripción.
+  - **Estrategia de rotación:** Eliminado el encabezado `"Comparativa de cultivos para esta campaña"`, filas del listado expandibles al tocarlas para ver el detalle de cada cultivo, y botón de fundamentos **`+ Mas...`** sin contenedor en la esquina inferior derecha.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+
+---
+
+### `[x]` FRONT-23: Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS
+- **Objetivo:** Unificar la recomendación dentro del listado de cultivos (cada ítem expande su tarjeta completa al tocarlo), enfocar la recomendación exclusivamente en la campaña actual (`verano`), desactivar `Invierno` con tooltip `"A futuro"` y eliminar el panel flotante de capas satelitales sobre el mapa.
+- **Archivos Permitidos:**
+  - `frontend/src/components/RecommendationPanel.tsx`
+  - `frontend/src/components/SimulationControls.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/services/apiClient.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Listado único expandible:** Se elimina la tarjeta fija superior y el bloque `"Rotación sugerida para el año"`; al tocar cualquier cultivo del listado se expande su tarjeta completa con anillo de puntaje, barras de pilares y enlace `+ Mas...`.
+  - **Campaña actual (`verano`):** `Invierno` queda desactivado (`disabled`) con ícono de información y tooltip `"A futuro"`, alineado con `CONTEXT.md`.
+  - **Mapa limpio:** Se elimina el panel flotante inferior de capas temáticas NASA GIBS sobre el mapa, conservando el visor satelital base y etiquetas.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-24: Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL`
+- **Objetivo:** Dejar configurado el entorno del frontend para conectarse al backend FastAPI + Supabase Auth (`BACK-3`) y alinear los tipos y el flujo de login/registro con el contrato real de `backend/schemas.py`.
+- **Archivos Permitidos:**
+  - `frontend/.env.example`
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/components/AuthScreen.tsx`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Configuración de API:** Se agrega `frontend/.env.example` (y `frontend/.env.local` para desarrollo local) con `VITE_API_URL=http://localhost:8000`.
+  - **Contrato Auth (`BACK-3`):** `AuthResponse` acepta `access_token: string | null` y `requiere_confirmacion_email?: boolean` para manejar cuentas recién registradas que requieren confirmación por email en Supabase.
+  - **Persistencia de sesión:** `authClient.ts` almacena y limpia `access_token` y `refresh_token` de forma consistente al iniciar y cerrar sesión.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

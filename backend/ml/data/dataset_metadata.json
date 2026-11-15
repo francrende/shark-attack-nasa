@@ -2,15 +2,15 @@
   "seed": 42,
   "data_source": "NASA POWER API (2006-2025 daily SMAP/GLDAS/GPM IMERG) + NASA SRTM 30m + ISRIC SoilGrids / GeoINTA",
   "anti_overfitting_strategy": {
-    "domain_shift_mitigation": "85% real 90-day NASA POWER windows (2006-2025) + 15% What-If slider perturbations over real windows",
+    "domain_shift_mitigation": "85% real NASA POWER dual-windows (past [-89d, t] for soil water + future [t+1, +90d] for crop-cycle risks) + 15% What-If slider perturbations",
     "spatial_overfitting_mitigation": "Continuous intra-zone & cross-zone spatial jittering on elevacion_m, pendiente_terreno_pct, and textura_arcilla_pct",
-    "temporal_leakage_mitigation": "Strict Out-of-Time Temporal Block Split: Train (2006-2019), Val (2020-2022), Test (2023-2025)"
+    "temporal_leakage_mitigation": "Strict Out-of-Time Temporal Block Split with zero window overlap across boundaries: Train (2006-2019), Val (2020-2022), Test (2023-2025)"
   },
   "real_nasa_windows_extracted": {
-    "total_90d_windows": 10830,
-    "train_pool_2006_2019": 7545,
-    "val_pool_2020_2022": 1635,
-    "test_pool_2023_2025": 1650
+    "total_90d_windows": 10695,
+    "train_pool_2006_2019": 7410,
+    "val_pool_2020_2022": 1365,
+    "test_pool_2023_2025": 1380
   },
   "locations_count": 15,
   "locations": [
@@ -235,99 +235,99 @@
   "target_stats_by_crop": {
     "avena_cobertura": {
       "count": 1500,
-      "mean": 79.63,
-      "std": 17.75,
-      "min": 0.0,
-      "median": 85.0,
-      "max": 100.0
+      "mean": 85.99,
+      "std": 8.71,
+      "min": 29.33,
+      "median": 88.65,
+      "max": 97.52
     },
     "camelina": {
       "count": 1500,
-      "mean": 78.6,
-      "std": 17.49,
+      "mean": 82.67,
+      "std": 10.55,
       "min": 0.0,
-      "median": 84.14,
-      "max": 97.36
+      "median": 85.68,
+      "max": 93.72
     },
     "cebada": {
       "count": 1500,
-      "mean": 68.0,
-      "std": 26.32,
+      "mean": 81.64,
+      "std": 18.3,
       "min": 0.0,
-      "median": 75.22,
+      "median": 88.44,
       "max": 100.0
     },
     "girasol": {
       "count": 1500,
-      "mean": 66.34,
-      "std": 25.73,
+      "mean": 78.48,
+      "std": 18.18,
       "min": 0.0,
-      "median": 73.57,
-      "max": 97.44
+      "median": 85.04,
+      "max": 96.67
     },
     "maiz_tardio": {
       "count": 1500,
-      "mean": 64.17,
-      "std": 28.16,
+      "mean": 79.0,
+      "std": 20.32,
       "min": 0.0,
-      "median": 71.76,
-      "max": 100.0
+      "median": 85.74,
+      "max": 99.54
     },
     "maiz_temprano": {
       "count": 1500,
-      "mean": 45.46,
-      "std": 34.58,
+      "mean": 68.8,
+      "std": 31.56,
       "min": 0.0,
-      "median": 50.48,
+      "median": 79.18,
       "max": 100.0
     },
     "soja_primera": {
       "count": 1500,
-      "mean": 49.83,
-      "std": 32.4,
+      "mean": 70.96,
+      "std": 29.63,
       "min": 0.0,
-      "median": 55.82,
+      "median": 82.07,
       "max": 100.0
     },
     "soja_segunda": {
       "count": 1500,
-      "mean": 48.21,
-      "std": 31.92,
+      "mean": 68.15,
+      "std": 27.08,
       "min": 0.0,
-      "median": 54.28,
-      "max": 97.54
+      "median": 77.62,
+      "max": 97.25
     },
     "sorgo": {
       "count": 1500,
-      "mean": 73.83,
-      "std": 22.26,
-      "min": 0.0,
-      "median": 80.96,
-      "max": 98.72
+      "mean": 85.31,
+      "std": 9.77,
+      "min": 4.28,
+      "median": 88.17,
+      "max": 96.56
     },
     "trigo": {
       "count": 1500,
-      "mean": 74.0,
-      "std": 23.12,
-      "min": 0.0,
-      "median": 80.2,
+      "mean": 85.56,
+      "std": 15.52,
+      "min": 14.16,
+      "median": 91.1,
       "max": 100.0
     },
     "vicia_cobertura": {
       "count": 1500,
-      "mean": 79.18,
-      "std": 18.2,
-      "min": 0.0,
-      "median": 84.47,
-      "max": 100.0
+      "mean": 84.35,
+      "std": 10.48,
+      "min": 21.44,
+      "median": 87.63,
+      "max": 99.36
     }
   },
   "context_md_drought_benchmark_summer": {
-    "maiz_temprano": 42.86,
-    "maiz_tardio": 79.06,
-    "soja_primera": 54.38,
-    "soja_segunda": 56.48,
-    "girasol": 84.75,
-    "sorgo": 89.8
+    "maiz_temprano": 43.74,
+    "maiz_tardio": 78.97,
+    "soja_primera": 54.99,
+    "soja_segunda": 56.87,
+    "girasol": 84.55,
+    "sorgo": 89.92
   }
 }
