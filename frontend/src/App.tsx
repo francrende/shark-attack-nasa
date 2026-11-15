@@ -3,7 +3,6 @@ import {
   Compass,
   History,
   Info,
-  MapPin,
 } from 'lucide-react'
 import './App.css'
 import { AuthScreen } from './components/AuthScreen'
@@ -50,6 +49,8 @@ import {
   saveFieldPolygon,
   updateUserField,
 } from './services/fieldsClient'
+import type { SearchCameraTarget } from './components/MapView'
+import type { MapSearchResult } from './services/geocodeClient'
 import type {
   Campana,
   Coordenadas,
@@ -65,7 +66,6 @@ import {
   calculateCentroid,
   calculatePolygonAreaHa,
   getProvincesBounds,
-  getProvincesLabel,
   isPointInProvinces,
 } from './utils/geo'
 
@@ -95,7 +95,6 @@ export function App() {
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([])
   const [isProvinceFilterApplied, setIsProvinceFilterApplied] =
     useState<boolean>(false)
-  const [isEditingProvinces, setIsEditingProvinces] = useState<boolean>(false)
   const [isSavingProvinces, setIsSavingProvinces] = useState<boolean>(false)
   const [provincesError, setProvincesError] = useState<string | null>(null)
 
@@ -112,7 +111,6 @@ export function App() {
       setSelectedProvinces([])
       setIsProvinceFilterApplied(false)
     }
-    setIsEditingProvinces(false)
     setProvincesError(null)
   }
 
@@ -162,6 +160,9 @@ export function App() {
     defaultField.centroide
   )
   const [customPolygon, setCustomPolygon] = useState<[number, number][]>([])
+  const [mapSearchTarget, setMapSearchTarget] =
+    useState<SearchCameraTarget | null>(null)
+  const [fieldFocusRequestId, setFieldFocusRequestId] = useState<number>(0)
 
   // Estado agronómico y simulación What-If (campaña y cultivo anterior inician sin selección)
   const [campana, setCampana] = useState<Campana | null>(null)
@@ -382,16 +383,29 @@ export function App() {
   }, [authStatus, activeToken])
 
   const handleSelectUserField = (field: UserField) => {
+    setMapSearchTarget(null)
     setIsDrawingNewField(false)
     setEditingPolygonField(null)
     setCustomPolygon([])
     setSelectedFieldId(field.id)
     setSelectedCoords({ lat: field.lat, lon: field.lon })
+    setFieldFocusRequestId((prev) => prev + 1)
     setFieldsError(null)
     setWhatIf({
       override_humedad_radicular_pct: null,
       variacion_lluvia_esperada_pct: 0,
     })
+  }
+
+  const handleSelectSearchLocation = (result: MapSearchResult) => {
+    setMapSearchTarget((prev) => ({
+      label: result.label,
+      coords: result.coords,
+      zoom: result.zoom,
+      bounds: result.bounds,
+      polygons: result.polygons,
+      requestId: (prev?.requestId ?? 0) + 1,
+    }))
   }
 
   const handleStartDrawing = () => {
@@ -402,6 +416,7 @@ export function App() {
   }
 
   const handleStartEditingPolygon = (field: UserField) => {
+    setMapSearchTarget(null)
     setIsSettingsOpen(false)
     setIsDrawingNewField(false)
     setEditingPolygonField(field)
@@ -492,6 +507,7 @@ export function App() {
             field.id === targetId ? updatedWithPolygon : field
           )
         )
+        setMapSearchTarget(null)
         setSelectedFieldId(targetId)
         setSelectedCoords(centroid)
         setEditingPolygonField(null)
@@ -514,6 +530,7 @@ export function App() {
             ? created.polygon
             : customPolygon,
       }
+      setMapSearchTarget(null)
       setUserFields((prev) => [createdWithPolygon, ...prev])
       setSelectedFieldId(created.id)
       setSelectedCoords(centroid)
@@ -613,28 +630,27 @@ export function App() {
     // Demo: la selección vive solo en memoria y siempre arranca en el selector
     setSelectedProvinces([])
     setIsProvinceFilterApplied(false)
-    setIsEditingProvinces(false)
     setProvincesError(null)
     setAuthStatus('demo')
   }
 
   const commitProvinces = (provinceIds: string[]) => {
+    setMapSearchTarget(null)
     setIsDrawingNewField(false)
     setEditingPolygonField(null)
     setCustomPolygon([])
     setFieldsError(null)
     setSelectedProvinces(provinceIds)
     setIsProvinceFilterApplied(true)
-    setIsEditingProvinces(false)
   }
 
-  const handleApplyProvinces = async (provinceIds: string[]) => {
+  const handleApplyProvinces = async (provinceIds: string[]): Promise<boolean> => {
     setProvincesError(null)
 
     // Modo demo (cuenta compartida): NUNCA se persiste en BD
     if (authStatus !== 'authenticated' || !activeToken) {
       commitProvinces(provinceIds)
-      return
+      return true
     }
 
     setIsSavingProvinces(true)
@@ -645,13 +661,51 @@ export function App() {
       setCurrentUser((prev) =>
         prev ? { ...prev, provincias: finalIds } : prev
       )
+
+      const fieldsToRemove = userFields.filter(
+        (field) => !isPointInProvinces(field.lat, field.lon, finalIds)
+      )
+
+      if (fieldsToRemove.length > 0) {
+        const results = await Promise.allSettled(
+          fieldsToRemove.map((field) => deleteUserField(activeToken, field.id))
+        )
+        const deletedIds = new Set<string>()
+        results.forEach((res, idx) => {
+          if (res.status === 'fulfilled') {
+            const deletedId = fieldsToRemove[idx].id
+            deletedIds.add(deletedId)
+            removeCachedFieldPolygon(deletedId)
+          }
+        })
+
+        if (deletedIds.size > 0) {
+          setUserFields((prev) =>
+            prev.filter((field) => !deletedIds.has(field.id))
+          )
+          if (selectedFieldId && deletedIds.has(selectedFieldId)) {
+            setSelectedFieldId(null)
+          }
+        }
+
+        if (deletedIds.size < fieldsToRemove.length) {
+          commitProvinces(finalIds)
+          setProvincesError(
+            'Se actualizaron las provincias, pero no fue posible eliminar algunos campos asociados.'
+          )
+          return false
+        }
+      }
+
       commitProvinces(finalIds)
+      return true
     } catch (err) {
       setProvincesError(
         err instanceof Error
           ? err.message
           : 'No fue posible guardar las provincias seleccionadas.'
       )
+      return false
     } finally {
       setIsSavingProvinces(false)
     }
@@ -665,7 +719,6 @@ export function App() {
     setSelectedFieldId(null)
     setSelectedProvinces([])
     setIsProvinceFilterApplied(false)
-    setIsEditingProvinces(false)
     setProvincesError(null)
     setIsSettingsOpen(false)
     setEditingPolygonField(null)
@@ -697,8 +750,8 @@ export function App() {
     )
   }
 
-  // Filtro previo: mapa plano de Argentina (primera vez, demo, o al reeditar desde el header)
-  if (!isProvinceFilterApplied || isEditingProvinces) {
+  // Filtro previo: mapa plano de Argentina (primera vez o demo)
+  if (!isProvinceFilterApplied) {
     return (
       <ProvinceSelectorScreen
         initialSelected={selectedProvinces}
@@ -707,14 +760,6 @@ export function App() {
         isDemo={authStatus === 'demo'}
         userLabel={currentUser?.nombre || currentUser?.email}
         onApply={handleApplyProvinces}
-        onCancel={
-          isProvinceFilterApplied
-            ? () => {
-                setProvincesError(null)
-                setIsEditingProvinces(false)
-              }
-            : undefined
-        }
         onLogout={handleLogout}
       />
     )
@@ -726,22 +771,6 @@ export function App() {
       <header className="top-navbar">
         <div className="top-navbar-left">
           <BrandBlock />
-
-          <div className="header-session-bar">
-            <button
-              type="button"
-              className="header-province-pill"
-              onClick={() => {
-                setProvincesError(null)
-                setIsEditingProvinces(true)
-              }}
-              title="Cambiar provincias seleccionadas"
-              aria-label={`Provincias: ${getProvincesLabel(selectedProvinces)}. Cambiar selección`}
-            >
-              <MapPin size={14} aria-hidden="true" />
-              <span>{getProvincesLabel(selectedProvinces)}</span>
-            </button>
-          </div>
         </div>
       </header>
 
@@ -751,6 +780,7 @@ export function App() {
           <FieldsSubheader
             fields={visibleFields}
             selectedFieldId={selectedFieldId}
+            selectedProvinces={selectedProvinces}
             isLoading={isFieldsLoading}
             isSaving={isSavingField}
             errorMsg={fieldsError}
@@ -763,9 +793,11 @@ export function App() {
               if (authStatus === 'demo') {
                 handleLogout()
               } else {
+                setProvincesError(null)
                 setIsSettingsOpen(true)
               }
             }}
+            onSelectSearchLocation={handleSelectSearchLocation}
             onSelectField={handleSelectUserField}
             onStartDrawing={handleStartDrawing}
             onCancelDrawing={handleCancelDrawing}
@@ -790,6 +822,8 @@ export function App() {
                 gibsDateIso: currentHistoricalGibsDate,
               }}
               selectedProvinces={selectedProvinces}
+              searchTarget={mapSearchTarget}
+              fieldFocusRequestId={fieldFocusRequestId}
               onOutsideProvinceClick={setFieldsError}
               onSelectUserField={handleSelectUserField}
               onUpdateCustomPolygon={handleUpdateCustomPolygon}
@@ -831,6 +865,8 @@ export function App() {
             {activeTab === 'planificacion' && (
               <>
                 <CampaignConfigPanel
+                  fieldName={selectedUserField?.nombre ?? null}
+                  isDrawingField={isDrawingNewField || editingPolygonField !== null}
                   campana={campana}
                   cultivoAnterior={cultivoAnterior}
                   objetivoProductor={objetivoProductor}
@@ -933,8 +969,12 @@ export function App() {
         user={currentUser}
         accessToken={activeToken}
         fields={visibleFields}
+        selectedProvinces={selectedProvinces}
+        isSavingProvinces={isSavingProvinces}
+        provincesError={provincesError}
         onClose={() => setIsSettingsOpen(false)}
         onUserUpdated={(updatedUser) => setCurrentUser(updatedUser)}
+        onSaveProvinces={handleApplyProvinces}
         onRenameField={handleRenameField}
         onEditFieldPolygon={handleStartEditingPolygon}
         onDeleteField={handleDeleteField}

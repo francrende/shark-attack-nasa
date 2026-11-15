@@ -3,20 +3,22 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Pencil,
   Pentagon,
+  Plus,
   RotateCcw,
-  Settings,
   Trash2,
   X,
 } from 'lucide-react'
+import type { MapSearchResult } from '../services/geocodeClient'
 import type { UserField } from '../types/api'
 import { getFieldColorByIndex } from '../theme/mapColors'
 import { calculatePolygonAreaHa } from '../utils/geo'
+import { MapSearchBar } from './MapSearchBar'
 
 interface FieldsSubheaderProps {
   fields: UserField[]
   selectedFieldId: string | null
+  selectedProvinces: string[]
   isLoading: boolean
   isSaving: boolean
   errorMsg: string | null
@@ -26,6 +28,7 @@ interface FieldsSubheaderProps {
   isDemo: boolean
   isUserSettingsOpen?: boolean
   onUserAction: () => void
+  onSelectSearchLocation: (result: MapSearchResult) => void
   onSelectField: (field: UserField) => void
   onStartDrawing: () => void
   onCancelDrawing: () => void
@@ -37,6 +40,7 @@ interface FieldsSubheaderProps {
 export function FieldsSubheader({
   fields,
   selectedFieldId,
+  selectedProvinces,
   isLoading,
   isSaving,
   errorMsg,
@@ -46,6 +50,7 @@ export function FieldsSubheader({
   isDemo,
   isUserSettingsOpen = false,
   onUserAction,
+  onSelectSearchLocation,
   onSelectField,
   onStartDrawing,
   onCancelDrawing,
@@ -59,6 +64,10 @@ export function FieldsSubheader({
   const measureRowRef = useRef<HTMLDivElement | null>(null)
   const [startIndex, setStartIndex] = useState(0)
   const [visibleCount, setVisibleCount] = useState<number>(fields.length)
+  const [slideState, setSlideState] = useState<{
+    dir: 'left' | 'right'
+    nonce: number
+  } | null>(null)
 
   useEffect(() => {
     if (!isDrawing) return
@@ -128,11 +137,38 @@ export function FieldsSubheader({
 
   const handleScrollFields = (direction: -1 | 1) => {
     if (direction === -1) {
-      setStartIndex((prev) => Math.max(0, prev - 1))
+      if (startIndex <= 0) return
+      const track = pillsTrackRef.current
+      const measureRow = measureRowRef.current
+      if (!track || !measureRow) {
+        setSlideState((prev) => ({ dir: 'left', nonce: (prev?.nonce ?? 0) + 1 }))
+        setStartIndex((prev) => Math.max(0, prev - Math.max(visibleCount, 1)))
+        return
+      }
+      const availableWidth = track.clientWidth
+      const children = Array.from(measureRow.children) as HTMLElement[]
+      const gap = 8
+      let usedWidth = 0
+      let prevStart = startIndex - 1
+      for (let i = startIndex - 1; i >= 0; i -= 1) {
+        const chipWidth = children[i]?.offsetWidth ?? 0
+        const nextWidth =
+          i === startIndex - 1 ? chipWidth : usedWidth + gap + chipWidth
+        if (nextWidth <= availableWidth) {
+          usedWidth = nextWidth
+          prevStart = i
+        } else {
+          break
+        }
+      }
+      setSlideState((prev) => ({ dir: 'left', nonce: (prev?.nonce ?? 0) + 1 }))
+      setStartIndex(prevStart)
       return
     }
-    if (startIndex + visibleCount < fields.length) {
-      setStartIndex((prev) => prev + 1)
+    const nextStart = startIndex + Math.max(visibleCount, 1)
+    if (nextStart < fields.length) {
+      setSlideState((prev) => ({ dir: 'right', nonce: (prev?.nonce ?? 0) + 1 }))
+      setStartIndex(nextStart)
     }
   }
 
@@ -261,36 +297,32 @@ export function FieldsSubheader({
     )
   }
 
-  const userPillButton = (
-    <button
-      type="button"
-      className={`fields-user-pill ${isUserSettingsOpen ? 'active' : ''}`}
-      onClick={onUserAction}
-      title={isDemo ? 'Iniciar sesión' : 'Ajustes de usuario'}
-      aria-label={isDemo ? 'Iniciar sesión' : 'Ajustes de usuario'}
-    >
-      <Settings size={15} aria-hidden="true" />
-    </button>
-  )
-
   return (
     <div
       className="fields-floating-bar expanded"
       role="region"
-      aria-label="Campos del usuario"
+      aria-label="Buscador y campos del usuario"
     >
-      {userPillButton}
+      <MapSearchBar
+        selectedProvinces={selectedProvinces}
+        isDemo={isDemo}
+        isUserSettingsOpen={isUserSettingsOpen}
+        onUserAction={onUserAction}
+        onSelectLocation={onSelectSearchLocation}
+      />
 
       <div className="fields-carousel-wrap">
         <button
           type="button"
-          className="fields-scroll-btn"
+          className={`fields-scroll-btn ${!canScrollLeft ? 'is-hidden' : ''}`}
           onClick={() => handleScrollFields(-1)}
           disabled={!canScrollLeft}
+          tabIndex={canScrollLeft ? 0 : -1}
+          aria-hidden={!canScrollLeft}
           aria-label="Desplazar campos hacia la izquierda"
           title="Campos anteriores"
         >
-          <ChevronLeft size={15} aria-hidden="true" />
+          <ChevronLeft size={18} strokeWidth={2.75} aria-hidden="true" />
         </button>
 
         <div ref={pillsTrackRef} className="fields-pills-transparent">
@@ -301,27 +333,28 @@ export function FieldsSubheader({
               Sin campos registrados
             </span>
           ) : (
-            visibleFields.map((field) => {
-              const originalIdx = fields.findIndex((f) => f.id === field.id)
-              const isSelected = field.id === selectedFieldId
-              const { variant } = getFieldColorByIndex(originalIdx)
-              return (
-                <button
-                  key={field.id}
-                  type="button"
-                  className={`field-chip-btn ${variant} ${isSelected ? 'selected' : ''}`}
-                  onClick={() => onSelectField(field)}
-                >
-                  <span className="field-chip-dot" aria-hidden="true" />
-                  <span className="field-chip-name">{field.nombre}</span>
-                  {field.hectareas !== null && (
-                    <span className="field-chip-ha">
-                      {Math.round(field.hectareas)} ha
-                    </span>
-                  )}
-                </button>
-              )
-            })
+            <div
+              key={slideState?.nonce ?? 0}
+              className={`fields-pills-page ${
+                slideState ? `slide-from-${slideState.dir}` : ''
+              }`}
+            >
+              {visibleFields.map((field) => {
+                const originalIdx = fields.findIndex((f) => f.id === field.id)
+                const isSelected = field.id === selectedFieldId
+                const { variant } = getFieldColorByIndex(originalIdx)
+                return (
+                  <button
+                    key={field.id}
+                    type="button"
+                    className={`field-chip-btn ${variant} ${isSelected ? 'selected' : ''}`}
+                    onClick={() => onSelectField(field)}
+                  >
+                    <span className="field-chip-name">{field.nombre}</span>
+                  </button>
+                )
+              })}
+            </div>
           )}
 
           {/* Fila oculta para medir el ancho exacto de cada pill y evitar cortes */}
@@ -334,13 +367,7 @@ export function FieldsSubheader({
               const { variant } = getFieldColorByIndex(idx)
               return (
                 <span key={field.id} className={`field-chip-btn ${variant}`}>
-                  <span className="field-chip-dot" />
                   <span className="field-chip-name">{field.nombre}</span>
-                  {field.hectareas !== null && (
-                    <span className="field-chip-ha">
-                      {Math.round(field.hectareas)} ha
-                    </span>
-                  )}
                 </span>
               )
             })}
@@ -349,13 +376,15 @@ export function FieldsSubheader({
 
         <button
           type="button"
-          className="fields-scroll-btn"
+          className={`fields-scroll-btn ${!canScrollRight ? 'is-hidden' : ''}`}
           onClick={() => handleScrollFields(1)}
           disabled={!canScrollRight}
+          tabIndex={canScrollRight ? 0 : -1}
+          aria-hidden={!canScrollRight}
           aria-label="Desplazar campos hacia la derecha"
           title="Siguientes campos"
         >
-          <ChevronRight size={15} aria-hidden="true" />
+          <ChevronRight size={18} strokeWidth={2.75} aria-hidden="true" />
         </button>
       </div>
 
@@ -366,7 +395,7 @@ export function FieldsSubheader({
         aria-label="Nuevo campo"
         title="Nuevo campo"
       >
-        <Pencil size={15} aria-hidden="true" />
+        <Plus size={16} aria-hidden="true" />
       </button>
 
       {errorMsg && (
