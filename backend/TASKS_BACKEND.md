@@ -34,8 +34,6 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ## 3. Tablero de Tareas Atómicas (Backend)
 
-*(Vacío inicialmente — El agente irá agregando aquí cada tarea junto con el desarrollador luego de la etapa de preguntas).*
-
 | ID | Tarea Atómica | Archivos Involucrados | Depende de | Estado |
 | :--- | :--- | :--- | :---: | :---: |
 | BACK-1 | Provider crudo NASA POWER (ventana 30 días + filtro `-999`) | `backend/providers/nasa_power.py`, `backend/providers/test_nasa_power.py`, `backend/providers/check_nasa_power_live.py` | — | `[x]` |
@@ -527,7 +525,121 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
-## 4. Plantilla para Especificar cada Nueva Tarea
+### Tablero de Tareas API FastAPI & Supabase (`backend-celi`)
+
+| ID | Tarea Atómica | Archivos Involucrados | Depende de | Estado |
+| :--- | :--- | :--- | :---: | :---: |
+| `BACK-1` | Estructura base FastAPI, config y cliente Supabase | `backend/main.py`, `backend/config.py`, `backend/providers/supabase_client.py`, `backend/requirements.txt`, `backend/.env.example` | — | `[x]` |
+| `BACK-2` | Esquema SQL en Supabase (`profiles`, `fields`, `campaigns` + RLS) | `backend/sql/schema.sql` | `BACK-1` | `[x]` |
+| `BACK-3` | Endpoints de Auth y dependencia JWT (Supabase Auth) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/main.py` | `BACK-1`, `BACK-2` | `[x]` |
+| `BACK-4` | CRUD de Campos y Campañas/Resultados por Campo | `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py` | `BACK-2`, `BACK-3` | `[x]` |
+| `BACK-5` | Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email | `backend/TASKS_BACKEND.md` | `BACK-3` | `[x]` |
+| `BACK-6` | Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`) | `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md` | `BACK-4` | `[x]` |
+
+---
+
+## 4. Especificación de Tareas Atómicas
+
+### `[x]` BACK-1: Estructura base FastAPI, configuración y cliente Supabase
+- **Objetivo:** Dejar levantado el esqueleto modular de FastAPI con lectura de variables de entorno (`pydantic-settings`), CORS habilitado para el frontend y el cliente oficial `supabase-py` listo para usar, más un endpoint `/health` que verifique la app y la configuración de Supabase.
+- **Archivos Permitidos:** `backend/main.py`, `backend/config.py`, `backend/providers/supabase_client.py`, `backend/requirements.txt`, `backend/.env.example`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Conexión a Supabase mediante el SDK oficial `supabase-py` usando `SUPABASE_URL` y `SUPABASE_KEY` (y opcionalmente `SUPABASE_SERVICE_ROLE_KEY` si se requiere en backend).
+- **Especificación Técnica:**
+  1. Agregar `supabase` a `backend/requirements.txt` e instalarlo en `.venv`.
+  2. Crear `backend/.env.example` con `SUPABASE_URL`, `SUPABASE_KEY` (anon/publishable) y `CORS_ORIGINS`.
+  3. Crear `backend/config.py` con `Settings(BaseSettings)` cargando `.env`.
+  4. Crear `backend/providers/supabase_client.py` con `get_supabase_client()` y `get_authenticated_supabase_client(access_token)` (para respetar RLS con el JWT del usuario).
+  5. Crear `backend/main.py` con la instancia `FastAPI(title="Shark Attack API")`, middleware CORS y `GET /health`.
+- **Definition of Done (Comando de Verificación):**
+  - `python -c "from backend.main import app; print(app.title)"` y `GET http://localhost:8000/health` devuelve `200 OK`.
+
+### `[x]` BACK-2: Esquema SQL en Supabase (`profiles`, `fields`, `campaigns` + RLS)
+- **Objetivo:** Definir el modelo relacional en PostgreSQL/Supabase para usuarios, sus campos/lotes y el historial de campañas (fechas, cultivo, resultados y JSON de simulación), con seguridad Row Level Security (RLS) activada.
+- **Archivos Permitidos:** `backend/sql/schema.sql`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Autenticación con **Supabase Auth** nativo (`auth.users`) enlazado a una tabla `public.profiles`.
+  - Guardar tanto los datos estructurados de cada campaña (tipo `invierno`/`verano`, fechas, cultivo, rinde/resultado) como el JSON completo de la recomendación/simulación (`/api/v1/simulate`) en una columna `simulacion_json` (`jsonb`).
+- **Especificación Técnica:**
+  1. Tabla `public.profiles`: `id` (`uuid PK references auth.users on delete cascade`), `email` (`text`), `nombre` (`text`), `created_at` (`timestamptz`). Trigger automático `on_auth_user_created` para insertar el perfil al registrarse.
+  2. Tabla `public.fields`: `id` (`uuid PK default gen_random_uuid()`), `user_id` (`uuid not null references public.profiles(id) on delete cascade`), `nombre` (`text not null`), `lat` (`double precision not null`), `lon` (`double precision not null`), `hectareas` (`double precision`), `created_at` (`timestamptz`).
+  3. Tabla `public.campaigns`: `id` (`uuid PK default gen_random_uuid()`), `field_id` (`uuid not null references public.fields(id) on delete cascade`), `user_id` (`uuid not null references public.profiles(id) on delete cascade`), `campana` (`text not null check (campana in ('invierno', 'verano'))`), `cultivo` (`text not null`), `fecha_inicio` (`date not null`), `fecha_fin` (`date`), `rinde_kg_ha` (`double precision`), `resultado_notas` (`text`), `simulacion_json` (`jsonb`), `created_at` (`timestamptz`).
+  4. Habilitar RLS en las 3 tablas con políticas para que cada usuario (`auth.uid()`) solo vea, cree, edite y elimine sus propios registros.
+- **Definition of Done (Comando de Verificación):**
+  - Ejecutar el script `backend/sql/schema.sql` en el SQL Editor de Supabase sin errores y verificar que las 3 tablas y políticas RLS queden creadas.
+
+### `[x]` BACK-3: Endpoints de Auth y dependencia JWT (Supabase Auth)
+- **Objetivo:** Exponer endpoints de registro, login y perfil actual usando Supabase Auth, y proveer una dependencia reutilizable `get_current_user` para proteger el resto de los endpoints.
+- **Archivos Permitidos:** `backend/routers/auth.py`, `backend/schemas.py`, `backend/main.py`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Se utiliza Supabase Auth nativo para registro/login con email y contraseña, devolviendo el `access_token` (JWT) y `refresh_token` de Supabase.
+- **Especificación Técnica:**
+  1. Definir en `backend/schemas.py` los modelos Pydantic: `AuthRegisterRequest`, `AuthLoginRequest`, `AuthResponse`, `UserProfileResponse`.
+  2. Crear `backend/routers/auth.py` con prefijo `/api/v1/auth`:
+     - `POST /register`: registra el usuario en Supabase Auth (`supabase.auth.sign_up`).
+     - `POST /login`: autentica con email y contraseña (`supabase.auth.sign_in_with_password`) y retorna tokens + datos básicos del usuario.
+     - `GET /me`: valida el Bearer token vía `get_current_user` (`supabase.auth.get_user(token)`) y retorna el perfil.
+  3. Registrar el router en `backend/main.py`.
+- **Definition of Done (Comando de Verificación):**
+  - Probar `POST /api/v1/auth/register`, `POST /api/v1/auth/login` y `GET /api/v1/auth/me` contra Swagger UI (`/docs`) o `curl` con respuesta `200`/`201`.
+
+### `[x]` BACK-4: CRUD de Campos y Campañas/Resultados por Campo
+- **Objetivo:** Permitir que cada usuario autenticado cree, liste, consulte, actualice y elimine sus campos, y registre/consulte el historial de campañas (cultivos, fechas, resultados y `simulacion_json`) de cada campo.
+- **Archivos Permitidos:** `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Todas las consultas se ejecutan con el cliente autenticado del usuario para respetar las políticas RLS de Supabase.
+  - Cada campaña pertenece a un `field_id` y puede almacenar opcionalmente `simulacion_json` completo.
+- **Especificación Técnica:**
+  1. Definir en `backend/schemas.py` los modelos Pydantic: `FieldCreate`, `FieldUpdate`, `FieldResponse`, `CampaignCreate`, `CampaignUpdate`, `CampaignResponse`.
+  2. Crear `backend/routers/fields.py` con prefijo `/api/v1/fields`:
+     - `GET /`: lista los campos del usuario autenticado.
+     - `POST /`: crea un nuevo campo (`nombre`, `lat`, `lon`, `hectareas`).
+     - `GET /{field_id}`: obtiene el detalle de un campo.
+     - `PATCH /{field_id}` y `DELETE /{field_id}`.
+  3. Crear `backend/routers/campaigns.py` con prefijo `/api/v1/fields/{field_id}/campaigns`:
+     - `GET /`: lista el historial de campañas/cultivos del campo ordenado por `fecha_inicio` descendente.
+     - `POST /`: registra una nueva campaña (`campana`, `cultivo`, `fecha_inicio`, `fecha_fin`, `rinde_kg_ha`, `resultado_notas`, `simulacion_json`).
+     - `PATCH /{campaign_id}` y `DELETE /{campaign_id}`: actualiza resultados/fechas o elimina un registro.
+  4. Registrar ambos routers en `backend/main.py`.
+- **Definition of Done (Comando de Verificación):**
+  - Crear un campo, agregar una campaña con fechas/cultivo/resultado y listar el historial del campo autenticado vía `/docs` o `pytest`/script de prueba.
+
+### `[x]` BACK-5: Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email
+- **Objetivo:** Verificar en vivo el servidor FastAPI conectado a Supabase Auth (`/health`, `/api/v1/auth/register`, `/api/v1/auth/login`), validar el usuario demo confirmado en Supabase y documentar la mitigación del `email rate limit exceeded` del SMTP gratuito de Supabase.
+- **Archivos Permitidos:** `backend/TASKS_BACKEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Usuario demo oficial en Supabase: `demoereia@gmail.com` (creado y confirmado manualmente en Supabase Auth).
+  - Para evitar el límite de ~2 correos/hora del SMTP gratuito de Supabase (`email rate limit exceeded`) durante pruebas y demo, se recomienda desactivar **Confirm email** en **Authentication → Providers → Email** del Dashboard de Supabase.
+- **Especificación Técnica:**
+  1. Levantar FastAPI con `uvicorn` en `http://127.0.0.1:8000` y verificar `GET /health` (`supabase_configured: True`).
+  2. Probar `POST /api/v1/auth/register` y `POST /api/v1/auth/login` con `demoereia@gmail.com` obteniendo `200 OK` y `access_token` JWT válido.
+- **Definition of Done (Comando de Verificación):**
+  - `GET http://127.0.0.1:8000/health` devuelve `{"status":"ok","supabase_configured":true}` y `POST /api/v1/auth/login` con `demoereia@gmail.com` devuelve `200 OK` con `access_token`.
+
+### `[x]` BACK-6: Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`)
+- **Objetivo:** Asegurar que el backend (`/api/v1/fields`) y la tabla `public.fields` en Supabase permitan guardar y recuperar el polígono dibujado en el mapa (`polygon: [[lat, lon], ...]`), manteniendo compatibilidad con clientes que envíen solo centroide y hectáreas.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Los endpoints CRUD `/api/v1/fields` (`GET`, `POST`, `GET /{field_id}`, `PATCH /{field_id}`, `DELETE /{field_id}`) ya existen desde `BACK-4`; se amplían para aceptar y devolver `polygon` opcional (`list[list[float]] | None`).
+  - En `create_field`, se usa `exclude_none=True` para mantener compatibilidad si la columna `polygon` aún no se migró en Supabase.
+  - No se modifica ningún archivo del frontend (`frontend/*`).
+- **Especificación Técnica:**
+  1. Agregar columna `polygon jsonb` en `public.fields` y sentencia idempotente `alter table public.fields add column if not exists polygon jsonb;` en `backend/sql/schema.sql`.
+  2. Agregar `polygon: list[list[float]] | None = None` en `FieldCreate`, `FieldUpdate` y `FieldResponse` dentro de `backend/schemas.py` (validando al menos 3 vértices `[lat, lon]` cuando se envía).
+  3. Actualizar `create_field` en `backend/routers/fields.py` para usar `payload.model_dump(mode="json", exclude_none=True)`.
+- **Definition of Done (Comando de Verificación):**
+  - `backend\.venv\Scripts\python.exe -c "from backend.main import app; from backend.schemas import FieldCreate, FieldResponse; f = FieldCreate(nombre='Lote Sur', lat=-33.1, lon=-64.3, hectareas=120.5, polygon=[[-33.1,-64.3],[-33.11,-64.3],[-33.11,-64.29]]); print(app.title, len(f.polygon))"`
+
+---
+
+## 4.1. Registro de Entorno y Despliegue en Supabase
+- **Proyecto Supabase:** Creado bajo categoría *B2B SaaS application* (`https://kjiddadksvosdaoyapfu.supabase.co`).
+- **Variables de entorno locales (`backend/.env`):** Archivo creado a partir de `backend/.env.example` con `SUPABASE_URL` (URL base sin `/rest/v1/`, requerida por `supabase-py`), `SUPABASE_KEY` (publishable key) y `CORS_ORIGINS=http://localhost:5173,http://localhost:3000`.
+- **Esquema SQL (`backend/sql/schema.sql`):** Listo para ejecutar en el **SQL Editor** de Supabase para crear `public.profiles`, `public.fields`, `public.campaigns`, trigger `on_auth_user_created` y políticas RLS.
+
+---
+
+## 5. Plantilla para Especificar cada Nueva Tarea
 
 Cuando el agente y el desarrollador terminen de responder las preguntas de definición de una tarea, el agente debe agregarla aquí abajo siguiendo este formato:
 

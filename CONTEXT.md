@@ -18,6 +18,7 @@ Para no construir código descartable en la hackathon pero tampoco bloquear el e
 ### 2.1. Tech Stack Base
 - **Frontend:** React + TypeScript + Vite (UI/UX enfocada en el productor, mapa interactivo con Leaflet / Mapbox GL superponiendo capas satelitales WMTS/WMS de la NASA).
 - **Backend:** Python + FastAPI (Arquitectura modular dividida en `routers/`, `services/`, `providers/` y `ml/`).
+- **Base de Datos y Auth:** Supabase (PostgreSQL + Supabase Auth + Row Level Security) conectado desde FastAPI mediante `supabase-py` (`backend/sql/schema.sql`).
 - **Data/ML:** `scikit-learn` (`HistGradientBoostingRegressor` / `RandomForestRegressor`) + `Pandas`/`Polars` para series temporales climáticas y motor híbrido de decisión multicriterio (MCDA).
 - **Despliegue (Deploy):** Frontend en Vercel | Backend en Render/Railway.
 - **Puertos Locales Habituales:** Frontend `:5173` (o `:3000`) | Backend `:8000`.
@@ -299,28 +300,34 @@ Formato estándar de comunicación entre el Frontend y el Backend.
 ---
 
 ## 6. Flujo del Usuario (User Journey)
-El proceso que cumple el productor o asesor al utilizar la herramienta sigue cuatro pasos ágiles y accionables:
+El proceso que cumple el productor o asesor al utilizar la herramienta sigue cinco pasos ágiles y accionables:
 
-1. **Selección del lote y detección satelital automática:** Entra a la web, activa las capas visuales de la NASA (Humedad SMAP o Verdor NDVI) y marca su lote en el mapa. El sistema consulta automáticamente a la NASA y al mapa edáfico, mostrándole en pantalla el estado hídrico y térmico actual de su campo sin que tenga que tipear datos complejos.
-2. **Configuración de contexto y objetivo:** Indica de qué cultivo viene el lote (ej. *"Vengo de Soja de 1ra"*), qué campaña va a planificar (*"Campaña de Verano"*) y cuál es su prioridad (*"Resiliencia hidroclimática"*, *"Conservación del suelo"* o *"Equilibrio"*).
-3. **Recepción de la decisión explicada:** El dashboard ejecuta el modelo híbrido y le devuelve el ranking de cultivos y la secuencia de rotación sugerida con una explicación transparente:
+1. **Autenticación y Selección de región (Región Pampeana):** Tras iniciar sesión o entrar en modo demo, la app presenta un mapa 3D interactivo de Argentina para filtrar las provincias habilitadas de trabajo (Buenos Aires, Córdoba, Entre Ríos, La Pampa y Santa Fe). En usuarios registrados, la selección se guarda en `profiles.provincias` (si ya está guardada, ingresa directo al tablero y puede reeditarla desde la pastilla del header); en modo demo vive solo en memoria.
+2. **Selección del lote y detección satelital automática:** Ya en el tablero climático (`Planificación de campaña`), visualiza o delimita lotes dentro de las provincias seleccionadas. El sistema consulta automáticamente a la NASA y al mapa edáfico, mostrándole en pantalla el estado hídrico y térmico actual de su campo sin que tenga que tipear datos complejos.
+3. **Configuración de contexto y objetivo:** Indica de qué cultivo viene el lote (ej. *"Vengo de Soja de 1ra"*), qué campaña va a planificar (*"Campaña de Verano"*) y cuál es su prioridad (*"Resiliencia hidroclimática"*, *"Conservación del suelo"* o *"Equilibrio"*).
+4. **Recepción de la decisión explicada:** El dashboard ejecuta el modelo híbrido y le devuelve el ranking de cultivos y la secuencia de rotación sugerida con una explicación transparente:
    > *"Recomendación: Sembrar Sorgo o Girasol (y evitar repetir Soja o Maíz Temprano). La telemetría de la NASA muestra una saturación radicular del 34% y una anomalía de lluvias de -24%. El Sorgo presenta un 87% de aptitud integral: resiste el estrés hídrico proyectado y aporta el carbono y rastrojo que tu lote necesita después de la Soja."*
-4. **Simulación "What-If" (Opcional):** El productor puede mover un control deslizante (ej. *"¿Qué cambia si llueven 80 mm antes de la siembra?"*) para ver en tiempo real cómo se reacomoda el ranking y planificar su compra de insumos con anticipación.
+5. **Simulación "What-If" (Opcional):** El productor puede mover un control deslizante (ej. *"¿Qué cambia si llueven 80 mm antes de la siembra?"*) para ver en tiempo real cómo se reacomoda el ranking y planificar su compra de insumos con anticipación.
 
 ---
 
 ## 7. Guía Rápida de Instalación (Setup del Equipo)
 
-Pasos para dejar el entorno local listo después de clonar o hacer `git pull` del repositorio. No se requiere ningún motor de base de datos externo.
+Pasos para dejar el entorno local listo después de clonar o hacer `git pull` del repositorio. El backend se conecta a **Supabase** (PostgreSQL + Auth) mediante variables de entorno.
 
 ### 7.1. Estructura del Repositorio
 ```text
 shark-attack-nasa/
 ├── backend/
 │   ├── ml/                # Entrenamiento (train_baseline.py), predictor y TASKS_ML.md
-│   ├── providers/         # Clientes HTTP (NASA POWER API, NASA SRTM / OpenTopoData, ISRIC SoilGrids API)
-│   ├── routers/           # Endpoints FastAPI (/api/v1/simulate)
+│   ├── providers/         # Clientes externos (supabase_client.py, NASA POWER, SRTM, SoilGrids)
+│   ├── routers/           # Endpoints FastAPI (auth.py, fields.py, campaigns.py, simulación)
 │   ├── services/          # Lógica de negocio y matriz de rotación agronómica
+│   ├── sql/               # Esquema PostgreSQL y políticas RLS para Supabase (schema.sql)
+│   ├── config.py          # Configuración con pydantic-settings (.env)
+│   ├── main.py            # Entrypoint FastAPI, CORS, /health y registro de routers
+│   ├── schemas.py         # Modelos Pydantic de request/response
+│   ├── .env.example       # Plantilla de variables de entorno (SUPABASE_URL, SUPABASE_KEY)
 │   ├── requirements.txt   # Dependencias de Python
 │   └── TASKS_BACKEND.md   # Tablero y protocolo de tareas atómicas de Backend
 ├── frontend/              # Aplicación React + TypeScript + Vite + Leaflet
@@ -328,6 +335,17 @@ shark-attack-nasa/
 │   └── TASKS_FRONTEND.md  # Tablero y protocolo de tareas atómicas de Frontend
 └── CONTEXT.md             # Documentación de arquitectura, contratos y metodología
 ```
+
+### 7.2. Configurar Base de Datos y Auth en Supabase
+1. Crear un proyecto en **Supabase** (categoría *B2B SaaS application*) y copiar `SUPABASE_URL` (URL base del proyecto, sin `/rest/v1/`) y `SUPABASE_KEY` (anon/publishable key).
+2. Copiar `backend/.env.example` a `backend/.env` y completar las credenciales.
+   - *Estado actual del entorno:* Proyecto Supabase creado (`https://kjiddadksvosdaoyapfu.supabase.co`) y archivo local `backend/.env` configurado con `SUPABASE_URL`, `SUPABASE_KEY` y `CORS_ORIGINS`.
+3. Ejecutar el script [`backend/sql/schema.sql`](./backend/sql/schema.sql) en el **SQL Editor** de Supabase para crear las tablas `profiles` (incluyendo la columna `provincias text[]`), `fields` y `campaigns` (incluye trigger de alta automática de perfil y políticas **RLS** por usuario).
+4. **Endpoints disponibles en Backend (`/docs`):**
+   - **Auth (`/api/v1/auth`):** `POST /register`, `POST /login`, `GET /me`, `PATCH /me/provinces` (Bearer JWT).
+   - **Campos (`/api/v1/fields`):** `GET /`, `POST /`, `GET /{field_id}`, `PATCH /{field_id}`, `DELETE /{field_id}`.
+   - **Campañas e Historial (`/api/v1/fields/{field_id}/campaigns`):** `GET /`, `POST /`, `PATCH /{campaign_id}`, `DELETE /{campaign_id}` (guarda `campana`, `cultivo`, `fecha_inicio`, `fecha_fin`, `rinde_kg_ha`, `resultado_notas` y `simulacion_json`).
+   - **Healthcheck:** `GET /health`.
 
 ### 7.2. Levantar el Frontend (`React + TypeScript + Vite`)
 ```bash

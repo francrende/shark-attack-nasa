@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
 import {
   CircleMarker,
@@ -21,7 +21,17 @@ import type {
   Coordenadas,
   UserField,
 } from '../types/api'
-import { calculateCentroid } from '../utils/geo'
+import {
+  calculateCentroid,
+  getProvinceLatLngPolygons,
+  getProvincesBounds,
+  isPointInProvinces,
+} from '../utils/geo'
+
+const OUTSIDE_PROVINCE_MESSAGE =
+  'El punto está fuera de las provincias seleccionadas en la Región Pampeana.'
+
+type LatLngBoundsTuple = [[number, number], [number, number]]
 
 export interface HistoricalMapConfig {
   active: boolean
@@ -51,6 +61,8 @@ interface MapViewProps {
   isDrawingNewField: boolean
   customPolygon: [number, number][]
   historicalMode?: HistoricalMapConfig
+  selectedProvinces: string[]
+  onOutsideProvinceClick?: (message: string) => void
   onSelectUserField: (field: UserField) => void
   onUpdateCustomPolygon: (
     points: [number, number][],
@@ -61,17 +73,35 @@ interface MapViewProps {
 function MapCameraController({
   targetCoords,
   zoom,
+  fitBoundsTarget,
 }: {
   targetCoords: Coordenadas
   zoom: number
+  /** Si está definido (sin campo seleccionado), encuadra estos bounds en lugar de volar al punto. */
+  fitBoundsTarget: LatLngBoundsTuple | null
 }) {
   const map = useMap()
+  const [[south, west], [north, east]] = fitBoundsTarget ?? [
+    [0, 0],
+    [0, 0],
+  ]
+  const hasBounds = fitBoundsTarget !== null
 
   useEffect(() => {
+    if (hasBounds) {
+      map.fitBounds(
+        [
+          [south, west],
+          [north, east],
+        ],
+        { padding: [32, 32], animate: true, duration: 1.1 }
+      )
+      return
+    }
     map.flyTo([targetCoords.lat, targetCoords.lon], zoom, {
       duration: 1.1,
     })
-  }, [map, targetCoords.lat, targetCoords.lon, zoom])
+  }, [map, hasBounds, south, west, north, east, targetCoords.lat, targetCoords.lon, zoom])
 
   return null
 }
@@ -101,9 +131,20 @@ export function MapView({
   isDrawingNewField,
   customPolygon,
   historicalMode,
+  selectedProvinces,
+  onOutsideProvinceClick,
   onSelectUserField,
   onUpdateCustomPolygon,
 }: MapViewProps) {
+  const provinceBounds = useMemo(
+    () => getProvincesBounds(selectedProvinces),
+    [selectedProvinces]
+  )
+  const provincePolygons = useMemo(
+    () => getProvinceLatLngPolygons(selectedProvinces),
+    [selectedProvinces]
+  )
+
   const [cameraTarget, setCameraTarget] = useState<{
     coords: Coordenadas
     zoom: number
@@ -144,18 +185,34 @@ export function MapView({
 
   const handleInteractiveMapClick = (lat: number, lon: number) => {
     if (!isDrawingNewField) return
+    if (!isPointInProvinces(lat, lon, selectedProvinces)) {
+      onOutsideProvinceClick?.(OUTSIDE_PROVINCE_MESSAGE)
+      return
+    }
     const roundedLat = Math.round(lat * 10000) / 10000
     const roundedLon = Math.round(lon * 10000) / 10000
     commitPolygonPoints([...customPolygon, [roundedLat, roundedLon]])
   }
 
-  const handleMoveVertex = (idx: number, lat: number, lon: number) => {
+  const handleMoveVertex = (
+    idx: number,
+    lat: number,
+    lon: number,
+    notifyOutside = false
+  ): boolean => {
+    if (!isPointInProvinces(lat, lon, selectedProvinces)) {
+      if (notifyOutside) {
+        onOutsideProvinceClick?.(OUTSIDE_PROVINCE_MESSAGE)
+      }
+      return false
+    }
     const roundedLat = Math.round(lat * 10000) / 10000
     const roundedLon = Math.round(lon * 10000) / 10000
     const nextPoints = customPolygon.map((pt, pointIdx): [number, number] =>
       pointIdx === idx ? [roundedLat, roundedLon] : pt
     )
     commitPolygonPoints(nextPoints)
+    return true
   }
 
   const handleRemoveVertex = (idx: number) => {
@@ -168,6 +225,10 @@ export function MapView({
     lat: number,
     lon: number
   ) => {
+    if (!isPointInProvinces(lat, lon, selectedProvinces)) {
+      onOutsideProvinceClick?.(OUTSIDE_PROVINCE_MESSAGE)
+      return
+    }
     const nextPoints = [...customPolygon]
     nextPoints.splice(afterIdx + 1, 0, [lat, lon])
     commitPolygonPoints(nextPoints)
@@ -185,6 +246,7 @@ export function MapView({
         <MapCameraController
           targetCoords={cameraTarget.coords}
           zoom={cameraTarget.zoom}
+          fitBoundsTarget={selectedFieldId === null ? provinceBounds : null}
         />
         <MapInteractionHandler
           isDrawingNewField={isDrawingNewField}
@@ -204,6 +266,20 @@ export function MapView({
           opacity={0.75}
           maxZoom={18}
         />
+
+        {/* 3. Contornos de las provincias seleccionadas (no bloquean los clics del mapa) */}
+        {provincePolygons.length > 0 && (
+          <Polygon
+            positions={provincePolygons}
+            pathOptions={{
+              color: THEME_COLORS.primary,
+              weight: 2.5,
+              fillColor: THEME_COLORS.primary,
+              fillOpacity: 0.05,
+              interactive: false,
+            }}
+          />
+        )}
 
         {/* 4. Campos del Usuario desde la Base de Datos */}
         {userFields.map((field, idx) => {
@@ -253,7 +329,7 @@ export function MapView({
           if (field.polygon && field.polygon.length >= 3) {
             return (
               <Polygon
-                key={`${field.id}-${historicalMode?.year ?? 'now'}-${historicalMode?.metric ?? 'base'}`}
+                key={field.id}
                 positions={field.polygon}
                 pathOptions={{
                   color: strokeColor,
@@ -272,7 +348,7 @@ export function MapView({
 
           return (
             <CircleMarker
-              key={`${field.id}-${historicalMode?.year ?? 'now'}-${historicalMode?.metric ?? 'base'}`}
+              key={field.id}
               center={[field.lat, field.lon]}
               radius={isSelected ? 10 : 7}
               pathOptions={{
@@ -331,7 +407,10 @@ export function MapView({
                   },
                   dragend: (e) => {
                     const pos = e.target.getLatLng()
-                    handleMoveVertex(idx, pos.lat, pos.lng)
+                    const moved = handleMoveVertex(idx, pos.lat, pos.lng, true)
+                    if (!moved && customPolygon[idx]) {
+                      e.target.setLatLng(customPolygon[idx])
+                    }
                   },
                   contextmenu: (e) => {
                     L.DomEvent.stopPropagation(e)
@@ -386,7 +465,6 @@ export function MapView({
           }}
         >
           <Tooltip
-            key={`${historicalMode?.year ?? 'live'}-${historicalMode?.metric ?? 'base'}`}
             permanent
             direction="right"
             offset={[10, 0]}

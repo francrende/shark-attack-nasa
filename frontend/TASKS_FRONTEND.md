@@ -55,6 +55,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-22** | Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación | `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.css` | `FRONT-21` | `[x]` |
 | **FRONT-23** | Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-22` | `[x]` |
 | **FRONT-24** | Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL` | `frontend/.env.example`, `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx` | `FRONT-18`, `FRONT-23` | `[x]` |
+| **FRONT-25** | Actualización de Credenciales Demo (`demoereia@gmail.com`) para Autenticación Real en Supabase | `frontend/.env.example`, `frontend/src/services/fieldsClient.ts` | `FRONT-24` | `[x]` |
 | **FRONT-26** | Envío y Persistencia de Polígono Dibujado en `/api/v1/fields` (`BACK-6`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `FRONT-24` | `[x]` |
 | **FRONT-27** | Header Limpio, Pestañas de Archivero Alineadas a la Izquierda y Barra de Campos en Una Fila con Pill Terracota de Ajustes | `frontend/src/components/BrandBlock.tsx`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-20`, `FRONT-26` | `[x]` |
 | **FRONT-28** | Card Flotante Glass con Diseño de Fichero para Ajustes de Usuario (`Usuario`, `Campos`, `Expandir mapa`, `Idioma`) | `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-27` | `[x]` |
@@ -62,6 +63,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-30** | Formulario de Edición de Perfil (`Nombre`, `Correo`, `Contraseña`) y Botón `Cerrar sesión` en Pestaña `Usuario` | `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-28` | `[x]` |
 | **FRONT-31** | Listado de Campos del Usuario con Menú Desplegable (`⋮`) para Renombrar y Borrar en Pestaña `Campos` | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-28`, `FRONT-29` | `[x]` |
 | **FRONT-32** | Edición Interactiva de Polígono de un Campo Existente (`Editar superficie`) desde el Menú Desplegable | `frontend/src/components/MapView.tsx`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-31` | `[x]` |
+| **FRONT-33** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
 
 ---
 
@@ -612,6 +614,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
+### `[x]` FRONT-25: Actualización de Credenciales Demo (`demoereia@gmail.com`) para Autenticación Real en Supabase
+- **Objetivo:** Actualizar las credenciales de fallback y de ejemplo del Modo Demo para usar la cuenta confirmada en Supabase (`demoereia@gmail.com` / `contraseñadedemo`), reemplazando el dominio ficticio `demo@ereia.app` que Supabase rechaza en validación de email.
+- **Archivos Permitidos:**
+  - `frontend/.env.example`
+  - `frontend/src/services/fieldsClient.ts`
+- **Decisiones Acordadas con el Desarrollador:**
+  - El Modo Demo se autentica contra `/api/v1/auth/login` con `demoereia@gmail.com` / `contraseñadedemo` (sobrescribible vía `VITE_DEMO_EMAIL` y `VITE_DEMO_PASSWORD`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
 ### `[x]` FRONT-26: Envío y Persistencia de Polígono Dibujado en `/api/v1/fields` (`BACK-6`)
 - **Objetivo:** Enviar el polígono dibujado (`polygon: [number, number][]`) al crear un campo en `POST /api/v1/fields` y priorizar el polígono devuelto por el backend al listar los campos en `GET /api/v1/fields`.
 - **Archivos Permitidos:**
@@ -718,3 +732,28 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Edición en Leaflet:** Marcadores `draggable` en cada vértice (`.poly-vertex-handle`), marcadores `+` en puntos medios (`.poly-midpoint-handle`) y clic derecho para quitar esquinas (mínimo 3). Al guardar recalcula centroide y superficie (`hectareas`) llamando a `updateUserField`.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-33: Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento
+- **Objetivo:** Incorporar una pantalla previa de selección de provincias argentinas (Región Pampeana habilitada: Buenos Aires, Córdoba, Entre Ríos, La Pampa y Santa Fe) con mapa SVG 3D interactivo, persistencia en `profiles.provincias` para cuentas registradas (solo en memoria en modo demo), filtrado de lotes y validación de vértices en `MapView`, y optimizaciones de rendimiento sin alterar la estética.
+- **Archivos Permitidos:**
+  - `frontend/src/data/argentinaProvinces.json`
+  - `frontend/src/utils/geo.ts`
+  - `frontend/src/components/ProvinceSelectorScreen.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/types/api.ts`
+  - `frontend/src/theme/mapColors.ts`
+  - `frontend/src/index.css`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+  - `frontend/SKILLS_FRONTEND.md`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Mapa 3D de Argentina (`ProvinceSelectorScreen`):** Proyección inclinada de las 24 jurisdicciones oficiales (IGN simplificado con topología compartida), con elevación coplanar en hover/selección para las 5 habilitadas, hover diferenciado en Islas Malvinas (`¡Son argentinas!`) y tooltip `"Próximamente — Región en expansión"` en jurisdicciones bloqueadas.
+  - **Sidebar alineado al tablero:** Reutiliza `.right-analysis-pane` y el ritmo/paleta cálida de tarjetas de `Planificación de campaña` (cajas crema/elevadas con borde punteado `--color-border-strong`, chips en `--color-earth-brown-dark`, contador en marrón tierra y botón terracota con texto `--color-bg-card`), además de una línea separadora `border-bottom: 1.5px solid var(--color-border-strong)` en `.top-navbar`.
+  - **Flujo Demo vs. BD y GIS:** Usuarios registrados persisten en `PATCH /api/v1/auth/me/provinces` y pueden reeditar desde `.header-province-pill`; en modo demo no se llama al endpoint. `App.tsx` filtra `visibleFields` y `MapView.tsx` ajusta `fitBounds` y valida clics de dibujo contra las provincias elegidas.
+  - **Optimización sin cambios visuales:** Tooltip posicionado vía `ref` + `translate3d` sin re-renders de React en `onMouseMove`, blur agrupado en `MapBaseRelief`, menos capas redundantes de extrusión 3D, `key={field.id}` estable en capas Leaflet y `React.lazy` para `MapView` y `HistoricalPanel`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npm run build && npm run lint`
