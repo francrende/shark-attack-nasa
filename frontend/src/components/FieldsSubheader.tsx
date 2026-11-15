@@ -205,87 +205,93 @@ export function FieldsSubheader({
         aria-label={isEditingExisting ? 'Editar polígono del campo' : 'Delimitar nuevo campo'}
       >
         <form className="fields-drawing-bar" onSubmit={handleSubmit}>
-          <div className="fields-drawing-inputs">
-            <Pentagon
-              size={15}
-              className="fields-drawing-icon"
-              aria-hidden="true"
-            />
-            <input
-              type="text"
-              className="fields-name-input"
-              placeholder={
-                isEditingExisting
-                  ? 'Nombre del campo'
-                  : 'Nombre del nuevo campo (ej. Lote Norte)'
-              }
-              value={fieldName}
-              onChange={(e) => {
-                setFieldName(e.target.value)
-                if (localError) setLocalError(null)
-              }}
-              disabled={isSaving}
-              aria-label={
-                isEditingExisting ? 'Nombre del campo' : 'Nombre del nuevo campo'
-              }
-            />
-            <span className="fields-drawing-metrics">
-              {customPolygon.length < 3
-                ? `${customPolygon.length} / 3 vértices mínimos (clic en el mapa)`
-                : `${customPolygon.length} vértices · ${drawnAreaHa} ha · arrastrar esquinas`}
-            </span>
+          <div className="fields-drawing-main">
+            <div className="fields-drawing-name-wrap">
+              <Pentagon
+                size={14}
+                className="fields-drawing-icon"
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                className="fields-name-input"
+                placeholder={
+                  isEditingExisting
+                    ? 'Nombre del campo'
+                    : 'Nombre del nuevo campo (ej. Lote Norte)'
+                }
+                value={fieldName}
+                onChange={(e) => {
+                  setFieldName(e.target.value)
+                  if (localError) setLocalError(null)
+                }}
+                disabled={isSaving}
+                aria-label={
+                  isEditingExisting ? 'Nombre del campo' : 'Nombre del nuevo campo'
+                }
+              />
+            </div>
+
+            <div className="fields-drawing-actions">
+              <button
+                type="button"
+                className="poly-action-btn"
+                onClick={onUndoVertex}
+                disabled={customPolygon.length === 0 || isSaving}
+                title="Deshacer último vértice"
+              >
+                <RotateCcw size={14} aria-hidden="true" />
+                <span>Deshacer</span>
+              </button>
+              <button
+                type="button"
+                className="poly-action-btn danger"
+                onClick={onClearPolygon}
+                disabled={customPolygon.length === 0 || isSaving}
+                title="Limpiar vértices"
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                <span>Limpiar</span>
+              </button>
+              <button
+                type="submit"
+                className="poly-action-btn primary"
+                disabled={
+                  customPolygon.length < 3 || !fieldName.trim() || isSaving
+                }
+              >
+                <CheckCircle2 size={14} aria-hidden="true" />
+                <span>
+                  {isSaving
+                    ? 'Guardando...'
+                    : isEditingExisting
+                      ? 'Guardar cambios'
+                      : 'Guardar campo'}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="poly-action-btn"
+                onClick={handleCancel}
+                disabled={isSaving}
+                title={
+                  isEditingExisting ? 'Cancelar edición' : 'Cancelar delimitación'
+                }
+              >
+                <X size={14} aria-hidden="true" />
+                <span>Cancelar</span>
+              </button>
+            </div>
           </div>
 
-          <div className="fields-drawing-actions">
-            <button
-              type="button"
-              className="poly-action-btn"
-              onClick={onUndoVertex}
-              disabled={customPolygon.length === 0 || isSaving}
-              title="Deshacer último vértice"
-            >
-              <RotateCcw size={14} aria-hidden="true" />
-              <span>Deshacer</span>
-            </button>
-            <button
-              type="button"
-              className="poly-action-btn danger"
-              onClick={onClearPolygon}
-              disabled={customPolygon.length === 0 || isSaving}
-              title="Limpiar vértices"
-            >
-              <Trash2 size={14} aria-hidden="true" />
-              <span>Limpiar</span>
-            </button>
-            <button
-              type="submit"
-              className="poly-action-btn primary"
-              disabled={
-                customPolygon.length < 3 || !fieldName.trim() || isSaving
-              }
-            >
-              <CheckCircle2 size={14} aria-hidden="true" />
-              <span>
-                {isSaving
-                  ? 'Guardando...'
-                  : isEditingExisting
-                    ? 'Guardar cambios'
-                    : 'Guardar campo'}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="poly-action-btn"
-              onClick={handleCancel}
-              disabled={isSaving}
-              title={
-                isEditingExisting ? 'Cancelar edición' : 'Cancelar delimitación'
-              }
-            >
-              <X size={14} aria-hidden="true" />
-              <span>Cancelar</span>
-            </button>
-          </div>
+          <span
+            className={`fields-drawing-metrics ${customPolygon.length >= 3 ? 'is-ready' : ''}`}
+            aria-live="polite"
+          >
+            {customPolygon.length < 3
+              ? `${customPolygon.length} / 3 vértices mínimos (clic en el mapa)`
+              : `${customPolygon.length} vértices · ${drawnAreaHa} ha · arrastrar esquinas`}
+          </span>
         </form>
 
         {(localError || errorMsg) && (
