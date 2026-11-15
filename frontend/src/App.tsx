@@ -3,7 +3,6 @@ import {
   Compass,
   History,
   Info,
-  MapPin,
 } from 'lucide-react'
 import './App.css'
 import { AuthScreen } from './components/AuthScreen'
@@ -32,6 +31,7 @@ import {
   type HistoricalMetricId,
 } from './data/historicalData'
 import {
+  fetchFieldTelemetry,
   generateSimulatedResponse,
   simulateCropRotation,
 } from './services/apiClient'
@@ -44,19 +44,26 @@ import {
 import {
   createUserField,
   deleteUserField,
+  listFieldCampaigns,
   listUserFields,
   loginDemoAccount,
   removeCachedFieldPolygon,
   saveFieldPolygon,
   updateUserField,
 } from './services/fieldsClient'
+import type { SearchCameraTarget } from './components/MapView'
+import type { MapSearchResult } from './services/geocodeClient'
 import type {
   Campana,
   Coordenadas,
   CultivoAnterior,
+  FieldCampaign,
   ObjetivoProductor,
+  PerfilSueloTelemetria,
   SimulacionWhatIf,
   SimulateResponse,
+  TelemetryResponse,
+  TopografiaTelemetria,
   UserField,
   UserProfile,
 } from './types/api'
@@ -65,7 +72,6 @@ import {
   calculateCentroid,
   calculatePolygonAreaHa,
   getProvincesBounds,
-  getProvincesLabel,
   isPointInProvinces,
 } from './utils/geo'
 
@@ -84,6 +90,54 @@ function getProvincesCenter(provinceIds: string[]): Coordenadas {
   return { lat: (south + north) / 2, lon: (west + east) / 2 }
 }
 
+function getStoredSoilFromField(
+  field: UserField | null
+): PerfilSueloTelemetria | null {
+  if (!field) return null
+  const hasAny =
+    field.materia_organica_g_kg != null ||
+    field.carbono_organico_g_kg != null ||
+    Boolean(field.textura_predominante) ||
+    field.arcilla_pct != null
+  if (!hasAny) return null
+  return {
+    textura_predominante: field.textura_predominante ?? null,
+    carbono_organico_g_kg: field.carbono_organico_g_kg ?? null,
+    materia_organica_g_kg: field.materia_organica_g_kg ?? null,
+    arcilla_pct: field.arcilla_pct ?? null,
+    arena_pct: field.arena_pct ?? null,
+    limo_pct: field.limo_pct ?? null,
+    ph: field.ph ?? null,
+    fuente: field.suelo_fuente ?? 'desconocida',
+    localidad_fallback: field.suelo_localidad_fallback ?? null,
+    distancia_fuente_km: field.suelo_distancia_fuente_km ?? 0,
+    reintentar_soilgrids: field.reintentar_soilgrids,
+  }
+}
+
+function getStoredTopoFromField(
+  field: UserField | null
+): TopografiaTelemetria | null {
+  if (
+    !field ||
+    field.elevacion_m === null ||
+    field.elevacion_m === undefined ||
+    field.pendiente_terreno_pct === null ||
+    field.pendiente_terreno_pct === undefined
+  ) {
+    return null
+  }
+  return {
+    elevacion_m: field.elevacion_m,
+    pendiente_terreno_pct: field.pendiente_terreno_pct,
+    fuente: field.topo_fuente ?? 'desconocida',
+    fuente_elevacion: field.fuente_elevacion ?? null,
+    localidad_fallback: field.topo_localidad_fallback ?? null,
+    distancia_fuente_km: field.topo_distancia_fuente_km ?? 0,
+    reintentar_srtm: field.reintentar_srtm,
+  }
+}
+
 export function App() {
   const defaultField = DEMO_FIELDS[0]
 
@@ -95,7 +149,6 @@ export function App() {
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([])
   const [isProvinceFilterApplied, setIsProvinceFilterApplied] =
     useState<boolean>(false)
-  const [isEditingProvinces, setIsEditingProvinces] = useState<boolean>(false)
   const [isSavingProvinces, setIsSavingProvinces] = useState<boolean>(false)
   const [provincesError, setProvincesError] = useState<string | null>(null)
 
@@ -112,7 +165,6 @@ export function App() {
       setSelectedProvinces([])
       setIsProvinceFilterApplied(false)
     }
-    setIsEditingProvinces(false)
     setProvincesError(null)
   }
 
@@ -162,6 +214,9 @@ export function App() {
     defaultField.centroide
   )
   const [customPolygon, setCustomPolygon] = useState<[number, number][]>([])
+  const [mapSearchTarget, setMapSearchTarget] =
+    useState<SearchCameraTarget | null>(null)
+  const [fieldFocusRequestId, setFieldFocusRequestId] = useState<number>(0)
 
   // Estado agronómico y simulación What-If (campaña y cultivo anterior inician sin selección)
   const [campana, setCampana] = useState<Campana | null>(null)
@@ -177,6 +232,15 @@ export function App() {
   const [isSimulating, setIsSimulating] = useState<boolean>(false)
   const [isHistoricalReady, setIsHistoricalReady] = useState<boolean>(false)
   const [hasPlanned, setHasPlanned] = useState<boolean>(false)
+
+  // Telemetría inmediata de Info general y último cultivo guardado en BD (FRONT-34)
+  const [fieldTelemetry, setFieldTelemetry] =
+    useState<TelemetryResponse | null>(null)
+  const [isTelemetryLoading, setIsTelemetryLoading] = useState<boolean>(false)
+  const [telemetryError, setTelemetryError] = useState<string | null>(null)
+  const [telemetryRetryCount, setTelemetryRetryCount] = useState<number>(0)
+  const [latestFieldCampaign, setLatestFieldCampaign] =
+    useState<FieldCampaign | null>(null)
 
   // Estado de la pestaña 'Información histórica' (10 años en vivo con el mapa)
   const [historicalYear, setHistoricalYear] = useState<number>(2026)
@@ -262,6 +326,138 @@ export function App() {
     if (!isRotationReady) return
     setHasPlanned(true)
   }
+
+  // Telemetría inmediata de Info general al seleccionar o guardar un campo (FRONT-34 / FRONT-35)
+  const selectedLat = selectedCoords.lat
+  const selectedLon = selectedCoords.lon
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' && authStatus !== 'demo') return
+    if (!isProvinceFilterApplied || isFieldsLoading) return
+    if (isDrawingNewField || editingPolygonField !== null) return
+
+    const controller = new AbortController()
+    setFieldTelemetry(null)
+    setTelemetryError(null)
+    setIsTelemetryLoading(true)
+
+    fetchFieldTelemetry(
+      { lat: selectedLat, lon: selectedLon },
+      {
+        fieldId: selectedFieldId,
+        token: activeToken,
+        signal: controller.signal,
+      }
+    )
+      .then((data) => {
+        if (controller.signal.aborted) return
+        setFieldTelemetry(data)
+        if (selectedFieldId) {
+          setUserFields((prev) =>
+            prev.map((field) => {
+              if (field.id !== selectedFieldId) return field
+              return {
+                ...field,
+                ph: data.perfil_suelo.ph ?? field.ph,
+                limo_pct: data.perfil_suelo.limo_pct ?? field.limo_pct,
+                arena_pct: data.perfil_suelo.arena_pct ?? field.arena_pct,
+                arcilla_pct: data.perfil_suelo.arcilla_pct ?? field.arcilla_pct,
+                textura_predominante:
+                  data.perfil_suelo.textura_predominante ??
+                  field.textura_predominante,
+                carbono_organico_g_kg:
+                  data.perfil_suelo.carbono_organico_g_kg ??
+                  field.carbono_organico_g_kg,
+                materia_organica_g_kg:
+                  data.perfil_suelo.materia_organica_g_kg ??
+                  field.materia_organica_g_kg,
+                suelo_fuente: data.perfil_suelo.fuente,
+                suelo_localidad_fallback: data.perfil_suelo.localidad_fallback,
+                suelo_distancia_fuente_km:
+                  data.perfil_suelo.distancia_fuente_km,
+                reintentar_soilgrids: data.perfil_suelo.reintentar_soilgrids,
+                ...(data.topografia_srtm
+                  ? {
+                      elevacion_m: data.topografia_srtm.elevacion_m,
+                      pendiente_terreno_pct:
+                        data.topografia_srtm.pendiente_terreno_pct,
+                      fuente_elevacion:
+                        data.topografia_srtm.fuente_elevacion ??
+                        field.fuente_elevacion,
+                      topo_fuente: data.topografia_srtm.fuente,
+                      topo_localidad_fallback:
+                        data.topografia_srtm.localidad_fallback,
+                      topo_distancia_fuente_km:
+                        data.topografia_srtm.distancia_fuente_km,
+                      reintentar_srtm: data.topografia_srtm.reintentar_srtm,
+                    }
+                  : {}),
+              }
+            })
+          )
+        }
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        setFieldTelemetry(null)
+        setTelemetryError(
+          err instanceof Error
+            ? err.message
+            : 'No fue posible obtener la telemetría del lote.'
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsTelemetryLoading(false)
+        }
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [
+    authStatus,
+    isProvinceFilterApplied,
+    isFieldsLoading,
+    isDrawingNewField,
+    editingPolygonField,
+    selectedFieldId,
+    activeToken,
+    selectedLat,
+    selectedLon,
+    telemetryRetryCount,
+  ])
+
+  // Último cultivo guardado en BD para el campo seleccionado (FRONT-34)
+  useEffect(() => {
+    if (
+      (authStatus !== 'authenticated' && authStatus !== 'demo') ||
+      !activeToken ||
+      !selectedFieldId
+    ) {
+      setLatestFieldCampaign(null)
+      return
+    }
+
+    const controller = new AbortController()
+    setLatestFieldCampaign(null)
+
+    listFieldCampaigns(activeToken, selectedFieldId, controller.signal)
+      .then((campaigns) => {
+        if (!controller.signal.aborted) {
+          setLatestFieldCampaign(campaigns[0] ?? null)
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setLatestFieldCampaign(null)
+        }
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [authStatus, activeToken, selectedFieldId])
 
   // Telemetría base para Info general y valor real de humedad en What-If
   const baselineResult = useMemo(() => {
@@ -382,16 +578,29 @@ export function App() {
   }, [authStatus, activeToken])
 
   const handleSelectUserField = (field: UserField) => {
+    setMapSearchTarget(null)
     setIsDrawingNewField(false)
     setEditingPolygonField(null)
     setCustomPolygon([])
     setSelectedFieldId(field.id)
     setSelectedCoords({ lat: field.lat, lon: field.lon })
+    setFieldFocusRequestId((prev) => prev + 1)
     setFieldsError(null)
     setWhatIf({
       override_humedad_radicular_pct: null,
       variacion_lluvia_esperada_pct: 0,
     })
+  }
+
+  const handleSelectSearchLocation = (result: MapSearchResult) => {
+    setMapSearchTarget((prev) => ({
+      label: result.label,
+      coords: result.coords,
+      zoom: result.zoom,
+      bounds: result.bounds,
+      polygons: result.polygons,
+      requestId: (prev?.requestId ?? 0) + 1,
+    }))
   }
 
   const handleStartDrawing = () => {
@@ -402,6 +611,7 @@ export function App() {
   }
 
   const handleStartEditingPolygon = (field: UserField) => {
+    setMapSearchTarget(null)
     setIsSettingsOpen(false)
     setIsDrawingNewField(false)
     setEditingPolygonField(field)
@@ -492,6 +702,7 @@ export function App() {
             field.id === targetId ? updatedWithPolygon : field
           )
         )
+        setMapSearchTarget(null)
         setSelectedFieldId(targetId)
         setSelectedCoords(centroid)
         setEditingPolygonField(null)
@@ -514,6 +725,7 @@ export function App() {
             ? created.polygon
             : customPolygon,
       }
+      setMapSearchTarget(null)
       setUserFields((prev) => [createdWithPolygon, ...prev])
       setSelectedFieldId(created.id)
       setSelectedCoords(centroid)
@@ -613,28 +825,27 @@ export function App() {
     // Demo: la selección vive solo en memoria y siempre arranca en el selector
     setSelectedProvinces([])
     setIsProvinceFilterApplied(false)
-    setIsEditingProvinces(false)
     setProvincesError(null)
     setAuthStatus('demo')
   }
 
   const commitProvinces = (provinceIds: string[]) => {
+    setMapSearchTarget(null)
     setIsDrawingNewField(false)
     setEditingPolygonField(null)
     setCustomPolygon([])
     setFieldsError(null)
     setSelectedProvinces(provinceIds)
     setIsProvinceFilterApplied(true)
-    setIsEditingProvinces(false)
   }
 
-  const handleApplyProvinces = async (provinceIds: string[]) => {
+  const handleApplyProvinces = async (provinceIds: string[]): Promise<boolean> => {
     setProvincesError(null)
 
     // Modo demo (cuenta compartida): NUNCA se persiste en BD
     if (authStatus !== 'authenticated' || !activeToken) {
       commitProvinces(provinceIds)
-      return
+      return true
     }
 
     setIsSavingProvinces(true)
@@ -645,13 +856,51 @@ export function App() {
       setCurrentUser((prev) =>
         prev ? { ...prev, provincias: finalIds } : prev
       )
+
+      const fieldsToRemove = userFields.filter(
+        (field) => !isPointInProvinces(field.lat, field.lon, finalIds)
+      )
+
+      if (fieldsToRemove.length > 0) {
+        const results = await Promise.allSettled(
+          fieldsToRemove.map((field) => deleteUserField(activeToken, field.id))
+        )
+        const deletedIds = new Set<string>()
+        results.forEach((res, idx) => {
+          if (res.status === 'fulfilled') {
+            const deletedId = fieldsToRemove[idx].id
+            deletedIds.add(deletedId)
+            removeCachedFieldPolygon(deletedId)
+          }
+        })
+
+        if (deletedIds.size > 0) {
+          setUserFields((prev) =>
+            prev.filter((field) => !deletedIds.has(field.id))
+          )
+          if (selectedFieldId && deletedIds.has(selectedFieldId)) {
+            setSelectedFieldId(null)
+          }
+        }
+
+        if (deletedIds.size < fieldsToRemove.length) {
+          commitProvinces(finalIds)
+          setProvincesError(
+            'Se actualizaron las provincias, pero no fue posible eliminar algunos campos asociados.'
+          )
+          return false
+        }
+      }
+
       commitProvinces(finalIds)
+      return true
     } catch (err) {
       setProvincesError(
         err instanceof Error
           ? err.message
           : 'No fue posible guardar las provincias seleccionadas.'
       )
+      return false
     } finally {
       setIsSavingProvinces(false)
     }
@@ -665,7 +914,6 @@ export function App() {
     setSelectedFieldId(null)
     setSelectedProvinces([])
     setIsProvinceFilterApplied(false)
-    setIsEditingProvinces(false)
     setProvincesError(null)
     setIsSettingsOpen(false)
     setEditingPolygonField(null)
@@ -697,8 +945,8 @@ export function App() {
     )
   }
 
-  // Filtro previo: mapa plano de Argentina (primera vez, demo, o al reeditar desde el header)
-  if (!isProvinceFilterApplied || isEditingProvinces) {
+  // Filtro previo: mapa plano de Argentina (primera vez o demo)
+  if (!isProvinceFilterApplied) {
     return (
       <ProvinceSelectorScreen
         initialSelected={selectedProvinces}
@@ -707,14 +955,6 @@ export function App() {
         isDemo={authStatus === 'demo'}
         userLabel={currentUser?.nombre || currentUser?.email}
         onApply={handleApplyProvinces}
-        onCancel={
-          isProvinceFilterApplied
-            ? () => {
-                setProvincesError(null)
-                setIsEditingProvinces(false)
-              }
-            : undefined
-        }
         onLogout={handleLogout}
       />
     )
@@ -726,22 +966,6 @@ export function App() {
       <header className="top-navbar">
         <div className="top-navbar-left">
           <BrandBlock />
-
-          <div className="header-session-bar">
-            <button
-              type="button"
-              className="header-province-pill"
-              onClick={() => {
-                setProvincesError(null)
-                setIsEditingProvinces(true)
-              }}
-              title="Cambiar provincias seleccionadas"
-              aria-label={`Provincias: ${getProvincesLabel(selectedProvinces)}. Cambiar selección`}
-            >
-              <MapPin size={14} aria-hidden="true" />
-              <span>{getProvincesLabel(selectedProvinces)}</span>
-            </button>
-          </div>
         </div>
       </header>
 
@@ -751,6 +975,7 @@ export function App() {
           <FieldsSubheader
             fields={visibleFields}
             selectedFieldId={selectedFieldId}
+            selectedProvinces={selectedProvinces}
             isLoading={isFieldsLoading}
             isSaving={isSavingField}
             errorMsg={fieldsError}
@@ -763,9 +988,11 @@ export function App() {
               if (authStatus === 'demo') {
                 handleLogout()
               } else {
+                setProvincesError(null)
                 setIsSettingsOpen(true)
               }
             }}
+            onSelectSearchLocation={handleSelectSearchLocation}
             onSelectField={handleSelectUserField}
             onStartDrawing={handleStartDrawing}
             onCancelDrawing={handleCancelDrawing}
@@ -790,6 +1017,8 @@ export function App() {
                 gibsDateIso: currentHistoricalGibsDate,
               }}
               selectedProvinces={selectedProvinces}
+              searchTarget={mapSearchTarget}
+              fieldFocusRequestId={fieldFocusRequestId}
               onOutsideProvinceClick={setFieldsError}
               onSelectUserField={handleSelectUserField}
               onUpdateCustomPolygon={handleUpdateCustomPolygon}
@@ -831,6 +1060,8 @@ export function App() {
             {activeTab === 'planificacion' && (
               <>
                 <CampaignConfigPanel
+                  fieldName={selectedUserField?.nombre ?? null}
+                  isDrawingField={isDrawingNewField || editingPolygonField !== null}
                   campana={campana}
                   cultivoAnterior={cultivoAnterior}
                   objetivoProductor={objetivoProductor}
@@ -890,16 +1121,38 @@ export function App() {
 
             {activeTab === 'info_general' && (
               <TelemetryCards
-                ubicacion={baselineResult.ubicacion}
+                ubicacion={
+                  simulationResult?.ubicacion ??
+                  fieldTelemetry?.ubicacion ??
+                  selectedCoords
+                }
                 loteLabel={currentLoteLabel}
                 superficieHa={currentSuperficieHa}
                 telemetria={
                   simulationResult?.telemetria_nasa ??
-                  baselineResult.telemetria_nasa
+                  fieldTelemetry?.telemetria_nasa ??
+                  null
                 }
                 perfilSuelo={
-                  simulationResult?.perfil_suelo ?? baselineResult.perfil_suelo
+                  simulationResult?.perfil_suelo ??
+                  fieldTelemetry?.perfil_suelo ??
+                  getStoredSoilFromField(selectedUserField)
                 }
+                topografia={
+                  fieldTelemetry?.topografia_srtm ??
+                  getStoredTopoFromField(selectedUserField)
+                }
+                advertencias={
+                  simulationResult?.advertencias ??
+                  fieldTelemetry?.advertencias ?? [
+                    ...(selectedUserField?.suelo_advertencias ?? []),
+                    ...(selectedUserField?.topo_advertencias ?? []),
+                  ]
+                }
+                latestCampaign={latestFieldCampaign}
+                isLoading={isTelemetryLoading && !simulationResult}
+                errorMessage={!simulationResult ? telemetryError : null}
+                onRetry={() => setTelemetryRetryCount((c) => c + 1)}
                 isWhatIfActive={isWhatIfActive}
               />
             )}
@@ -933,8 +1186,12 @@ export function App() {
         user={currentUser}
         accessToken={activeToken}
         fields={visibleFields}
+        selectedProvinces={selectedProvinces}
+        isSavingProvinces={isSavingProvinces}
+        provincesError={provincesError}
         onClose={() => setIsSettingsOpen(false)}
         onUserUpdated={(updatedUser) => setCurrentUser(updatedUser)}
+        onSaveProvinces={handleApplyProvinces}
         onRenameField={handleRenameField}
         onEditFieldPolygon={handleStartEditingPolygon}
         onDeleteField={handleDeleteField}

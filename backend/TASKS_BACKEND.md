@@ -52,9 +52,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-14` | Persistencia y endpoint `PATCH /api/v1/auth/me/provinces` para filtro inicial de provincias pampeanas (`FRONT-33`) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/sql/schema.sql` | `BACK-2`, `BACK-3` | `[x]` |
 | `BACK-15` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado (`FRONT-30`) *(antes BACK-8)* | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
 | `BACK-16` | Deploy en Render (creación): Web Service Free desde `main`, versiones fijas, `/health` con `HEAD` | `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md` | `BACK-13` | `[x]` |
-| `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[~]` |
+| `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[x]` |
 | `BACK-18` | Capa de caché persistente en Supabase (`provider_cache`): precarga al arrancar, escritura en segundo plano | `backend/sql/schema.sql`, `backend/providers/cache_supabase.py`, `backend/providers/test_cache_supabase.py`, `backend/config.py`, `backend/.env.example`, `backend/main.py`, `backend/conftest.py` | `BACK-10`, tabla `provider_cache` (la crea la desarrolladora) | `[x]` |
 | `BACK-19` | Grilla de suelo ISRIC cada 100 km en Supabase como respaldo antes de GeoINTA | `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/test_soilgrids.py`, `backend/main.py` | `BACK-18` | `[x]` |
+| `BACK-20` | Endpoint `GET /api/v1/telemetry` para telemetría inmediata de lote (`Info general`, `FRONT-34`) | `backend/schemas.py`, `backend/services/telemetry_service.py`, `backend/routers/telemetry.py`, `backend/main.py`, `backend/routers/test_telemetry.py` | `BACK-8`, `BACK-9`, `BACK-11` | `[x]` |
+| `BACK-21` | Columnas propias de suelo, `materia_organica_g_kg` y topografía en `public.fields` + esquemas | `backend/sql/schema.sql`, `backend/schemas.py`, `backend/services/field_enrichment_service.py`, `backend/TASKS_BACKEND.md` | `BACK-6` | `[x]` |
+| `BACK-22` | Poblado automático de suelo, materia orgánica y topografía en `POST`/`PATCH /api/v1/fields` | `backend/routers/fields.py`, `backend/services/field_enrichment_service.py`, `backend/routers/test_fields_enrichment.py`, `backend/TASKS_BACKEND.md` | `BACK-21`, `BACK-9`, `BACK-11` | `[x]` |
+| `BACK-23` | Integración de `GET /api/v1/telemetry` con datos propios de `public.fields` (`field_id`) y reintento automático | `backend/routers/telemetry.py`, `backend/services/telemetry_service.py`, `backend/services/field_enrichment_service.py`, `backend/schemas.py`, `backend/routers/test_telemetry.py`, `backend/TASKS_BACKEND.md` | `BACK-20`, `BACK-22` | `[x]` |
 
 ---
 
@@ -747,12 +751,20 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **El build no encuentra Python 3.14.5:** usar la versión 3.14.x más reciente que ofrezca Render. El modelo depende de la versión de scikit-learn, no de la de Python.
   - **`Out of memory` o reinicios en Metrics:** subir a Starter (misma RAM, pero sin dormir) o a Standard (2 GB).
 
-### `[~]` BACK-17: Deploy en Render — conexión con el frontend y keep-alive
-> **Avance (15/11/2026):**
+### `[x]` BACK-17: Deploy en Render — conexión con el frontend y keep-alive
+> **Verificación (15/11/2026):**
 > - **Frontend en Vercel:** `https://shark-attack-nasa.vercel.app`. El bundle publicado apunta a `https://shark-attack-nasa.onrender.com`, así que `VITE_API_URL` se aplicó en el build.
 > - **CORS:** `CORS_ORIGINS` en Render incluye la URL de Vercel. El preflight `OPTIONS /api/v1/simulate` con ese `Origin` da 200 con `access-control-allow-origin: https://shark-attack-nasa.vercel.app`.
 > - **Keep-alive:** ping configurado por la desarrolladora.
-> - **Falta:** la prueba de punta a punta en el navegador (login demo, crear campo y simular sin errores de CORS) y confirmar la *Site URL* en Supabase.
+> - **De punta a punta desde Vercel** (Network → Fetch/XHR), todo contra Render y sin errores de CORS:
+>   - `auth/me`, `fields`, `campaigns` y `telemetry`: 200.
+>   - `POST /simulate`: 200 en 655 ms.
+>   - `POST /fields`: **201**.
+> - **Supabase:** *Site URL* = `https://shark-attack-nasa.vercel.app`.
+> - **Observación:**
+>   - `POST /fields` tardó 9,9 s porque BACK-22 espera el enriquecimiento de suelo y topografía, y ISRIC hoy agota su timeout de 8 s.
+>   - Es compatible con BACK-19: `suelo_fuente = 'grilla_isric'` es texto libre, y como queda `reintentar_soilgrids = true`, BACK-23 vuelve a intentar.
+>   - Mejora posible, a cargo de quien tiene BACK-22: responder el alta antes y enriquecer en segundo plano.
 >
 - **Objetivo:** Que el frontend publicado en Vercel use el backend de Render para el login, los campos y `/simulate`, sin errores de CORS, y que el servicio no se duerma.
 - **Bloqueante:** el frontend todavía no está en Vercel (15/11/2026). Hasta entonces se puede probar desde `localhost:5173` apuntando a Render (paso 1).
@@ -944,6 +956,71 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m pytest -q`: todos en verde.
   - `cd backend && python -m providers.generar_precache grilla`: unos 83 puntos en `provider_cache` con `espacio = 'suelo_grilla'`.
   - En Render, con ISRIC lento o en corte, `/simulate` en (−29,0, −60,0) da **200** con `fuente` de grilla y la advertencia, en lugar de `503`.
+
+---
+
+### `[x]` BACK-20: Endpoint `GET /api/v1/telemetry` para Telemetría Inmediata de Lote (`Info general` / `FRONT-34`)
+- **Objetivo:** Exponer los datos satelitales, edáficos y topográficos reales de una coordenada (`Agua en las raíces`, `Humedad para sembrar`, `Riesgo de golpe de calor`, `Materia orgánica del suelo`, textura y topografía) apenas el usuario selecciona un campo, sin exigir `campana` ni `cultivo_anterior` y sin ejecutar el motor ML.
+- **Archivos Permitidos:**
+  - `backend/schemas.py`
+  - `backend/services/telemetry_service.py`
+  - `backend/routers/telemetry.py`
+  - `backend/main.py`
+  - `backend/routers/test_telemetry.py`
+  - `backend/TASKS_BACKEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Disparo sin simulación completa ni descarga histórica pesada:** Se habilita `GET /api/v1/telemetry?lat=...&lon=...` sin autenticación obligatoria. Usa la ventana reciente de NASA (100 días) y climatología cacheada/precalculada (o consulta acotada `2006–2025` con timeout de `10 s`), evitando la serie `1981–2025` del ML. No modifica *What-If*.
+  - **Tolerancia parcial y sin datos falsos cuando SoilGrids falla:** Si `SoilGrids`, `SRTM` o el histórico climático fallan por separado, el backend devuelve igual `200 OK` con todo lo disponible (preservando `null` en campos faltantes y `fuente="no_disponible"` + `advertencias`), respondiendo `503` solo si fallan todos los providers.
+  - **Último cultivo desde BD:** Se resuelve directamente con el endpoint existente `GET /api/v1/fields/{field_id}/campaigns` (ordenado por `fecha_inicio` descendente).
+- **Especificación Técnica:**
+  1. En `backend/schemas.py`, definir `TelemetriaNasaInfoOut`, `PerfilSueloTelemetriaOut`, `TopografiaTelemetriaOut` y `TelemetryResponse`, manteniendo intacto `SimulateResponse` / `PerfilSueloOut`.
+  2. En `backend/services/telemetry_service.py`, implementar `obtener_telemetria_campo` consultando en paralelo con `asyncio.gather(..., return_exceptions=True)` a `obtener_telemetria_nasa_ligera`, `fetch_perfil_suelo` y `fetch_topografia`, deduplicando `advertencias`.
+  3. En `backend/routers/telemetry.py`, exponer `GET /api/v1/telemetry` validando `lat ∈ [-90, 90]` y `lon ∈ [-180, 180]`, con dependencias sobreescribibles para tests y mapeo de `*Unavailable` total a HTTP `503` y `ValueError` a HTTP `422`.
+  4. Registrar el router en `backend/main.py` y agregar tests mockeados en `backend/routers/test_telemetry.py`.
+- **Definition of Done (Comando de Verificación):**
+  - `.\backend\.venv\Scripts\python.exe -m unittest backend.routers.test_telemetry -v` (7 tests en verde) y verificar que `/api/v1/telemetry` figura en `app.openapi()["paths"]`.
+
+---
+
+### `[x]` BACK-21: Columnas Propias de Suelo, `materia_organica_g_kg` y Topografía en `public.fields`
+- **Objetivo:** Que cada campo del usuario en `public.fields` persista sus propias columnas de suelo (mismas claves que `espacio = 'suelo'` / `suelo_grilla.perfil` en `provider_cache`), topografía (`espacio = 'topografia'`) y la **materia orgánica del suelo** en `g/kg` (`carbono_organico_g_kg × 1.724`).
+- **Archivos Permitidos:** `backend/sql/schema.sql`, `backend/schemas.py`, `backend/services/field_enrichment_service.py`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Materia orgánica:** se calcula con el factor Van Bemmelen (`1.724`), guardando `materia_organica_g_kg` en `g/kg` en la BD y devolviéndola también en `PerfilSueloTelemetriaOut` para que el frontend la muestre en `%` (`÷ 10`).
+  - **Columnas repetidas:** las 4 claves compartidas entre suelo y topografía se prefijan con `suelo_` (`suelo_fuente`, `suelo_advertencias`, `suelo_localidad_fallback`, `suelo_distancia_fuente_km`) y `topo_` (`topo_fuente`, `topo_advertencias`, `topo_localidad_fallback`, `topo_distancia_fuente_km`).
+  - **Solo lectura satelital:** no se habilita edición manual en `FieldUpdate`.
+  - **Sin tocar `/simulate`:** `POST /api/v1/simulate` permanece intacto.
+- **Especificación Técnica:**
+  1. Agregar a `backend/sql/schema.sql` las 20 columnas nuevas sobre `public.fields` (con `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` idempotente).
+  2. Crear `backend/services/field_enrichment_service.py` con `calcular_materia_organica_g_kg` y los mappers entre `PerfilSueloSatelital`/`TopografiaSrtm` y columnas de `public.fields`.
+  3. Actualizar `FieldResponse`, `PerfilSueloTelemetriaOut` (sumando `materia_organica_g_kg`) y `TopografiaTelemetriaOut` (sumando `fuente_elevacion`) en `backend/schemas.py`.
+- **Definition of Done (Comando de Verificación):**
+  - Validar compilación, esquemas Pydantic y cálculo de `materia_organica_g_kg` con tests unitarios sin red.
+
+### `[x]` BACK-22: Poblado Automático de Suelo, Materia Orgánica y Topografía en CRUD de Campos
+- **Objetivo:** Que `POST /api/v1/fields` y `PATCH /api/v1/fields/{field_id}` (cuando cambia `lat`, `lon` o `polygon`) consulten en paralelo `fetch_perfil_suelo` (ISRIC → vecinos → grilla 100 km `BACK-19` → GeoINTA) y `fetch_topografia`, guardando las columnas propias en `public.fields`.
+- **Archivos Permitidos:** `backend/routers/fields.py`, `backend/services/field_enrichment_service.py`, `backend/routers/test_fields_enrichment.py`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador:**
+  - Si un proveedor falla por completo (`*Unavailable`), el campo se crea/actualiza igual con `suelo_fuente` / `topo_fuente = "no_disponible"` y `reintentar_soilgrids = true` / `reintentar_srtm = true`.
+- **Especificación Técnica:**
+  1. Implementar `enriquecer_datos_campo(lat, lon)` en `backend/services/field_enrichment_service.py`.
+  2. Inyectar `get_field_enricher` en `backend/routers/fields.py` y ejecutarlo en `create_field` y en `update_field` cuando cambian coordenadas/polígono.
+  3. Agregar tests unitarios mockeados en `backend/routers/test_fields_enrichment.py`.
+- **Definition of Done (Comando de Verificación):**
+  - `.\backend\.venv\Scripts\python.exe -m unittest backend.routers.test_fields_enrichment -v` en verde.
+
+### `[x]` BACK-23: Telemetría Inmediata Integrada con Datos Propios del Campo (`GET /api/v1/telemetry`)
+- **Objetivo:** Al seleccionar un campo guardado (`field_id` opcional + Bearer token opcional), pedir en vivo a NASA POWER los indicadores dinámicos (**Agua en las raíces**, **Humedad para sembrar**, **Lluvias 90d** y **Riesgo de golpe de calor**) y devolver suelo, materia orgánica y topografía desde `public.fields`, reintentando ISRIC/SRTM y actualizando la fila solo si `reintentar_* == true` o si las columnas estaban vacías.
+- **Archivos Permitidos:** `backend/routers/telemetry.py`, `backend/services/telemetry_service.py`, `backend/services/field_enrichment_service.py`, `backend/schemas.py`, `backend/routers/test_telemetry.py`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador:**
+  - Conservar retrocompatibilidad total cuando no se envía `field_id` o no hay token.
+  - Si `reintentar_soilgrids == false` y `reintentar_srtm == false` con datos válidos en `public.fields`, no se vuelve a llamar a ISRIC ni SRTM.
+- **Especificación Técnica:**
+  1. Ampliar `obtener_telemetria_campo` en `backend/services/telemetry_service.py` para aceptar `field_row` y `persist_field_updates`, reutilizando datos válidos del campo o reintentando y persistiendo actualizaciones.
+  2. Agregar `field_id: UUID | None` y lectura/actualización opcional en `public.fields` (vía dependencia sobreescribible en tests) en `backend/routers/telemetry.py`.
+  3. Ampliar `backend/routers/test_telemetry.py` cubriendo reutilización desde `fields`, reintento con actualización y compatibilidad sin `field_id`.
+- **Definition of Done (Comando de Verificación):**
+  - `.\backend\.venv\Scripts\python.exe -m unittest backend.routers.test_telemetry -v` en verde.
 
 ---
 

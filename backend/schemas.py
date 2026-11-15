@@ -170,7 +170,43 @@ class FieldResponse(BaseModel):
     lon: float
     hectareas: float | None = None
     polygon: list[list[float]] | None = None
+    # Suelo propio del campo
+    ph: float | None = None
+    limo_pct: float | None = None
+    arena_pct: float | None = None
+    arcilla_pct: float | None = None
+    textura_predominante: str | None = None
+    carbono_organico_g_kg: float | None = None
+    materia_organica_g_kg: float | None = None
+    suelo_fuente: str | None = None
+    suelo_advertencias: list[str] = Field(default_factory=list)
+    suelo_localidad_fallback: str | None = None
+    suelo_distancia_fuente_km: float | None = None
+    reintentar_soilgrids: bool = True
+    # Topografía propia del campo
+    elevacion_m: float | None = None
+    pendiente_terreno_pct: float | None = None
+    fuente_elevacion: str | None = None
+    topo_fuente: str | None = None
+    topo_advertencias: list[str] = Field(default_factory=list)
+    topo_localidad_fallback: str | None = None
+    topo_distancia_fuente_km: float | None = None
+    reintentar_srtm: bool = True
     created_at: datetime
+
+    @field_validator("suelo_advertencias", "topo_advertencias", mode="before")
+    @classmethod
+    def _coerce_advertencias(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        return [str(item) for item in value]
+
+    @field_validator("reintentar_soilgrids", "reintentar_srtm", mode="before")
+    @classmethod
+    def _coerce_retry_flag(cls, value: Any) -> bool:
+        if value is None:
+            return True
+        return bool(value)
 
 
 # ---------------------------------------------------------------------------
@@ -380,3 +416,58 @@ class SimulateResponse(BaseModel):
         default_factory=list,
         description="Avisos de calidad de dato (fallbacks de SoilGrids/SRTM, propiedades faltantes).",
     )
+
+
+# ---------------------------------------------------------------------------
+# Telemetría Inmediata de Lote (GET /api/v1/telemetry — BACK-20)
+# ---------------------------------------------------------------------------
+
+
+class PerfilSueloTelemetriaOut(BaseModel):
+    """Perfil edáfico 0-30 cm para lectura directa; preserva ``None`` ante fallback sin dato."""
+
+    textura_predominante: str | None = None
+    arcilla_pct: float | None = None
+    arena_pct: float | None = None
+    limo_pct: float | None = None
+    carbono_organico_g_kg: float | None = None
+    materia_organica_g_kg: float | None = None
+    ph: float | None = None
+    fuente: str
+    localidad_fallback: str | None = None
+    distancia_fuente_km: float
+    reintentar_soilgrids: bool = False
+
+
+class TopografiaTelemetriaOut(BaseModel):
+    """Elevación y pendiente reales desde SRTM o respaldo regional."""
+
+    elevacion_m: float
+    pendiente_terreno_pct: float
+    fuente: str
+    fuente_elevacion: str | None = None
+    localidad_fallback: str | None = None
+    distancia_fuente_km: float
+    reintentar_srtm: bool = False
+
+
+class TelemetriaNasaInfoOut(BaseModel):
+    """Bloque ``telemetria_nasa`` para ``GET /api/v1/telemetry`` (tolera métricas históricas ausentes)."""
+
+    fecha_ultimo_dato_valido: date
+    indice_humedad_radicular_pct: float
+    indice_humedad_superficial_pct: float
+    tendencia_humedad_15d_pct: float
+    anomalia_lluvia_90d_pct: float | None = None
+    frecuencia_tormentas_extremas_90d: int
+    riesgo_termico_verano: RiesgoTermico | None = None
+
+
+class TelemetryResponse(BaseModel):
+    """Respuesta de ``GET /api/v1/telemetry`` para ``Info general`` al seleccionar un campo."""
+
+    ubicacion: Ubicacion
+    telemetria_nasa: TelemetriaNasaInfoOut | None = None
+    topografia_srtm: TopografiaTelemetriaOut | None = None
+    perfil_suelo: PerfilSueloTelemetriaOut
+    advertencias: list[str] = Field(default_factory=list)

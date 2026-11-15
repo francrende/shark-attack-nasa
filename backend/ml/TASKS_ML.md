@@ -561,3 +561,16 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Otros:** la alternativa ya no usa el texto fijo "(o Maíz Tardío precedido por Vicia)"; el contraste del Maíz Temprano no se menciona si no es sembrable. Las estrategias se calculan antes de la explicación para saber cuál es el testigo.
 - **Verificación (2026-11-15):** `pytest -q` 252 en verde (tests nuevos en `TestExplicacionML15`). Respuesta en vivo para las mismas coordenadas con los cinco cambios.
 
+---
+
+### Sugerencia: Leer desde `public.fields` solo las variables de largo plazo en `POST /api/v1/simulate`
+
+- **Contexto:** Con `BACK-21`/`BACK-22`, cada campo del usuario en `public.fields` pasa a guardar su propio perfil edáfico (`arcilla_pct`, `arena_pct`, `limo_pct`, `carbono_organico_g_kg`, `materia_organica_g_kg`, `ph`, `textura_predominante`) y topográfico (`elevacion_m`, `pendiente_terreno_pct`), junto con `reintentar_soilgrids` y `reintentar_srtm`.
+- **Qué SÍ conviene que use el modelo/motor desde BD (variables de largo plazo — cambian en años o décadas):**
+  - Topografía: `elevacion_m`, `pendiente_terreno_pct` (usadas por el modelo ML y `rotation_matrix.py`).
+  - Edafología física y química lenta: `arcilla_pct`, `arena_pct`, `carbono_organico_g_kg`, `ph`, `textura_predominante` (usadas por el modelo ML y `rotation_matrix.py`).
+  - Si `SimulateRequest` acepta en el futuro un `field_id` opcional y ese campo tiene `reintentar_soilgrids = false` / `reintentar_srtm = false`, `/simulate` podría reutilizar directamente estos valores de `public.fields` sin reconsultar ISRIC ni SRTM, manteniendo coherencia entre `Info general` y la simulación.
+- **Qué NO debe congelarse en `public.fields` para el modelo (variables dinámicas):**
+  - `GWETROOT` (`gwetroot_saturacion_pct`), `GWETTOP` (`gwettop_saturacion_pct`), `tendencia_humedad_15d_pct`, `anomalia_lluvia_90d_pct`, `indice_aridez_evaporativa`, `riesgo_termico_verano`, `oni_actual` y `dias_hasta_siembra` dependen del clima reciente y de la fecha de consulta; deben seguir calculándose en vivo desde NASA POWER / ENSO / años análogos para no alterar la predicción.
+
+

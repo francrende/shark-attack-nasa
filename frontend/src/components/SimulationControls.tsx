@@ -1,6 +1,7 @@
 import {
   Calendar,
   Info,
+  MapPin,
   Play,
   RotateCcw,
   Sparkles,
@@ -20,6 +21,8 @@ import type {
 import { campanaVigente, proximaHabilitacion } from '../utils/campana'
 
 interface CampaignConfigProps {
+  fieldName?: string | null
+  isDrawingField?: boolean
   campana: Campana | null
   cultivoAnterior: CultivoAnterior | null
   objetivoProductor: ObjetivoProductor
@@ -55,6 +58,8 @@ const OBJETIVOS_KEYS: ObjetivoProductor[] = [
  * Selección de Tipo de campaña, Cultivo antecesor y Prioridad de manejo
  */
 export function CampaignConfigPanel({
+  fieldName = null,
+  isDrawingField = false,
   campana,
   cultivoAnterior,
   objetivoProductor,
@@ -67,12 +72,25 @@ export function CampaignConfigPanel({
   onPlan,
 }: CampaignConfigProps) {
   const vigente = campanaVigente()
+  const activeFieldLabel =
+    fieldName?.trim() || (isDrawingField ? 'Nuevo campo' : 'Sin campo')
+  const isUnassigned = !fieldName?.trim()
+
   return (
     <section className="panel-section controls-section">
-      <div className="section-header-row">
-        <div>
-          <h2 className="section-title">Planificación de campaña</h2>
-        </div>
+      <div className="section-header-row campaign-header-row">
+        <h2 className="section-title">Planificación de campaña</h2>
+        <span
+          className={`campaign-field-tag ${isUnassigned ? 'is-muted' : ''}`}
+          title={
+            fieldName?.trim()
+              ? `Campo activo: ${fieldName.trim()}`
+              : activeFieldLabel
+          }
+        >
+          <MapPin size={12} aria-hidden="true" />
+          <span className="campaign-field-tag-name">{activeFieldLabel}</span>
+        </span>
       </div>
 
       <div className="controls-row-2col">
