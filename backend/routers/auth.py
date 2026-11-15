@@ -29,9 +29,6 @@ except ImportError:
         AuthLoginRequest,
         AuthRegisterRequest,
         AuthResponse,
-        UserProfileResponse,
-    )
-
         ProfileProvincesUpdate,
         UserProfileResponse,
     )
@@ -214,7 +211,6 @@ def login(payload: AuthLoginRequest) -> AuthResponse:
     return AuthResponse(
         access_token=response.session.access_token,
         refresh_token=response.session.refresh_token,
-        user=_extract_user_profile(response.user),
         user=_load_user_profile(
             response.session.access_token, _extract_user_profile(response.user)
         ),
@@ -225,22 +221,6 @@ def login(payload: AuthLoginRequest) -> AuthResponse:
 @router.get("/me", response_model=UserProfileResponse)
 def get_me(current_user: AuthenticatedUser = Depends(get_current_user)) -> UserProfileResponse:
     """Devuelve el perfil del usuario autenticado."""
-    client = get_authenticated_supabase_client(current_user.access_token)
-    result = (
-        client.table("profiles")
-        .select("id, email, nombre, created_at")
-        .eq("id", current_user.id)
-        .maybe_single()
-        .execute()
-    )
-    if result.data:
-        return UserProfileResponse(**result.data)
-
-    return UserProfileResponse(
-        id=current_user.id,
-        email=current_user.email,
-        nombre=current_user.nombre,
-    )
     return _load_user_profile(
         current_user.access_token, _fallback_profile(current_user)
     )

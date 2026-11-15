@@ -136,13 +136,13 @@ Todas las features se calculan de forma determinística a partir de las respuest
   2. `gwettop_saturacion_pct`: Humedad superficial (0–5 cm, `GWETTOP * 100`) en el día $t$ para viabilidad de emergencia en siembra y detección de desacople con la raíz.
   3. `tendencia_humedad_15d_pct`: Variación neta de humedad superficial/radicular en los últimos 15 días válidos (`[t - 14, t]`, mide la velocidad de secado o recarga reciente del perfil).
   4. `anomalia_lluvia_90d_pct`: Desvío porcentual de la lluvia acumulada (`PRECTOTCORR`) de los últimos 90 días (`[t - 89, t]`) respecto a la climatología histórica de 20 años de NASA POWER en esa coordenada.
-  8. `indice_aridez_evaporativa`: Relación entre precipitación acumulada y demanda evaporativa (`PRECTOTCORR / EVPTRNS`) en los 90 días previos (`[t - 89, t]`) que explica cómo llegó el perfil hídrico al día $t$.
+  5. `indice_aridez_evaporativa`: Relación entre precipitación acumulada y demanda evaporativa (`PRECTOTCORR / EVPTRNS`) en los 90 días previos (`[t - 89, t]`) que explica cómo llegó el perfil hídrico al día $t$.
 
 - **B. Ventana Futura `[t + 1, t + 90]` (Riesgos Meteorológicos durante el Ciclo del Cultivo):**
-  *(En el dataset histórico `generate_dataset.py` se extraen de los 90 días **realmente observados** después de la fecha de decisión `[t + 1, t + 90]`. En inferencia online el futuro no se conoce y **no se resume en un promedio climatológico**. Se usa un **ensemble de años análogos**: el backend (`BACK-6`) entrega, por cada año 2006–2025 con la ventana `[corte + 1, corte + 90]` completa (19 o 20), los valores reales de ese año de las tres features, juntos para conservar la relación entre ellas. El ML (`ML-5`, `predict_ensemble`) corre el modelo una vez por escenario y cultivo y devuelve la distribución del puntaje: el **promedio** es el score principal, el **P10** un "año malo", el **P90** un "año bueno", más la cantidad de años por debajo del umbral desfavorable y el peor año análogo. Es la misma lógica del "Ensemble Streamflow Prediction" hidrológico: no se pronostica, se usa lo que ya ocurrió en esa coordenada y en esas fechas).*
-  5. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia torrencial (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en la ventana futura de 90 días (`[t + 1, t + 90]`) — indicador de riesgo de escorrentía y erosión durante el ciclo.
-  6. `frecuencia_estres_termico`: Días con `T2M_MAX > 34°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, golpes de calor en el ciclo del cultivo).
-  7. `frecuencia_riesgo_helada`: Días con `T2M_MIN < 2°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, riesgo de helada en el ciclo del cultivo).
+  *(En el dataset histórico `generate_dataset.py` se extraen de los 90 días **realmente observados** después de la fecha de decisión `[t + 1, t + 90]`. En inferencia online el futuro no se conoce y **no se resume en un promedio climatológico**. Se usa un **ensemble de años análogos**: el backend (`BACK-12`) entrega, por cada año 2006–2025 con la ventana `[corte + 1, corte + 90]` completa (19 o 20), los valores reales de ese año de las tres features, juntos para conservar la relación entre ellas. El ML (`ML-5`, `predict_ensemble`) corre el modelo una vez por escenario y cultivo y devuelve la distribución del puntaje: el **promedio** es el score principal, el **P10** un "año malo", el **P90** un "año bueno", más la cantidad de años por debajo del umbral desfavorable y el peor año análogo. Es la misma lógica del "Ensemble Streamflow Prediction" hidrológico: no se pronostica, se usa lo que ya ocurrió en esa coordenada y en esas fechas).*
+  6. `frecuencia_tormentas_extremas`: Cantidad de eventos de lluvia torrencial (`PRECTOTCORR > 50 mm/día`, derivado de GPM/IMERG/POWER) en la ventana futura de 90 días (`[t + 1, t + 90]`) — indicador de riesgo de escorrentía y erosión durante el ciclo.
+  7. `frecuencia_estres_termico`: Días con `T2M_MAX > 34°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, golpes de calor en el ciclo del cultivo).
+  8. `frecuencia_riesgo_helada`: Días con `T2M_MIN < 2°C` durante la ventana futura de 90 días (`[t + 1, t + 90]`, riesgo de helada en el ciclo del cultivo).
 
 - **C. Variables Topográficas, Edáficas y de Cultivo:**
   9. `pendiente_terreno_pct`: Pendiente topográfica local (%) obtenida de **NASA SRTM (30m)** (modifica la infiltración efectiva del agua de lluvia y el riesgo de erosión).
@@ -183,7 +183,7 @@ $$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\te
 - **Fase Online (`POST /api/v1/simulate` en `< 1.5s`):**
   1. FastAPI recibe `coordenadas`, `campana`, `cultivo_anterior`, `objetivo_productor` y (opcionalmente) `simulacion_what_if`.
   2. Consulta en paralelo **NASA POWER API** (filtrando lags `-999.0`), **OpenTopoData SRTM API** (con fallback a la elevación de NASA POWER) e **ISRIC SoilGrids API**.
-  3. Calcula las 8 features actuales y los escenarios históricos de la ventana futura (`BACK-6`). Evalúa las alertas de anomalías físicas en curso (sin forzar predicciones sin sustento) y ejecuta en memoria el ensemble `predict_ensemble` (`ML-5`): un único batch de `escenarios × cultivos`. Así obtiene $S_{\text{hidroclimatico}}$ (promedio) y su distribución (P10, P90 y años desfavorables). El riesgo se clasifica con el promedio y sube un nivel si el P10 cae en zona crítica.
+  3. Calcula las 8 features actuales y los escenarios históricos de la ventana futura (`BACK-12`). Evalúa las alertas de anomalías físicas en curso (sin forzar predicciones sin sustento) y ejecuta en memoria el ensemble `predict_ensemble` (`ML-5`): un único batch de `escenarios × cultivos`. Así obtiene $S_{\text{hidroclimatico}}$ (promedio) y su distribución (P10, P90 y años desfavorables). El riesgo se clasifica con el promedio y sube un nivel si el P10 cae en zona crítica.
   4. Cruza cada cultivo con la **Matriz de Rotación y Pendiente** para obtener $S_{\text{suelo}}$, aplica los pesos ($w_{\text{clima}}, w_{\text{suelo}}$) e incluye las notas de incertidumbre y validación agronómica local requeridas por el challenge.
 
 ---
@@ -288,12 +288,12 @@ Formato estándar de comunicación entre el Frontend y el Backend.
     ],
     "recomendacion_experto": "Validar agua útil real con muestreo de barreno a 1 metro y consultar al ingeniero agrónomo local antes de definir la densidad de siembra."
   },
-  // BACK-7: además vienen "cobertura_12_meses" y "comparacion_estrategias" (ML-3; ver Swagger en /docs)
+  // BACK-13: además vienen "cobertura_12_meses" y "comparacion_estrategias" (ML-3; ver Swagger en /docs)
   "advertencias": [] // avisos de calidad de dato (fallback regional de SoilGrids/SRTM, propiedades faltantes)
 }
 ```
 
-> **Notas de implementación (BACK-7):**
+> **Notas de implementación (BACK-13):**
 > - `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` muestran el **dato satelital real**, sin los topes del modelo ni el What-If. El What-If solo cambia los scores, el ranking, las anomalías y la explicación.
 > - **Errores:** `422` para un request inválido (campaña u objetivo desconocidos, `cultivo_anterior` fuera de los 11 cultivos o de `ninguno`/`barbecho`/`sin_cultivo`/`null`, rangos del What-If, campos extra, o **campaña que no corresponde a la fecha** según la regla de §4.1: el backend también la rechaza, además del bloqueo del frontend). `503` si un provider no tiene datos.
 
@@ -321,7 +321,7 @@ shark-attack-nasa/
 ├── backend/
 │   ├── ml/                # Entrenamiento (train_baseline.py), predictor y TASKS_ML.md
 │   ├── providers/         # Clientes externos (supabase_client.py, NASA POWER, SRTM, SoilGrids)
-│   ├── routers/           # Endpoints FastAPI (auth.py, fields.py, campaigns.py, simulación)
+│   ├── routers/           # Endpoints FastAPI (auth.py, fields.py, campaigns.py, simulate.py)
 │   ├── services/          # Lógica de negocio y matriz de rotación agronómica
 │   ├── sql/               # Esquema PostgreSQL y políticas RLS para Supabase (schema.sql)
 │   ├── config.py          # Configuración con pydantic-settings (.env)
@@ -345,9 +345,10 @@ shark-attack-nasa/
    - **Auth (`/api/v1/auth`):** `POST /register`, `POST /login`, `GET /me`, `PATCH /me/provinces` (Bearer JWT).
    - **Campos (`/api/v1/fields`):** `GET /`, `POST /`, `GET /{field_id}`, `PATCH /{field_id}`, `DELETE /{field_id}`.
    - **Campañas e Historial (`/api/v1/fields/{field_id}/campaigns`):** `GET /`, `POST /`, `PATCH /{campaign_id}`, `DELETE /{campaign_id}` (guarda `campana`, `cultivo`, `fecha_inicio`, `fecha_fin`, `rinde_kg_ha`, `resultado_notas` y `simulacion_json`).
+   - **Simulación:** `POST /api/v1/simulate`.
    - **Healthcheck:** `GET /health`.
 
-### 7.2. Levantar el Frontend (`React + TypeScript + Vite`)
+### 7.3. Levantar el Frontend (`React + TypeScript + Vite`)
 ```bash
 cd frontend
 npm install
@@ -355,7 +356,7 @@ npm run dev
 ```
 - El servidor de desarrollo quedará corriendo en `http://localhost:5173`.
 
-### 7.3. Configurar y Levantar el Backend (`Python + FastAPI`)
+### 7.4. Configurar y Levantar el Backend (`Python + FastAPI`)
 ```bash
 cd backend
 

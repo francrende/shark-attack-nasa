@@ -42,33 +42,36 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-4` | CRUD de Campos y Campañas/Resultados por Campo | `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py` | `BACK-2`, `BACK-3` | `[x]` |
 | `BACK-5` | Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email | `backend/TASKS_BACKEND.md` | `BACK-3` | `[x]` |
 | `BACK-6` | Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`) | `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md` | `BACK-4` | `[x]` |
-| BACK-1 (Providers) | Provider crudo NASA POWER (ventana 30 días + filtro `-999`) | `backend/providers/nasa_power.py`, `backend/providers/test_nasa_power.py`, `backend/providers/check_nasa_power_live.py` | — | `[x]` |
-| BACK-2 | Bloque `telemetria_nasa` (humedad, tendencia de 15 días, anomalía de lluvia de 90 días, tormentas extremas, riesgo térmico de verano) | `backend/schemas.py`, `backend/providers/nasa_power.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_nasa_power_live.py` | BACK-1 | `[x]` |
-| BACK-3 | Provider ISRIC SoilGrids (0–30 cm ponderado, vecinos ante `null`, fallback GeoINTA, caché) | `backend/providers/soilgrids.py`, `backend/providers/test_soilgrids.py`, `backend/providers/check_soilgrids_live.py` | — | `[x]` |
-| BACK-4 | Resiliencia y latencia: caché en capas, caché de NASA por celda de grilla, climatología pampeana precalculada, corte automático de SoilGrids, lotes de ejemplo | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | BACK-2, BACK-3 | `[x]` |
-| BACK-5 | Provider SRTM (OpenTopoData): elevación + pendiente con grilla 3×3 a 300 m (Horn), cascada de fallback, caché y corte automático | `backend/providers/srtm.py`, `backend/providers/regional.py`, `backend/providers/resiliencia.py`, `backend/providers/soilgrids.py`, `backend/providers/nasa_power.py`, `backend/providers/test_srtm.py`, `backend/providers/check_srtm_live.py` | BACK-4 | `[x]` |
-| BACK-6 | Constructor de features del ML: features actuales (ventana pasada + topografía + suelo) y escenarios históricos por año de la ventana futura (calendario de eventos por celda) | `backend/providers/features.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/providers/test_features.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_features_live.py` | BACK-2, BACK-3, BACK-4, BACK-5 | `[x]` |
-| `BACK-8` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
-| BACK-7 | Endpoint `POST /api/v1/simulate`: BACK-6 → ensemble ML-5 → contrato §5, app FastAPI con CORS y carga del modelo al arrancar | `backend/main.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/schemas.py`, `backend/routers/test_simulate.py` | BACK-6, ML-5 | `[x]` |
+| `BACK-7` | Provider crudo NASA POWER (ventana 30 días + filtro `-999`) *(antes BACK-1 Providers)* | `backend/providers/nasa_power.py`, `backend/providers/test_nasa_power.py`, `backend/providers/check_nasa_power_live.py` | — | `[x]` |
+| `BACK-8` | Bloque `telemetria_nasa` (humedad, tendencia 15d, anomalía lluvia 90d, tormentas, riesgo térmico verano) *(antes BACK-2 Providers)* | `backend/schemas.py`, `backend/providers/nasa_power.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_nasa_power_live.py` | `BACK-7` | `[x]` |
+| `BACK-9` | Provider ISRIC SoilGrids (0–30 cm ponderado, vecinos ante `null`, fallback GeoINTA, caché) *(antes BACK-3 Providers)* | `backend/providers/soilgrids.py`, `backend/providers/test_soilgrids.py`, `backend/providers/check_soilgrids_live.py` | — | `[x]` |
+| `BACK-10` | Resiliencia y latencia: caché en capas, caché NASA por celda, climatología pampeana precalculada, corte automático SoilGrids, lotes ejemplo *(antes BACK-4 Providers)* | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | `BACK-8`, `BACK-9` | `[x]` |
+| `BACK-11` | Provider SRTM (OpenTopoData): elevación + pendiente grilla 3×3 a 300 m (Horn), cascada fallback, caché y corte automático *(antes BACK-5 Providers)* | `backend/providers/srtm.py`, `backend/providers/regional.py`, `backend/providers/resiliencia.py`, `backend/providers/soilgrids.py`, `backend/providers/nasa_power.py`, `backend/providers/test_srtm.py`, `backend/providers/check_srtm_live.py` | `BACK-10` | `[x]` |
+| `BACK-12` | Constructor de features del ML: features actuales y escenarios históricos por año de la ventana futura *(antes BACK-6 Providers)* | `backend/providers/features.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/providers/test_features.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_features_live.py` | `BACK-8`, `BACK-9`, `BACK-10`, `BACK-11` | `[x]` |
+| `BACK-13` | Endpoint `POST /api/v1/simulate`: `BACK-12` → ensemble `ML-5` → contrato §5, app FastAPI con CORS y carga del modelo al arrancar *(antes BACK-7)* | `backend/main.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/schemas.py`, `backend/routers/test_simulate.py` | `BACK-12`, `ML-5` | `[x]` |
+| `BACK-14` | Persistencia y endpoint `PATCH /api/v1/auth/me/provinces` para filtro inicial de provincias pampeanas (`FRONT-33`) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/sql/schema.sql` | `BACK-2`, `BACK-3` | `[x]` |
+| `BACK-15` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado (`FRONT-30`) *(antes BACK-8)* | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
 
 ---
 
-## 3.1. Especificación de Tareas (Providers NASA / SoilGrids / SRTM)
+## 4. Especificación de Tareas Atómicas
 
-### `[x]` BACK-1: Provider crudo de NASA POWER API
+### 4.1. Providers NASA / SoilGrids / SRTM y Simulación (`BACK-7` a `BACK-13`)
+
+### `[x]` BACK-7: Provider crudo de NASA POWER API *(antes BACK-1 Providers)*
 - **Objetivo:** Cliente HTTP aislado que trae la serie diaria de los últimos 30 días de NASA POWER para un `lat`/`lon`, limpia los valores `-999` y expone el último valor válido de cada parámetro. No calcula métricas derivadas ni expone endpoints.
 - **Archivos Permitidos:**
   - `backend/providers/nasa_power.py`: el cliente.
   - `backend/providers/test_nasa_power.py`: los tests con mocks.
   - `backend/providers/check_nasa_power_live.py`: el script opcional contra la API real.
 - **Decisiones Acordadas con el Desarrollador:**
-  - **Alcance:** solo el provider crudo. La anomalía de lluvia de 90 días, el riesgo térmico y el armado de `telemetria_nasa` quedan para **BACK-2**.
+  - **Alcance:** solo el provider crudo. La anomalía de lluvia de 90 días, el riesgo térmico y el armado de `telemetria_nasa` quedan para **BACK-8**.
   - **Fallas:** timeout de 10 s y 1 reintento ante timeout, error de red o HTTP 5xx. Si igual falla, se lanza `NasaPowerUnavailable`. El mapeo a **HTTP 503** lo hace el router cuando exista, no en esta tarea.
   - **Caché:** no hay en esta tarea (va en una tarea posterior).
   - **Verificación:** pytest con respuestas mockeadas (sin red) y un script opcional contra la API real.
 - **Decisiones por defecto del agente (corregir si no aplican):**
-  - Cliente **async** con `httpx.AsyncClient`, para poder consultarlo en paralelo con SoilGrids en BACK-2.
-  - Si un parámetro tiene los 30 días en `-999`, su último valor válido es `None` y **no se lanza error**. Qué hacer en ese caso lo decide BACK-2.
+  - Cliente **async** con `httpx.AsyncClient`, para poder consultarlo en paralelo con SoilGrids en BACK-8.
+  - Si un parámetro tiene los 30 días en `-999`, su último valor válido es `None` y **no se lanza error**. Qué hacer en ese caso lo decide BACK-8.
   - Las coordenadas fuera de rango (`lat ∉ [-90, 90]`, `lon ∉ [-180, 180]`) lanzan `ValueError` antes de llamar a la API.
   - Los tests usan `httpx.MockTransport` y `asyncio.run`, para no sumar `respx` ni `pytest-asyncio`. Solo hay que agregar `pytest` a `requirements.txt`.
 - **Especificación Técnica:**
@@ -98,7 +101,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m pytest providers/test_nasa_power.py -v`: todos los tests en verde.
   - (Opcional, con red) `cd backend && python -m providers.check_nasa_power_live`: imprime el último valor válido de cada parámetro para Pergamino (-33.95, -60.57).
 
-### `[x]` BACK-2: Bloque `telemetria_nasa`
+### `[x]` BACK-8: Bloque `telemetria_nasa` *(antes BACK-2 Providers)*
 > **Recalibración post-verificación (acordada con el desarrollador):** los umbrales originales 5/12/20 dejaban 11 de 12 puntos de la región en `alto` o `critico`, porque NASA POWER (MERRA-2) da al menos unos 11 días por verano en toda la región. Se midieron 12 puntos (2006–2025) y se pasó a **15/25/40**, manteniendo `T2M_MAX > 34 °C` por coherencia con la feature `frecuencia_estres_termico` del ML. El ML no usa este campo, que es solo informativo.
 >
 > | Nivel | Días/verano | Puntos de calibración (promedio) |
@@ -139,7 +142,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Features de ML:** `frecuencia_estres_termico`, `frecuencia_riesgo_helada` e `indice_aridez_evaporativa` quedan **fuera** de esta tarea, hasta que el track de ML confirme las ventanas.
   - **Fuera de alcance:** `anomalias_detectadas` (tarea aparte) y la elevación de `geometry.coordinates` (va en la tarea de SRTM).
 - **Decisiones por defecto del agente (corregir si no aplican):**
-  - `fetch_daily_window` gana un parámetro `dias`. Por defecto sigue en 30, así que BACK-1 no cambia.
+  - `fetch_daily_window` gana un parámetro `dias`. Por defecto sigue en 30, así que BACK-7 no cambia.
   - Si en la ventana de 90 días hay huecos internos en `-999`, se rellenan con `ffill` y `bfill`, igual que en el script de ML. Si hay **menos de 75 días válidos** de `PRECTOTCORR`, se lanza `NasaPowerUnavailable`.
   - Si no existe una fecha de corte (ningún día con los 3 parámetros válidos en la ventana de 100 días), se lanza `NasaPowerUnavailable`, que el router convertirá en 503. Nunca se inventan datos.
   - `fecha_ultimo_dato_valido` es la fecha de corte.
@@ -180,10 +183,10 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
      - `build_telemetria_nasa` de punta a punta con `MockTransport`.
      - Sin `GWETROOT` válido lanza `NasaPowerUnavailable`.
 - **Definition of Done (Comando de Verificación):**
-  - `cd backend && python -m pytest providers/ -v`: todos en verde, incluidos los tests de BACK-1.
+  - `cd backend && python -m pytest providers/ -v`: todos en verde, incluidos los tests de BACK-7.
   - (Opcional, con red) `cd backend && python -m providers.check_nasa_power_live`: imprime el bloque `telemetria_nasa` real de Pergamino.
 
-### `[x]` BACK-3: Provider ISRIC SoilGrids
+### `[x]` BACK-9: Provider ISRIC SoilGrids *(antes BACK-3 Providers)*
 > **Verificación (14/11/2026):** pasan los 80 tests de `providers/`. En la prueba en vivo, ISRIC no respondió: Pergamino y Tres Arroyos cayeron al fallback por timeout (unos 8,9 s cada uno), y una consulta suelta con timeout de 60 s tampoco respondió. Más temprano respondía en unos 5 s. **El camino con dato real no se pudo verificar en vivo.** Está cubierto por tests con los valores reales de Pergamino capturados antes. La cascada de fallback sí quedó verificada en vivo.
 >
 > **Riesgo abierto:** con ISRIC caído, cada consulta nueva espera los 8 s antes de caer al fallback, porque esos fallbacks no se cachean. Ver la propuesta de circuit breaker o pre-caché en la conversación.
@@ -259,10 +262,10 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
      - Sin cupo en el limitador → fallback directo sin request. Con cupo parcial, se consultan solo los vecinos que entran.
      - Coordenadas inválidas → `ValueError`.
 - **Definition of Done (Comando de Verificación):**
-  - `cd backend && python -m pytest providers/ -v`: todos en verde, incluidos los de BACK-1 y BACK-2.
+  - `cd backend && python -m pytest providers/ -v`: todos en verde, incluidos los de BACK-7 y BACK-8.
   - (Opcional, con red) `cd backend && python -m providers.check_soilgrids_live`: imprime el perfil de Pergamino (dato real) y de Tres Arroyos (vecino o fallback).
 
-### `[x]` BACK-4: Resiliencia y latencia (caché, precálculo y corte automático)
+### `[x]` BACK-10: Resiliencia y latencia (caché, precálculo y corte automático) *(antes BACK-4 Providers)*
 > **Verificación (14/11/2026):**
 > - **Tests:** pasan los 107 de `providers/`.
 > - **Precálculo:** `generar_precache nasa` generó **299/299 celdas sin fallas** (786 KB). Distribución del riesgo: bajo 41, medio 74, alto 119, crítico 65. Coincide con la calibración: Balcarce 11,5 (bajo), Pergamino 23,8 (medio), Rafaela 35,8 (alto).
@@ -271,7 +274,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 > **Pendiente:** `generar_precache suelo` no se pudo correr porque ISRIC sigue sin responder. Correrlo cuando vuelva, y confirmar los 4 lotes de ejemplo con el frontend.
 >
 > **Para coordinar tras el pull de `main` (ML-4):**
-> - `predictor.py` trae su propio `classify_summer_thermal_risk` (días en una ventana de 90 días, cortes 3,5/7, sin `critico`) y `classify_soil_texture` (solo arcilla). Se superponen con `riesgo_termico_verano` (dic–feb, 15/25/40) y con la clasificación USDA de este track. Hay que acordar cuál llena el contrato. **Resuelto (15/11/2026):** `telemetria_nasa` la llena BACK-2 (BACK-7) y el ML usa la misma escala 15/25/40 con `critico` (`THERMAL_RISK_THRESHOLDS`, test de paridad en `routers/test_simulate.py`); la anomalía `estres_termico_critico` aparece solo con riesgo alto (severidad media) o crítico (alta).
+> - `predictor.py` trae su propio `classify_summer_thermal_risk` (días en una ventana de 90 días, cortes 3,5/7, sin `critico`) y `classify_soil_texture` (solo arcilla). Se superponen con `riesgo_termico_verano` (dic–feb, 15/25/40) y con la clasificación USDA de este track. Hay que acordar cuál llena el contrato. **Resuelto (15/11/2026):** `telemetria_nasa` la llena BACK-8 (BACK-13) y el ML usa la misma escala 15/25/40 con `critico` (`THERMAL_RISK_THRESHOLDS`, test de paridad en `routers/test_simulate.py`); la anomalía `estres_termico_critico` aparece solo con riesgo alto (severidad media) o crítico (alta).
 > - En el ML, las tormentas, el estrés térmico y las heladas pasaron a la **ventana futura** `[t+1, t+90]`. En producción hay que calcularlas como el promedio histórico de esos 90 días. `frecuencia_tormentas_extremas_90d` de la telemetría (90 días pasados) **no** es esa feature.
 - **Objetivo:** Que cualquier jurado, en cualquier punto y en cualquier momento, reciba respuesta rápida, y que una caída de ISRIC no deje datos aproximados guardados para siempre. Sin Supabase (lo implementa otro compañero), pero con la caché lista para enchufarlo.
 - **Contexto:** los jurados prueban la app **solos, sin guía y en puntos arbitrarios**. Por eso una pre-caché de puntos fijos sirve poco, y el foco pasa a la **caché por celda de grilla** y al **precálculo regional**.
@@ -308,7 +311,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Clave de la caché:** es un `str`. Hay helpers para las dos formas: `clave_coordenada(lat, lon)` (3 decimales, para el suelo) y `clave_celda_power(lat, lon)` (para NASA). Así la misma interfaz sirve para los dos casos y para Supabase.
   - **Región pampeana precalculada:** lat de -39,0 a -28,0 y lon de -65,0 a -57,5 (centros de celda), unas 300 celdas. Se guardan con un decimal (unos 800 KB), y el script tarda unos 10 minutos.
   - **Qué se usa del histórico cacheado:** se guarda `dias_calor_verano_promedio` y la categoría se **reclasifica al leer**, con los umbrales vigentes. Así una recalibración no invalida la caché. `riesgo_termico_verano` se guarda solo como referencia.
-  - **El "punto y 4 vecinos sin dato" de BACK-3** pasa a la interfaz como `{"sin_dato": true}`. Es determinístico, así que `reintentar_soilgrids = False`.
+  - **El "punto y 4 vecinos sin dato" de BACK-9** pasa a la interfaz como `{"sin_dato": true}`. Es determinístico, así que `reintentar_soilgrids = False`.
   - **Descarto el "perfil de lote de referencia a hasta 30 km"** de la ronda anterior de preguntas: con solo 3–4 lotes precargados casi nunca aplicaría.
   - **Lotes de ejemplo propuestos:** Pergamino (-33,95, -60,57), Marcos Juárez (-32,70, -62,10), Balcarce (-37,85, -58,26) y Rafaela (-31,25, -61,49). **A confirmar con el frontend.**
   - **Coordenadas justo en el borde de una celda:** se asignan con `round()` de Python. No se verificó qué celda asigna NASA en esos casos.
@@ -344,9 +347,9 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m pytest providers/ -v`: todos en verde.
   - `cd backend && python -m providers.generar_precache nasa`: genera `data/climatologia_pampa.json` con unas 300 celdas.
   - (Cuando ISRIC esté disponible) `cd backend && python -m providers.generar_precache suelo`.
-- **Riesgo anotado (fuera de alcance de BACK-4):** el plan gratuito de Render **duerme el servicio** tras 15 minutos sin tráfico, y el primer jurado espera unos 30–60 s. Hace falta un **ping cada 10 minutos** (por ejemplo, un cron externo o UptimeRobot a un `/health`). Tarea de deploy, coordinar con quien tenga `main.py`.
+- **Riesgo anotado (fuera de alcance de BACK-10):** el plan gratuito de Render **duerme el servicio** tras 15 minutos sin tráfico, y el primer jurado espera unos 30–60 s. Hace falta un **ping cada 10 minutos** (por ejemplo, un cron externo o UptimeRobot a un `/health`). Tarea de deploy, coordinar con quien tenga `main.py`.
 
-### `[x]` BACK-5: Provider SRTM (OpenTopoData)
+### `[x]` BACK-11: Provider SRTM (OpenTopoData) *(antes BACK-5 Providers)*
 > **Verificación (14/11/2026):** pasan los 133 tests de `providers/` (26 nuevos; SoilGrids sigue en verde tras el refactor). En vivo, con dato real de SRTM:
 > - Pergamino: 69 m, **0,82 %**, en 0,96 s.
 > - Tandil: 187 m, 1,53 %, en 0,56 s.
@@ -382,7 +385,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Puntos sin dato:** si alguno de los 9 viene `null` (mar o fuera de la cobertura de SRTM), es **determinístico**. Se va al fallback con `reintentar_srtm = False` y se cachea `{"sin_dato": true}`.
   - **Caché:** espacio `topografia`, clave `clave_coordenada` (unos 100 m), **sin vencimiento**. Solo guarda datos reales y el "sin dato". Nunca guarda los fallbacks transitorios.
   - **Elevación de respaldo:** primero se busca en la ventana reciente de NASA que ya esté en caché para esa celda. Si no está, se hace un pedido mínimo a NASA POWER (1 día, 1 parámetro) y la elevación se cachea por celda en el espacio `nasa_elevacion`, sin vencimiento. Si NASA también falla, se usa la elevación de la localidad GeoINTA.
-  - **`NasaPowerDailySeries` gana `elevacion_m: float | None = None`**, al final, sin romper BACK-1. `serie_a_dict` y `dict_a_serie` lo incluyen.
+  - **`NasaPowerDailySeries` gana `elevacion_m: float | None = None`**, al final, sin romper BACK-7. `serie_a_dict` y `dict_a_serie` lo incluyen.
   - **Advertencia del fallback:** *"Topografía estimada regionalmente: pendiente de {localidad} (a {X} km) y elevación promedio de la zona. El ajuste por pendiente es aproximado."*
   - **Redondeo:** la pendiente a 2 decimales y la elevación a 1.
 - **Especificación Técnica:**
@@ -415,7 +418,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m pytest providers/ -v`: todos en verde.
   - (Con red) `cd backend && python -m providers.check_srtm_live`: Pergamino con pendiente baja (menos de 1,5 %) y Tandil o Paraná con pendiente mayor.
 
-### `[x]` BACK-6: Constructor de features del ML
+### `[x]` BACK-12: Constructor de features del ML *(antes BACK-6 Providers)*
 > **Verificación (14/11/2026):**
 > - **Tests:** pasan los 155 de `providers/` (22 nuevos, incluida la paridad con pandas de los escenarios).
 > - **Precálculo:** `generar_precache nasa` regeneró 299/299 celdas en `telemetria-v2`, sin errores (2,9 MB, 20 años de calendario por celda).
@@ -427,7 +430,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   1. Las **features actuales**: las 8 de la ventana pasada, la topografía y el suelo, con los mismos topes que el entrenamiento.
   2. La **lista de escenarios históricos** de la ventana futura `[corte+1, corte+90]`: los valores reales de cada año.
 
-  Con un único módulo de fórmulas puras (`features.py`) que `generate_dataset.py` pueda importar, para que entrenamiento y producción calculen igual. Sin correr el modelo y sin endpoint (eso es BACK-7).
+  Con un único módulo de fórmulas puras (`features.py`) que `generate_dataset.py` pueda importar, para que entrenamiento y producción calculen igual. Sin correr el modelo y sin endpoint (eso es BACK-13).
 - **Archivos Permitidos:**
   - `backend/providers/features.py` (nuevo): las fórmulas y `construir_insumos_ml`.
   - `backend/providers/nasa_telemetry.py`: el histórico cacheado gana el calendario de eventos y `T2M_MIN`, y sube `VERSION_CALCULO`.
@@ -501,16 +504,16 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - `cd backend && python -m providers.generar_precache nasa`: 299/299 celdas en v2.
   - (Con red) `cd backend && python -m providers.check_features_live`: Pergamino da aridez de unos 0,75, 19 escenarios con calor de 1 a 51 días, y las 8 features actuales completas.
 
-### `[x]` BACK-7: Endpoint `POST /api/v1/simulate`
+### `[x]` BACK-13: Endpoint `POST /api/v1/simulate` *(antes BACK-7)*
 > **Verificación (15/11/2026):**
 > - **Tests:** 22 nuevos en `routers/test_simulate.py`, incluido uno de punta a punta con los providers reales y HTTP mockeado. La suite completa del backend da 203 en verde.
 > - **En vivo, Pergamino** (corte 11/11): 200 OK, 19 años análogos, gana sorgo (88,2, riesgo bajo, P10 81,2). Primer pedido con caché vacía 1,96 s; los siguientes 0,18 s.
-- **Objetivo:** Exponer el pipeline online de CONTEXT §4.6: request §5 → `construir_insumos_ml` (BACK-6) → `run_recommendation` con `escenarios_historicos` (ML-5) → respuesta §5.
+- **Objetivo:** Exponer el pipeline online de CONTEXT §4.6: request §5 → `construir_insumos_ml` (BACK-12) → `run_recommendation` con `escenarios_historicos` (ML-5) → respuesta §5.
 - **Archivos Permitidos:** `backend/main.py` (nuevo), `backend/routers/simulate.py` (nuevo), `backend/services/simulation_service.py` (nuevo), `backend/schemas.py`, `backend/routers/test_simulate.py` (nuevo).
 - **Decisiones Acordadas con el Desarrollador:**
   - El track de ML hace también el cableado del backend (ML-5 ya expone `predict_ensemble` y `run_recommendation(escenarios_historicos=...)`).
 - **Decisiones por defecto del agente (corregir si no aplican):**
-  - **Bloques descriptivos con dato real:** `telemetria_nasa` es el objeto de BACK-2 tal cual (sin topes ni What-If; `frecuencia_tormentas_extremas_90d` es la de los 90 días pasados). `topografia_srtm` muestra elevación y pendiente reales sin el tope del modelo. `perfil_suelo` usa la textura USDA, la arcilla y el carbono de SoilGrids. Los scores sí usan las features con topes y con el What-If.
+  - **Bloques descriptivos con dato real:** `telemetria_nasa` es el objeto de BACK-8 tal cual (sin topes ni What-If; `frecuencia_tormentas_extremas_90d` es la de los 90 días pasados). `topografia_srtm` muestra elevación y pendiente reales sin el tope del modelo. `perfil_suelo` usa la textura USDA, la arcilla y el carbono de SoilGrids. Los scores sí usan las features con topes y con el What-If.
   - **What-If sobre todo el ensemble:** el override de humedad y la variación de lluvia se aplican a cada año análogo (no se elige un único escenario, porque el request §5 no tiene campo para elegirlo).
   - **Validación estricta (422):** `campana`, `objetivo_productor` y `cultivo_anterior` cerrados (los 11 cultivos de la matriz o `ninguno`/`barbecho`/`sin_cultivo`/`null`; un typo ya no se trata en silencio como "sin cultivo anterior"); rangos del What-If de §5; campos desconocidos rechazados.
   - **Campaña no vigente → `422`** (corregido el 15/11/2026 con el desarrollador): el frontend bloquea el botón, pero el backend también valida con la regla de §4.1 (`campana_vigente`: mes de hoy + 45 días en abril–septiembre → invierno), **antes** de consultar los providers. El mensaje indica la fecha en que se habilita la campaña pedida. Antes se aceptaban ambas y una llamada directa a la API evaluaba invierno con el clima del verano.
@@ -531,20 +534,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
-### Tablero de Tareas API FastAPI & Supabase (`backend-celi`)
-
-| ID | Tarea Atómica | Archivos Involucrados | Depende de | Estado |
-| :--- | :--- | :--- | :---: | :---: |
-| `BACK-1` | Estructura base FastAPI, config y cliente Supabase | `backend/main.py`, `backend/config.py`, `backend/providers/supabase_client.py`, `backend/requirements.txt`, `backend/.env.example` | — | `[x]` |
-| `BACK-2` | Esquema SQL en Supabase (`profiles`, `fields`, `campaigns` + RLS) | `backend/sql/schema.sql` | `BACK-1` | `[x]` |
-| `BACK-3` | Endpoints de Auth y dependencia JWT (Supabase Auth) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/main.py` | `BACK-1`, `BACK-2` | `[x]` |
-| `BACK-4` | CRUD de Campos y Campañas/Resultados por Campo | `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py` | `BACK-2`, `BACK-3` | `[x]` |
-| `BACK-5` | Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email | `backend/TASKS_BACKEND.md` | `BACK-3` | `[x]` |
-| `BACK-6` | Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`) | `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md` | `BACK-4` | `[x]` |
-
----
-
-## 4. Especificación de Tareas Atómicas
+### 4.2. API FastAPI, Auth & Supabase (`BACK-1` a `BACK-6`, `BACK-14` y `BACK-15`)
 
 ### `[x]` BACK-1: Estructura base FastAPI, configuración y cliente Supabase
 - **Objetivo:** Dejar levantado el esqueleto modular de FastAPI con lectura de variables de entorno (`pydantic-settings`), CORS habilitado para el frontend y el cliente oficial `supabase-py` listo para usar, más un endpoint `/health` que verifique la app y la configuración de Supabase.
@@ -638,14 +628,45 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
-## 4.1. Registro de Entorno y Despliegue en Supabase
+### `[x]` BACK-14: Persistencia y endpoint `PATCH /api/v1/auth/me/provinces` para filtro inicial de provincias pampeanas (`FRONT-33`)
+- **Objetivo:** Guardar en `public.profiles.provincias` la selección de provincias habilitadas de la Región Pampeana (`buenos_aires`, `cordoba`, `santa_fe`, `entre_rios`, `la_pampa`) y devolverla en el perfil de usuario.
+- **Archivos Permitidos:** `backend/routers/auth.py`, `backend/schemas.py`, `backend/sql/schema.sql`
+- **Especificación Técnica:**
+  1. Agregar columna `provincias text[]` (y migración idempotente `alter table`) en `backend/sql/schema.sql`.
+  2. Agregar `PAMPEAN_PROVINCE_IDS`, `ProfileProvincesUpdate` y el campo `provincias: list[str] | None = None` en `UserProfileResponse` dentro de `backend/schemas.py`.
+  3. Implementar `PATCH /api/v1/auth/me/provinces` y cargar `provincias` desde `public.profiles` en `login` y `GET /api/v1/auth/me` dentro de `backend/routers/auth.py`.
+
+### `[ ]` BACK-15: Endpoint `PATCH /api/v1/auth/me` para Edición de Perfil de Usuario (`FRONT-30`) *(antes BACK-8 / BACK-7)*
+- **Objetivo:** Permitir que el usuario autenticado actualice su `nombre`, `email` y/o `password` desde la pestaña **Usuario** del modal de ajustes en el frontend, persistiendo los cambios en Supabase Auth y en la tabla `profiles`.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/routers/auth.py`, `backend/TASKS_BACKEND.md`
+- **Contrato ya conectado desde Frontend (`FRONT-30`):**
+  - Método y ruta: `PATCH /api/v1/auth/me`
+  - Header requerido: `Authorization: Bearer <access_token>` (dependencia `get_current_user`)
+  - Body JSON opcional por campo (`UserUpdateRequest`):
+    - `nombre?: string`
+    - `email?: string`
+    - `password?: string` (mínimo 6 caracteres cuando se envía)
+  - Respuesta esperada (`200 OK`, `UserProfileResponse`): `{ "id": string, "email": string, "nombre": string, "provincias": string[] | null, "created_at": string | null }`
+- **Pendiente a definir antes de programar (Protocolo Paso 2):**
+  1. Confirmar si para actualizar `email` o `password` se utilizará el cliente autenticado del usuario (`update_user` con JWT) o `service_role` admin (`auth.admin.update_user_by_id`) para evitar bloqueos por confirmación de correo en demo/hackatón.
+  2. Confirmar si al cambiar `nombre` o `email` se debe actualizar también `public.profiles` en la misma petición.
+- **Especificación Técnica Preliminar:**
+  1. Agregar el schema `UserUpdateRequest` en `backend/schemas.py` con validaciones opcionales (`nombre`, `email: EmailStr | None`, `password` mínimo 6 caracteres).
+  2. Implementar `@router.patch("/me", response_model=UserProfileResponse)` en `backend/routers/auth.py` recibiendo `current_user: AuthenticatedUser = Depends(get_current_user)`.
+  3. Rechazar payloads vacíos (`400 Bad Request`) y mapear errores de Supabase Auth (`AuthApiError`) a respuestas HTTP claras en español.
+- **Definition of Done (Comando de Verificación):**
+  - Verificar con `uvicorn` levantado que `PATCH /api/v1/auth/me` responde `200` con el perfil actualizado y que `GET /api/v1/auth/me` refleja los nuevos valores.
+
+---
+
+## 5. Registro de Entorno y Despliegue en Supabase
 - **Proyecto Supabase:** Creado bajo categoría *B2B SaaS application* (`https://kjiddadksvosdaoyapfu.supabase.co`).
 - **Variables de entorno locales (`backend/.env`):** Archivo creado a partir de `backend/.env.example` con `SUPABASE_URL` (URL base sin `/rest/v1/`, requerida por `supabase-py`), `SUPABASE_KEY` (publishable key) y `CORS_ORIGINS=http://localhost:5173,http://localhost:3000`.
 - **Esquema SQL (`backend/sql/schema.sql`):** Listo para ejecutar en el **SQL Editor** de Supabase para crear `public.profiles`, `public.fields`, `public.campaigns`, trigger `on_auth_user_created` y políticas RLS.
 
 ---
 
-## 5. Plantilla para Especificar cada Nueva Tarea
+## 6. Plantilla para Especificar cada Nueva Tarea
 
 Cuando el agente y el desarrollador terminen de responder las preguntas de definición de una tarea, el agente debe agregarla aquí abajo siguiendo este formato:
 
@@ -662,28 +683,3 @@ Cuando el agente y el desarrollador terminen de responder las preguntas de defin
 - **Definition of Done (Comando de Verificación):**
   - `<comando ejecutable para comprobar que funciona>`
 ```
-
----
-
-## 5. Tareas Pendientes Registradas desde Frontend
-
-### `[ ]` BACK-7: Endpoint `PATCH /api/v1/auth/me` para Edición de Perfil de Usuario (`FRONT-30`)
-- **Objetivo:** Permitir que el usuario autenticado actualice su `nombre`, `email` y/o `password` desde la pestaña **Usuario** del modal de ajustes en el frontend, persistiendo los cambios en Supabase Auth y en la tabla `profiles`.
-- **Archivos Permitidos:** `backend/schemas.py`, `backend/routers/auth.py`, `backend/TASKS_BACKEND.md`
-- **Contrato ya conectado desde Frontend (`FRONT-30`):**
-  - Método y ruta: `PATCH /api/v1/auth/me`
-  - Header requerido: `Authorization: Bearer <access_token>` (dependencia `get_current_user`)
-  - Body JSON opcional por campo (`UserUpdateRequest`):
-    - `nombre?: string`
-    - `email?: string`
-    - `password?: string` (mínimo 6 caracteres cuando se envía)
-  - Respuesta esperada (`200 OK`, `UserProfileResponse`): `{ "id": string, "email": string, "nombre": string, "created_at": string | null }`
-- **Pendiente a definir antes de programar (Protocolo Paso 2):**
-  1. Confirmar si para actualizar `email` o `password` se utilizará el cliente autenticado del usuario (`update_user` con JWT) o `service_role` admin (`auth.admin.update_user_by_id`) para evitar bloqueos por confirmación de correo en demo/hackatón.
-  2. Confirmar si al cambiar `nombre` o `email` se debe actualizar también `public.profiles` en la misma petición.
-- **Especificación Técnica Preliminar:**
-  1. Agregar el schema `UserUpdateRequest` en `backend/schemas.py` con validaciones opcionales (`nombre`, `email: EmailStr | None`, `password` mínimo 6 caracteres).
-  2. Implementar `@router.patch("/me", response_model=UserProfileResponse)` en `backend/routers/auth.py` recibiendo `current_user: AuthenticatedUser = Depends(get_current_user)`.
-  3. Rechazar payloads vacíos (`400 Bad Request`) y mapear errores de Supabase Auth (`AuthApiError`) a respuestas HTTP claras en español.
-- **Definition of Done (Comando de Verificación):**
-  - Verificar con `uvicorn` levantado que `PATCH /api/v1/auth/me` responde `200` con el perfil actualizado y que `GET /api/v1/auth/me` refleja los nuevos valores.
