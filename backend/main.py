@@ -33,6 +33,7 @@ from routers.simulate import router as simulate_router  # noqa: E402
 settings = get_settings()
 
 _cache_persistente: CacheSupabase | None = None
+_filas_precargadas = 0
 
 
 def _no_esta_en_el_precalculo(espacio: str, clave: str) -> bool:
@@ -42,10 +43,12 @@ def _no_esta_en_el_precalculo(espacio: str, clave: str) -> bool:
 
 async def _iniciar_cache_persistente() -> CacheSupabase | None:
     """BACK-18: precarga la caché de Supabase y la enchufa como capa secundaria."""
+    global _filas_precargadas
     cache = crear_cache_supabase(settings, filtro_escritura=_no_esta_en_el_precalculo)
     if cache is None:
         return None
     filas = await asyncio.to_thread(cache.hidratar)
+    _filas_precargadas = filas
     logger.info("cache_supabase: %d filas precargadas", filas)
     configurar_cache(CacheEnCapas(CacheMemoria(), secundaria=cache, ttl_por_espacio=TTL_POR_ESPACIO_DEFAULT))
     return cache
@@ -86,7 +89,7 @@ app.include_router(simulate_router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
-def health_check() -> dict[str, str | bool]:
+def health_check() -> dict[str, str | bool | int]:
     """Verifica el estado del servidor y si Supabase está configurado.
 
     Acepta HEAD además de GET (BACK-16): algunos servicios de ping (UptimeRobot)
@@ -96,4 +99,6 @@ def health_check() -> dict[str, str | bool]:
         "status": "ok",
         "supabase_configured": settings.is_supabase_configured,
         "cache_persistente": _cache_persistente is not None,
+        # Filas de provider_cache bajadas en el último arranque (verificación sin mirar logs).
+        "cache_filas_precargadas": _filas_precargadas,
     }
