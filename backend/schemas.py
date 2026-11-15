@@ -321,6 +321,12 @@ class ItemRanking(BaseModel):
     cultivo: str
     score_final: float
     riesgo: NivelRiesgo
+    # ML-16: aptitud frente al agua y el clima y aporte al suelo de cada cultivo (no solo del ganador)
+    sub_scores: SubScores | None = None
+    fuera_de_ventana_siembra: bool = False  # ML-7: la siembra de este cultivo ya terminó
+    # ML-11: por qué hoy no se puede sembrar (lote ocupado por el antecesor o siembra terminada);
+    # None si se puede. Los no sembrables van al final del ranking.
+    motivo_no_sembrable: str | None = None
     score_hidroclimatico_p10: float | None = None
     anios_desfavorables: int | None = None
     anios_evaluados: int | None = None

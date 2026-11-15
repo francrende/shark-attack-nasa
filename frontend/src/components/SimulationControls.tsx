@@ -13,20 +13,21 @@ import {
 } from '../data/demoFields'
 import type {
   Campana,
-  CultivoId,
+  CultivoAnterior,
   ObjetivoProductor,
   SimulacionWhatIf,
 } from '../types/api'
+import { campanaVigente, proximaHabilitacion } from '../utils/campana'
 
 interface CampaignConfigProps {
   campana: Campana | null
-  cultivoAnterior: CultivoId | null
+  cultivoAnterior: CultivoAnterior | null
   objetivoProductor: ObjetivoProductor
   canPlan: boolean
   isPlanning: boolean
   isHistoricalReady: boolean
   onChangeCampana: (campana: Campana) => void
-  onChangeCultivoAnterior: (cultivo: CultivoId) => void
+  onChangeCultivoAnterior: (cultivo: CultivoAnterior) => void
   onChangeObjetivo: (objetivo: ObjetivoProductor) => void
   onPlan: () => void
 }
@@ -39,6 +40,10 @@ interface WhatIfPanelProps {
 }
 
 const TODOS_LOS_CULTIVOS = Object.values(CULTIVOS_CATALOGO)
+const CAMPANAS = [
+  { id: 'verano', label: 'Verano', titulo: 'Campaña gruesa', Icono: Sun, className: 'summer-btn' },
+  { id: 'invierno', label: 'Invierno', titulo: 'Campaña fina', Icono: Snowflake, className: 'winter-btn' },
+] as const
 const OBJETIVOS_KEYS: ObjetivoProductor[] = [
   'resiliencia_hidroclimatica',
   'equilibrio',
@@ -61,6 +66,7 @@ export function CampaignConfigPanel({
   onChangeObjetivo,
   onPlan,
 }: CampaignConfigProps) {
+  const vigente = campanaVigente()
   return (
     <section className="panel-section controls-section">
       <div className="section-header-row">
@@ -81,27 +87,42 @@ export function CampaignConfigPanel({
             role="group"
             aria-label="Seleccionar campaña a planificar"
           >
-            <button
-              type="button"
-              className={`campaign-btn summer-btn ${campana === 'verano' ? 'active' : ''}`}
-              onClick={() => onChangeCampana('verano')}
-              title="Campaña gruesa"
-            >
-              <Sun size={15} />
-              <span>Verano</span>
-            </button>
-            <span className="campaign-disabled-wrap" title="A futuro">
-              <button
-                type="button"
-                className="campaign-btn winter-btn"
-                disabled
-                aria-disabled="true"
-              >
-                <Snowflake size={15} />
-                <span>Invierno</span>
-                <Info size={13} className="campaign-info-icon" aria-hidden="true" />
-              </button>
-            </span>
+            {CAMPANAS.map(({ id, label, titulo, Icono, className }) => {
+              // Solo se habilita la campaña vigente para la fecha (misma regla que el backend).
+              if (id === vigente) {
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`campaign-btn ${className} ${campana === id ? 'active' : ''}`}
+                    onClick={() => onChangeCampana(id)}
+                    title={titulo}
+                  >
+                    <Icono size={15} />
+                    <span>{label}</span>
+                  </button>
+                )
+              }
+              const desde = proximaHabilitacion(id)
+              return (
+                <span
+                  key={id}
+                  className="campaign-disabled-wrap"
+                  title={`Se habilita el ${desde.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}`}
+                >
+                  <button
+                    type="button"
+                    className={`campaign-btn ${className}`}
+                    disabled
+                    aria-disabled="true"
+                  >
+                    <Icono size={15} />
+                    <span>{label}</span>
+                    <Info size={13} className="campaign-info-icon" aria-hidden="true" />
+                  </button>
+                </span>
+              )
+            })}
           </div>
         </div>
 
@@ -116,13 +137,14 @@ export function CampaignConfigPanel({
             value={cultivoAnterior ?? ''}
             onChange={(e) => {
               if (e.target.value) {
-                onChangeCultivoAnterior(e.target.value as CultivoId)
+                onChangeCultivoAnterior(e.target.value as CultivoAnterior)
               }
             }}
           >
             <option value="" disabled>
               Cultivo
             </option>
+            <option value="barbecho">Barbecho (lote sin cultivo previo)</option>
             <optgroup label="Campaña gruesa (verano)">
               {TODOS_LOS_CULTIVOS.filter((c) => c.campana === 'verano').map(
                 (c) => (

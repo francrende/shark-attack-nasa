@@ -138,7 +138,7 @@ def test_simulate_contrato_completo_con_ensemble(cliente):
 
     dist = data["recomendacion_principal"]["distribucion_hidroclimatica"]
     assert dist["anios_evaluados"] == len(ESCENARIOS)
-    assert dist["umbral_desfavorable"] == 50.0
+    assert dist["umbral_desfavorable"] == 40.0  # ML-8
     assert dist["p10"] <= dist["promedio"] <= dist["p90"]
     for item in data["ranking_cultivos"]:
         assert item["anios_evaluados"] == len(ESCENARIOS)
@@ -151,7 +151,13 @@ def test_simulate_contrato_completo_con_ensemble(cliente):
 
 def test_bloques_descriptivos_muestran_dato_real(cliente):
     data = cliente.post("/api/v1/simulate", json=BODY).json()
-    assert data["telemetria_nasa"] == TELEMETRIA.model_dump(mode="json")
+    # ML-12: en verano el riesgo térmico sale de los años análogos (misma fase ENSO); el resto
+    # del bloque es el dato real del provider.
+    esperado = TELEMETRIA.model_dump(mode="json")
+    assert {k: v for k, v in data["telemetria_nasa"].items() if k != "riesgo_termico_verano"} == {
+        k: v for k, v in esperado.items() if k != "riesgo_termico_verano"
+    }
+    assert data["telemetria_nasa"]["riesgo_termico_verano"] in ("bajo", "medio", "alto", "critico")
     assert data["topografia_srtm"]["pendiente_terreno_pct"] == 9.3
     assert data["topografia_srtm"]["elevacion_m"] == 69.0
     assert data["perfil_suelo"]["textura_predominante"] == "franco_limoso"
@@ -211,9 +217,12 @@ def test_testigo_segun_cultivo_anterior():
     assert misma.secuencia_anual == "barbecho_desnudo (invierno) -> soja_primera (repetido)"
     inv = compare_rotation_strategies("invierno", "trigo")[0]
     assert inv.secuencia_anual == "trigo (invierno, repetido) -> barbecho_desnudo (verano)"
+    # ML-11: tras un cultivo de invierno de cosecha el testigo es el doble cultivo (soja de segunda)
     cruzado = compare_rotation_strategies("verano", "trigo")[0]
-    assert cruzado.cultivo_evaluado == "soja_primera"
-    assert cruzado.secuencia_anual == "trigo (invierno) -> soja_primera (verano)"
+    assert cruzado.cultivo_evaluado == "soja_segunda"
+    assert cruzado.secuencia_anual == "trigo (invierno) -> soja_segunda (verano)"
+    tras_cobertura = compare_rotation_strategies("verano", "vicia_cobertura")[0]
+    assert tras_cobertura.cultivo_evaluado == "soja_primera"
     sin = compare_rotation_strategies("invierno", None)[0]
     assert sin.cultivo_evaluado == "trigo" and "repetido" in sin.secuencia_anual
 
@@ -294,5 +303,5 @@ def test_punta_a_punta_con_providers_mockeados():
     SimulateResponse.model_validate(data)
     assert {"nasa_reciente", "nasa_hist", "suelo", "srtm"} <= set(registro)
     dist = data["recomendacion_principal"]["distribucion_hidroclimatica"]
-    assert dist["anios_evaluados"] in (19, 20)
+    assert 4 <= dist["anios_evaluados"] <= 20  # ML-12: solo los años de la misma fase ENSO
     assert set(FEATURES_FUTURAS) <= set(dist["peor_escenario"])

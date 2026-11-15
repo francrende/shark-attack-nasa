@@ -363,6 +363,98 @@ SPECIFIC_TRANSITION_SCORES: dict[tuple[str, str], float] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# ML-10: demanda hídrica del cultivo vs. agua disponible en el perfil
+# ---------------------------------------------------------------------------
+# Consumo de agua del ciclo (mm), valores orientativos dentro de los rangos de requerimiento
+# de FAO (FAO-56 / FAO Irrigation Water Management) ajustados al largo de ciclo pampeano. Las
+# coberturas se cortan antes de completar el ciclo y consumen menos. Requieren validación local.
+CONSUMO_AGUA_CICLO_MM: dict[str, float] = {
+    "trigo": 430.0,
+    "cebada": 380.0,
+    "camelina": 300.0,
+    "avena_cobertura": 250.0,
+    "vicia_cobertura": 220.0,
+    "maiz_temprano": 550.0,
+    "maiz_tardio": 500.0,
+    "soja_primera": 500.0,
+    "soja_segunda": 400.0,
+    "girasol": 480.0,
+    "sorgo": 450.0,
+}
+CONSUMO_AGUA_MIN_MM = 200.0
+CONSUMO_AGUA_MAX_MM = 550.0
+# Con el agua en las raíces por debajo de este % el perfil no cubre un cultivo demandante; la
+# penalización crece linealmente hasta el máximo cuando baja RANGO puntos más.
+HUMEDAD_PERFIL_SECO_PCT = 45.0
+HUMEDAD_PERFIL_SECO_RANGO_PCT = 20.0
+PENALIZACION_DEMANDA_MAX = 10.0
+
+
+# ---------------------------------------------------------------------------
+# ML-11: lote ocupado por un cultivo de invierno de cosecha
+# ---------------------------------------------------------------------------
+# Trigo, cebada y camelina se cosechan entre noviembre y diciembre: en la campaña de verano que
+# sigue, el lote solo admite cultivos "de segunda". Las coberturas (vicia, avena) se secan en
+# septiembre-octubre justamente para liberar el lote, así que no restringen.
+CULTIVOS_INVIERNO_COSECHA: frozenset[str] = frozenset({"trigo", "cebada", "camelina"})
+CULTIVOS_DE_SEGUNDA: frozenset[str] = frozenset({"soja_segunda", "maiz_tardio", "sorgo"})
+
+
+def motivo_lote_ocupado(campana: Campaign, cultivo_anterior: str | None, cultivo_candidato: str) -> str | None:
+    """Motivo por el que ``cultivo_candidato`` no se puede sembrar tras ``cultivo_anterior``, o None.
+
+    En verano, después de un cultivo de invierno de cosecha, solo valen los cultivos de segunda.
+    """
+    prev_id = _normalize_previous_crop(cultivo_anterior)
+    if campana != "verano" or prev_id not in CULTIVOS_INVIERNO_COSECHA:
+        return None
+    candidato = get_crop_profile(cultivo_candidato).id
+    if candidato in CULTIVOS_DE_SEGUNDA:
+        return None
+    nombre = CROP_PROFILES[prev_id].nombre_legible
+    return (
+        f"El lote está ocupado por {nombre} hasta la cosecha (noviembre-diciembre): "
+        "solo se pueden sembrar cultivos de segunda."
+    )
+
+
+def secuencia_real(campana: Campaign, cultivo_anterior: str | None, cultivo_candidato: str) -> str:
+    """Secuencia del ciclo actual, con la del perfil como sugerencia para el próximo (ML-14).
+
+    En verano el invierno ya pasó: fue el antecesor si es de invierno, o barbecho si no. La
+    secuencia del perfil (por ejemplo "vicia_cobertura (invierno) -> sorgo (verano)") se mantiene
+    como sugerencia para el próximo ciclo cuando propone otro invierno. En invierno la secuencia del
+    perfil empieza por el propio candidato y mira hacia adelante, así que se usa tal cual.
+    """
+    candidato = get_crop_profile(cultivo_candidato)
+    if campana != "verano":
+        return candidato.secuencia_sugerida
+    prev_id = _normalize_previous_crop(cultivo_anterior)
+    invierno = prev_id if prev_id is not None and CROP_PROFILES[prev_id].campana == "invierno" else "barbecho"
+    actual = f"{invierno} (invierno) -> {candidato.id} (verano)"
+    invierno_perfil = candidato.secuencia_sugerida.split(" (invierno)")[0]
+    if invierno in [c.strip() for c in invierno_perfil.split("/")]:
+        return actual
+    return f"{actual}; próximo ciclo: {candidato.secuencia_sugerida}"
+
+
+def penalizacion_demanda_hidrica(cultivo: str, humedad_radicular_pct: float) -> float:
+    """Puntos que se restan a S_hidroclimatico por sembrar un cultivo demandante con perfil seco.
+
+    El modelo aprende cuánto se desvía cada cultivo de su propio rinde normal; no sabe cuánta
+    agua consume ni cuánta le deja al cultivo siguiente. Esta regla agrega esa característica:
+    ``max × severidad × demanda_relativa``, con severidad 0 si el perfil tiene 45% o más y 1 si
+    tiene 25% o menos, y demanda relativa 0 (200 mm) a 1 (550 mm).
+    """
+    consumo = CONSUMO_AGUA_CICLO_MM[get_crop_profile(cultivo).id]
+    severidad = (HUMEDAD_PERFIL_SECO_PCT - float(humedad_radicular_pct)) / HUMEDAD_PERFIL_SECO_RANGO_PCT
+    severidad = max(0.0, min(1.0, severidad))
+    demanda = (consumo - CONSUMO_AGUA_MIN_MM) / (CONSUMO_AGUA_MAX_MM - CONSUMO_AGUA_MIN_MM)
+    demanda = max(0.0, min(1.0, demanda))
+    return round(PENALIZACION_DEMANDA_MAX * severidad * demanda, 1)
+
+
 def _clamp_score(value: float) -> float:
     return round(max(0.0, min(100.0, value)), 2)
 
@@ -764,7 +856,7 @@ def evaluate_soil_and_rotation(
         ajuste_ph=round(adj_ph, 2),
         riesgo_erosion_suelo=erosion_risk,
         condicion_rotacion_previa=condicion,
-        secuencia_sugerida=candidate.secuencia_sugerida,
+        secuencia_sugerida=secuencia_real(candidate.campana, cultivo_anterior, candidate.id),
         perfil_mercado=candidate.perfil_mercado,
         meses_suelo_desnudo=bare_months,
         calendario_12m=calendario,
@@ -820,6 +912,8 @@ def compare_rotation_strategies(
     # - sin anterior -> monocultivo del cultivo convencional.
     prev_id = _normalize_previous_crop(cultivo_anterior)
     convencional = "soja_primera" if campana == "verano" else "trigo"
+    if campana == "verano" and prev_id in CULTIVOS_INVIERNO_COSECHA:
+        convencional = "soja_segunda"  # ML-11: doble cultivo, el de primera no es posible
     if prev_id in evals:
         testigo_res = evals[prev_id]
         testigo_titulo = "Estrategia Testigo (Repetir Cultivo / Barbecho Desnudo)"

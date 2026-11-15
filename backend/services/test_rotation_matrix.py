@@ -15,6 +15,7 @@ from backend.services.rotation_matrix import (
     evaluate_soil_and_rotation,
     get_crop_numeric_id,
     get_crops_for_campaign,
+    penalizacion_demanda_hidrica,
 )
 
 
@@ -73,9 +74,11 @@ class TestRotationMatrix(unittest.TestCase):
         )
         self.assertEqual(sorgo.s_suelo, 95.0)
         self.assertEqual(sorgo.condicion_rotacion_previa, "deficit_rastrojo_por_soja")
+        # ML-14: tras soja de primera el invierno fue barbecho; la vicia queda para el próximo ciclo.
         self.assertEqual(
             sorgo.secuencia_sugerida,
-            "vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
+            "barbecho (invierno) -> sorgo (verano); "
+            "próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
         )
         self.assertEqual(soja_repeat.s_suelo, 15.0)
 
@@ -139,6 +142,35 @@ class TestRotationMatrix(unittest.TestCase):
         self.assertLess(testigo.s_suelo, defensiva.s_suelo)
         self.assertLess(testigo.s_suelo, regenerativa.s_suelo)
         self.assertGreater(defensiva.reduccion_suelo_desnudo_vs_testigo, 0)
+
+    def test_penalizacion_demanda_hidrica(self) -> None:
+        """ML-10: sin penalización con perfil cargado; con perfil seco pesa más el que más consume."""
+        for cultivo in ALL_CROPS:
+            self.assertEqual(penalizacion_demanda_hidrica(cultivo, 45.0), 0.0)
+            self.assertEqual(penalizacion_demanda_hidrica(cultivo, 80.0), 0.0)
+            self.assertLessEqual(penalizacion_demanda_hidrica(cultivo, 0.0), 10.0)
+        self.assertEqual(penalizacion_demanda_hidrica("maiz_temprano", 25.0), 10.0)
+        self.assertGreater(
+            penalizacion_demanda_hidrica("trigo", 30.0), penalizacion_demanda_hidrica("vicia_cobertura", 30.0)
+        )
+        self.assertGreater(
+            penalizacion_demanda_hidrica("trigo", 25.0), penalizacion_demanda_hidrica("trigo", 35.0)
+        )
+
+    def test_secuencia_real_respeta_el_invierno_que_ya_paso(self) -> None:
+        """ML-14: en verano la secuencia empieza por el invierno real (antecesor o barbecho)."""
+        from backend.services.rotation_matrix import secuencia_real
+
+        self.assertEqual(
+            secuencia_real("verano", "trigo", "sorgo"),
+            "trigo (invierno) -> sorgo (verano); próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
+        )
+        self.assertEqual(secuencia_real("verano", "trigo", "soja_segunda"), "trigo (invierno) -> soja_segunda (verano)")
+        self.assertEqual(secuencia_real("verano", "vicia_cobertura", "maiz_tardio"), "vicia_cobertura (invierno) -> maiz_tardio (verano)")
+        self.assertTrue(secuencia_real("verano", None, "girasol").startswith("barbecho (invierno) -> girasol (verano)"))
+        self.assertEqual(secuencia_real("invierno", "soja_primera", "trigo"), CROP_PROFILES["trigo"].secuencia_sugerida)
+        for estrategia in compare_rotation_strategies("verano", "trigo")[1:]:
+            self.assertTrue(estrategia.secuencia_anual.startswith("trigo (invierno) -> "), estrategia.secuencia_anual)
 
 
 if __name__ == "__main__":

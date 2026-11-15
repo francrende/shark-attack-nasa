@@ -40,6 +40,16 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `ML-3` | Matriz de Rotación Agronómica, Salud del Suelo ($S_{\text{suelo}}$) y Cobertura 12 Meses (*Bare-Field Periods*) | `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py` | — | `[x]` |
 | `ML-4` | Motor de Inferencia Online (`predictor.py`), Fusión Multicriterio (MCDA), Detector de Anomalías y Explicabilidad | `backend/ml/predictor.py`, `backend/ml/test_predictor.py` | `ML-2`, `ML-3` | `[x]` |
 | `ML-5` | Ensemble de años análogos para la ventana futura (`predict_ensemble`): promedio, P10/P90, años desfavorables y escalón de riesgo (Tarea C.1, coordinada con `BACK-6`) | `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `CONTEXT.md` | `ML-4`, `BACK-6` | `[x]` |
+| `ML-6` | Dataset con rindes reales MAGyP (179 departamentos pampeanos, 2006/07–2024/25): label = rinde ajustado por abandono vs. tendencia, ventanas por calendario de siembra, `dias_hasta_siembra`, pesos 1/n, fórmulas únicas con el backend (Tareas C.2 y C.3) | `backend/ml/generate_dataset.py`, `backend/ml/magyp.py`, `backend/ml/calendario_siembra.py`, `backend/ml/fao_labels.py`, `backend/ml/test_dataset_magyp.py`, `backend/ml/data/*`, `backend/providers/features.py` | `ML-5`, `BACK-6` | `[x]` |
+| `ML-7` | Reentrenamiento con el dataset MAGyP: validación agrupada por campaña, early stopping propio y métricas contra la tendencia y contra FAO | `backend/ml/train_baseline.py`, `backend/ml/escenarios.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/predictor.py`, `backend/providers/enso.py`, `backend/providers/nasa_telemetry.py`, `backend/services/simulation_service.py`, `backend/schemas.py` | `ML-6` | `[x]` (2/3 criterios) |
+| `ML-8` | Recalibración de umbrales de riesgo a la escala MAGyP (50 = año normal): cortes por puntaje esperado, escalón por P10, `umbral_desfavorable`, regla de suelo; cultivos fuera de ventana al final del ranking; `visualize_model.py` actualizado | `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/ml/visualize_model.py`, `backend/routers/test_simulate.py`, `CONTEXT.md` | `ML-10` | `[x]` |
+| `ML-9` | Extender el dataset a las campañas 1990/91–2024/25 (más años para aprender la relación clima–rinde y el contraste entre cultivos) | `backend/ml/generate_dataset.py`, `backend/ml/data/*` | `ML-7` | `[ ]` |
+| `ML-10` | Cultivos sin rinde MAGyP fuera del modelo (puntaje relativo por `Ky` de FAO-56) y penalización por demanda hídrica con perfil seco | `backend/ml/train_baseline.py`, `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-7` | `[x]` |
+| `ML-11` | Lote ocupado por el antecesor de invierno: en verano, tras trigo, cebada o camelina, solo cultivos de segunda; campo `motivo_no_sembrable`; testigo trigo → soja de segunda | `backend/services/rotation_matrix.py`, `backend/ml/predictor.py`, `backend/schemas.py`, `backend/ml/test_predictor.py`, `backend/routers/test_simulate.py`, `CONTEXT.md` | `ML-8` | `[x]` |
+| `ML-12` | Años análogos filtrados por fase ENSO (en lugar del peso gaussiano) y riesgo térmico de verano calculado con esos mismos años | `backend/providers/enso.py`, `backend/ml/escenarios.py`, `backend/ml/predictor.py`, `backend/services/simulation_service.py`, tests, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-11` | `[x]` |
+| `ML-13` | Años análogos desde 1981 (climatología y días de calor siguen en 2006–2025); `train_baseline --solo-evaluar` | `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/ml/generate_dataset.py`, `backend/ml/train_baseline.py`, `backend/ml/data/*`, `backend/ml/modelo_agro.joblib`, tests, `CONTEXT.md` | `ML-12` | `[x]` |
+| `ML-14` | Secuencias de rotación que respetan el invierno que ya pasó (antecesor o barbecho) y dejan la del perfil como "próximo ciclo" | `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `CONTEXT.md` | `ML-11` | `[x]` |
+| `ML-15` | Explicación en lenguaje de productor: escala MAGyP en palabras, contraste con números, práctica habitual y cultivos no sembrables | `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `CONTEXT.md` | `ML-14` | `[x]` |
 
 ---
 
@@ -231,3 +241,323 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - Sin `escenarios_historicos`, la respuesta es idéntica al contrato de ML-4, con las mismas claves y en el mismo orden (test 08).
   - Ejemplo (caso testigo de sequía + 19 escenarios con calor de 1 a 45 días, como Pergamino al 11/11/2026): `sorgo` gana con promedio `74.1`, P10 `49.7`, P90 `88.3` y `3/19` años desfavorables. El peor escenario es de 45 días de calor (score `45.5`). `maiz_temprano` tiene `17/19` años desfavorables y P10 `0.0`.
   - **Observación para ML-8:** con el modelo FAO actual, los años de mucho calor bajan fuerte el score. Con el escalón por P10 < 50, en ese ejemplo **todos** los cultivos de verano quedan en `alto` o `critico`, incluido el ganador (`sorgo`, que por promedio sería `medio`). No es un error: refleja la fórmula FAO frente a veranos de 30 a 45 días de calor. Hay que revisar el corte del escalón y `umbral_desfavorable` cuando se reentrene con MAGyP.
+
+---
+
+### `[x]` ML-6: Dataset con rindes reales MAGyP
+- **Objetivo:** Reemplazar el label `s_hidroclimatico`, que hoy calcula la fórmula FAO (el modelo solo la imitaba), por el **rinde real de MAGyP por departamento y campaña**. Usar las mismas fórmulas de features que producción (`providers/features.py`, Tarea C.2) y el mismo suelo y la misma topografía (arcilla 0–30 cm y pendiente Horn 3×3, Tarea C.3).
+- **Archivos Permitidos:**
+  - `backend/ml/generate_dataset.py` (reescrito).
+  - `backend/ml/magyp.py`, `backend/ml/calendario_siembra.py` y `backend/ml/fao_labels.py` (nuevos; `fao_labels.py` recibe `CROP_CATALOG` y `compute_fao_hydroclimatic_score`, que se siguen re-exportando desde `generate_dataset.py`).
+  - `backend/ml/test_dataset_magyp.py` (nuevo).
+  - `backend/ml/data/*`.
+  - `backend/providers/features.py`: refactor sin cambio de comportamiento, para exponer el cálculo puro de las features actuales.
+  - `.gitignore`.
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Alcance:** región pampeana (Buenos Aires, Córdoba, Santa Fe, Entre Ríos y La Pampa), campañas 2006/07–2024/25.
+  - **Fuente del label:** CSV consolidado `estimaciones-agricolas` de datos.magyp.gob.ar.
+  - **Cultivos:**
+    - `trigo` ← trigo total.
+    - `cebada` ← cebada total desde 2016/17 y **cebada cervecera hasta 2015/16**.
+    - `maiz_temprano` y `maiz_tardio` ← maíz: el mismo rinde, cada uno con su fecha de siembra.
+    - `soja_primera` ← soja 1ra; `soja_segunda` ← soja 2da.
+    - `girasol` y `sorgo`.
+  - **Rinde ajustado por abandono:** `rinde_aj = rendimiento × min(1, fc / fc_típica)`.
+    - `fc` es la superficie cosechada sobre la sembrada de esa campaña.
+    - `fc_típica` es la mediana de `fc` del departamento y cultivo en los años de entrenamiento.
+    - Así el silo y el pastoreo habituales (22% del maíz y 26% del sorgo no se cosechan para grano) no penalizan, pero el abandono extra de una sequía sí.
+  - **Puntaje:** `50 + 100 × (rinde_aj / tendencia − 1)`, recortado a [0, 100]. 50 es un año normal y 30 es un rinde 20% debajo de la tendencia.
+  - **Calendario de siembra único** para la región pampeana (inicio–fin):
+    - Verano: `maiz_temprano` 15/09–31/10, `maiz_tardio` 01/12–10/01, `soja_primera` 25/10–10/12, `soja_segunda` 10/12–15/01, `girasol` 15/09–15/11, `sorgo` 01/11–20/12.
+    - Invierno: `trigo` 20/05–31/07, `cebada` 01/06–20/07, `camelina` 15/05–30/06, `vicia_cobertura` 01/03–30/04, `avena_cobertura` 15/02–30/04.
+  - **Filas:** se mantienen las ventanas de 10 días.
+    - Cada ventana de una campaña lleva el mismo label MAGyP, con `sample_weight = 1/n_ventanas` de ese departamento, campaña y cultivo.
+    - Las ventanas van desde la habilitación de la campaña (regla §4.1: mes de t + 45 días) hasta el fin de siembra del cultivo.
+  - **Feature nueva `dias_hasta_siembra`** = inicio de siembra − t, en días. Es negativa dentro de la ventana de siembra. Con ella el modelo pasa a tener 13 features.
+  - **Ventana futura:** en el entrenamiento se usa la observada en ese año. En producción se usa el ensemble de años análogos (ML-5).
+  - **Split por campaña:**
+    - train: 2006/07–2018/19
+    - val: 2019/20–2021/22
+    - test: 2022/23–2024/25
+  - **Híbrido FAO, solo en train:**
+    - Cultivos de cobertura sin dato MAGyP (`vicia_cobertura`, `avena_cobertura`, `camelina`): peso 0,5.
+    - Filas What-If extremas: peso 0,25.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Punto por departamento:** el centroide de georef (apis.datos.gob.ar), deduplicando las celdas de NASA POWER que se comparten.
+    - Suelo y topografía salen de los providers del backend (`fetch_perfil_suelo`, `fetch_topografia`) en el centroide. Ya implementan C.3 (arcilla 0–30 cm ponderada y Horn 3×3 a 300 m).
+    - **Sin ruido artificial**: no hay jitter de pendiente, arcilla ni elevación, porque ahora la variación espacial es real.
+  - **Features idénticas a producción:**
+    - Las actuales salen de una función pura extraída de `construir_insumos_ml`, que recibe la serie de los 100 días previos al corte, la climatología 2006–2025 y los datos estáticos.
+    - Las futuras salen de `escenarios_ventana_futura(calendario, t)`, tomando el escenario del año de t.
+    - Los topes son los de `aplicar_topes`.
+  - **Tendencia:** Theil–Sen (mediana de pendientes, robusta a años de sequía) sobre los años de entrenamiento de cada departamento y cultivo. La tendencia tiene un piso del 30% de la mediana.
+  - **Filtros:**
+    - Superficie sembrada ≥ 1.000 ha.
+    - ≥ 8 campañas de entrenamiento con dato por departamento y cultivo (si no, se descarta).
+  - **Escala FAO → MAGyP:** las filas FAO usan un mapeo por cuantiles por campaña, ajustado con las filas MAGyP de train, para que 50 signifique lo mismo en ambas fuentes.
+  - **Filas What-If con label delta:** `label = label_MAGyP + (FAO_mapeado(perturbada) − FAO_mapeado(original))`. El nivel real se conserva y FAO solo aporta la dirección de la sensibilidad. Son el 15% de las filas reales de train, con las perturbaciones de ML-1.
+  - **Archivos de salida:**
+    - Commiteados: `data/magyp_pampa.csv` (filtrado), `data/departamentos_pampa.json` (centroide, suelo y topografía), `data/dataset_magyp_{train,val,test}.csv.gz` y `data/dataset_magyp_metadata.json`, además de `data/dataset_magyp_escenarios.csv.gz`: los años análogos (sin el año evaluado) de cada departamento y fecha t de val y test, para la evaluación de ML-7.
+    - Sin commitear (`.gitignore`): el CSV crudo de MAGyP y la caché de NASA por celda (`data/cache/`).
+    - Los CSV del modelo FAO actual quedan hasta ML-7, que los reemplaza al reentrenar.
+  - **Sin modelo nuevo en ML-6:** el predictor y el backend no cambian; `dias_hasta_siembra` se cablea en ML-7.
+- **Especificación Técnica:**
+  1. `calendario_siembra.py`: `CALENDARIO`, `campana_de(t)`, `inicio_siembra(cultivo, anio_campana)`, `dias_hasta_siembra(cultivo, t)` y `fechas_ventana(campana, anio_campana)`.
+  2. `magyp.py`: descarga y filtrado, mapeo de cultivos, `rinde_ajustado`, `tendencia_theil_sen` y `puntaje_vs_tendencia`.
+  3. `providers/features.py`: `features_actuales_desde_series(...)` (puro), usado por `construir_insumos_ml` sin cambiar su salida.
+  4. `generate_dataset.py`: centroides → estáticos por departamento → NASA por celda (secuencial, reanudable) → filas → split → archivos + metadata.
+  5. Tests:
+     - Calendario: campaña, `dias_hasta_siembra` y cruce de año.
+     - MAGyP: ajuste por abandono, Theil–Sen contra un caso conocido, puntaje, cebada cervecera/total y filtros.
+     - Paridad: una fila del dataset coincide con `construir_insumos_ml` para la misma celda y el mismo corte.
+     - Pesos: la suma por departamento, campaña y cultivo es 1.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && .venv\Scripts\python.exe -m pytest -q`: todos en verde.
+  - `cd backend && .venv\Scripts\python.exe -m ml.generate_dataset`: genera los archivos.
+  - La metadata muestra filas por split y por fuente, y la distribución del label.
+  - **Sanidad:** las campañas de sequía 2008/09 y 2022/23 dan puntaje medio de maíz y soja < 40.
+
+- **Cambios durante la implementación (acordados con el desarrollador):**
+  - **Tendencia del label:** se ajusta con **todo el período 2006–2024** y no solo con train. Con train solamente, la tendencia proyectaba rindes más altos que los reales de 2019–2024 y corría la escala del label entre los splits (MAE 25 en lugar de 17). La tendencia solo usa rindes, nunca clima.
+  - **Features futuras en el período crítico de cada cultivo** (ver ML-7), con lluvia acumulada y ONI. Antes eran los 90 días posteriores a t.
+  - **Calendario de lluvia diaria en el backend** (`telemetria-v3`): se regeneró el precálculo de las 299 celdas.
+  - **`dataset_magyp_escenarios.csv.gz`:** features críticas por departamento × cultivo × año. ML-7 las usa para evaluar con años análogos.
+  - **Chascomús:** georef usa el código nuevo `06218` y MAGyP el viejo `06217`; se mapean.
+  - **Generador offline:** usa un timeout de 90 s para SoilGrids, porque ISRIC llegó a tardar 30 s por consulta. Hace hasta 4 consultas en vuelo para respetar el límite de 5/min y reintenta más allá del corte automático. Producción no cambia.
+- **Resultado de la Verificación (2026-11-15):**
+  - **Departamentos:** 169 de 170.
+    - Suelo: 166 con dato de SoilGrids, 1 de un píxel vecino y 2 con el valor regional.
+    - Topografía: 169 con SRTM.
+    - A un departamento le falta el dato estático; se reintenta en la próxima corrida.
+  - **Filas:**
+    - train: 176587 reales, 65910 de cobertura FAO y 26488 What-If con label delta
+    - val: 42135
+    - test: 42034
+  - **Sanidad:** puntaje medio de maíz y soja en las sequías: {'2008/2009': 11.0, '2017/2018': 30.6, '2022/2023': 17.4} (las tres < 40 ✅).
+  - **Tests:** `cd backend && pytest -q` da 234 en verde.
+
+---
+
+### `[x]` ML-7: Reentrenamiento con el dataset MAGyP (aceptación parcial: 2 de 3 criterios)
+- **Objetivo:** Entrenar `modelo_agro.joblib` sobre el dataset de ML-6 (13 features, label = rinde real vs. tendencia) y medirlo de forma honesta, igual que funciona en producción. Además, conectar `dias_hasta_siembra` en el predictor y el backend.
+- **Archivos Permitidos:**
+  - `backend/ml/train_baseline.py` (reescrito).
+  - `backend/ml/modelo_agro.joblib`.
+  - `backend/ml/data/training_metrics.json`.
+  - `backend/ml/predictor.py` y `backend/ml/test_predictor.py`.
+  - `backend/ml/visualize_model.py`.
+  - `backend/services/simulation_service.py` (pasa `fecha_corte`), `backend/schemas.py` (flag `fuera_de_ventana_siembra`), `backend/routers/test_simulate.py` y `CONTEXT.md` (§4.2, §4.3, §5).
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Evaluación igual que producción:**
+    - En val y test, cada fila se predice con el **ensemble de años análogos** (`escenarios_ventana_futura` de la celda, **sin el año evaluado**), promediado como en `predict_ensemble`. Esa métrica decide.
+    - También se informa la métrica con el futuro observado, como techo teórico.
+  - **Criterio de aceptación en test:** el MAE ponderado (`sample_weight`, solo filas `magyp_real`) tiene que ser **≥ 10% menor** que el de las dos líneas base, en el mismo régimen de ensemble:
+    1. **Año normal:** la media ponderada de train por cultivo.
+    2. **FAO mapeado:** `compute_fao_hydroclimatic_score` llevado a la escala MAGyP con el mapeo por cuantiles de ML-6.
+  - **Monotonía agronómica:** HistGradientBoosting con `monotonic_cst = −1` en `frecuencia_estres_termico` y `frecuencia_riesgo_helada` (el puntaje no sube con más calor ni con más heladas). El resto de las features queda libre, porque el exceso de agua también daña.
+  - **Chequeo de sequía de ML-2 (CONTEXT §5): informativo.** Se calcula y se informa, pero no bloquea.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Features:** las 13 de ML-6. `cultivo_candidato` es categórica. **Sin** `departamento_id`, lat ni lon, para que el modelo no memorice lugares y sirva para cualquier lote.
+  - **Entrenamiento:** `fit(..., sample_weight=...)`.
+    - Early stopping **propio**: se entrena con un `max_iter` alto, se elige la iteración con `staged_predict` según el MAE de val en régimen ensemble, y se reentrena con esa cantidad de iteraciones.
+    - Nada de `validation_fraction` aleatorio: mezclaría ventanas de la misma campaña entre train y val.
+  - **Búsqueda chica de hiperparámetros** (4 a 6 combinaciones de `learning_rate`, `max_leaf_nodes`, `min_samples_leaf` y `l2_regularization`) elegida por el MAE de val en ensemble. Se descarta RandomForest, porque no admite restricciones de monotonía en sklearn.
+  - **Modelo final:** se reentrena con train + val usando los hiperparámetros y la cantidad de iteraciones elegidos. Test queda solo para informar.
+  - **Métricas informadas** (val y test, ensemble y observado):
+    - MAE, RMSE y R² ponderados.
+    - MAE por cultivo.
+    - Spearman entre cultivos por departamento y campaña (calidad del ranking).
+    - Recall de años malos (label < 35).
+  - **Predictor:**
+    - `predict_ensemble`, `predict_and_recommend` y `run_recommendation` reciben `fecha_corte` (keyword).
+    - `dias_hasta_siembra` se calcula por cultivo con `ml/calendario_siembra.py`. Si no viene `fecha_corte`, se usa la fecha UTC de hoy.
+    - Los cultivos con la siembra ya terminada no se sacan del ranking: llevan `fuera_de_ventana_siembra: true`.
+  - **Backend:** `simulation_service` pasa `fecha_corte = insumos.fecha_corte`. `ItemRanking` gana `fuera_de_ventana_siembra: bool = false`.
+  - **Tests que fijaban valores de la fórmula FAO:** se pasan a chequeos estructurales y direccionales (por ejemplo, que la sequía baje el puntaje). Los umbrales de riesgo se recalibran en ML-8.
+  - **Bundle:**
+    - Se mantienen las claves actuales (`model`, `feature_columns`, `crops_catalog`, `feature_importances`, `feature_baselines`).
+    - Se suma `model_version = "ml7-magyp"` y el resumen de métricas.
+- **Especificación Técnica:**
+  1. `train_baseline.py`: carga de `dataset_magyp_*.csv.gz` y de los escenarios de val/test → búsqueda con early stopping propio → refit con train + val → métricas y líneas base → importancias por permutación sobre test → bundle.
+  2. `predictor.py`: 13 features, `fecha_corte` y `fuera_de_ventana_siembra`.
+  3. `simulation_service.py` y `schemas.py`: pasar `fecha_corte` y agregar el flag.
+  4. Tests: el predictor con el modelo nuevo (estructura, monotonía y latencia), el flag de siembra y el endpoint.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && .venv\Scripts\python.exe -m ml.train_baseline`: imprime las métricas y el criterio de aceptación da `passed`.
+  - `cd backend && .venv\Scripts\python.exe -m pytest -q`: todos en verde.
+  - Latencia p95 del ensemble (6 cultivos × 20 escenarios) `< 15 ms`.
+
+- **Cambios durante la implementación (acordados con el desarrollador):**
+  - **Diagnóstico:** con los 90 días posteriores a t, el modelo no le ganaba a "año normal" **ni siquiera con el clima observado**. El rinde se define en el período crítico (floración y llenado), que esa ventana no cubría.
+  - **Período crítico + ENSO:**
+    - Las features futuras se miden en la ventana crítica de cada cultivo (`calendario_siembra.OFFSET_PERIODO_CRITICO`), más la lluvia acumulada.
+    - El ONI publicado al decidir es una feature, y además pondera los años análogos (`providers/enso.py`, `ml/escenarios.py`).
+  - **Selección por validación cruzada dejando una campaña afuera** (16 campañas) en lugar del early stopping por val. Val (2019–2021) son 3 campañas sin sequías fuertes: cortaba a 1–7 iteraciones, mientras test mejoraba hasta las 100–200.
+  - **Criterio de aceptación nuevo:** el 10% en producción no es alcanzable antes de sembrar. Quedan tres criterios:
+    - producción contra "año normal": ≥ 5%
+    - producción contra FAO: ≥ 10%
+    - What-If contra "año normal": ≥ 15%
+  - **`MAX_ITER` subió a 1500**, porque la validación cruzada con 500 quedaba en el tope. Se usa la cantidad de iteraciones que elige la validación cruzada, **no** la que mejor rinde en test.
+- **Resultado de la Verificación (2026-11-15):**
+  - **Modelo:** `{'learning_rate': 0.03, 'max_leaf_nodes': 7, 'min_samples_leaf': 1500, 'l2_regularization': 20.0, 'max_iter': 827, 'monotonic_cst': [0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, 0, 0, 0]}`.
+  - **Validación cruzada:** MAE 17.755, contra 18.918 de "año normal".
+  - **Test 2022–2024:**
+
+    | Régimen | MAE | R² | AUC años malos |
+    | :--- | :---: | :---: | :---: |
+    | Producción, años análogos ponderados por ONI | 17.74 | 0.043 | 0.76 |
+    | Producción, años análogos uniformes | 17.80 | 0.025 | 0.74 |
+    | What-If, clima observado | 14.76 | 0.315 | 0.80 |
+    | Línea base "año normal" | 18.35 | -0.115 | 0.52 |
+    | Línea base FAO mapeado | 23.47 | -0.557 | 0.64 |
+
+  - **Aceptación:**
+    - producción contra "año normal": 3.3% ❌ (mínimo 5%)
+    - producción contra FAO: 24.4% ✅
+    - What-If: 19.6% ✅
+  - **Por campaña** (puntaje real / predicho en producción): {a: (v['real'], m['test_produccion_oni']['por_anio'][a]['predicho']) for a, v in m['test_produccion_oni']['por_anio'].items()}. En la sequía de 2022/23 el modelo anticipa la dirección, pero no la magnitud.
+  - **Importancias:** lluvia del período crítico 0,33, calor del período crítico 0,23, ONI 0,19, cultivo 0,12, humedad radicular 0,06.
+  - **Chequeos:**
+    - Monotonía: OK.
+    - Latencia p95 del ensemble 6×20: 5.228 ms.
+    - Benchmark de sequía de CONTEXT §5 (informativo): no se cumple, con margen 3.15.
+  - **Debilidad para ML-8 y ML-9:** el ranking **entre cultivos** del mismo año es débil (Spearman ~0,04–0,10). En una sequía extrema todos los cultivos dan bajo y decide el pilar suelo. Causas: `maiz_temprano` y `maiz_tardio` comparten el label "maíz", y 16 campañas no alcanzan para aprender cómo afecta el clima a cada cultivo.
+  - **Tests:** los que fijaban valores de la fórmula FAO pasaron a chequeos estructurales y direccionales. `cd backend && pytest -q` da 234 en verde; `python -m unittest backend/ml/test_predictor.py` da OK.
+  - **Pendiente:** `ml/visualize_model.py` todavía lee el `test.csv` del modelo FAO (borrado). Resuelto en ML-8.
+
+---
+
+### `[x]` ML-10: Cultivos sin rinde MAGyP fuera del modelo y penalización por demanda hídrica
+- **Objetivo:** Que el ranking respete el estado del agua del lote también en invierno. Con ML-7, en sequía el trigo quedaba primero en el pilar hidroclimático porque las coberturas caían a 6–8 puntos. Ese desplome venía de su label (fórmula FAO mapeada), no de datos reales.
+- **Archivos Permitidos:** `backend/ml/train_baseline.py`, `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `backend/ml/TASKS_ML.md`, `CONTEXT.md`.
+- **Decisiones (propuestas por el agente y aprobadas por el desarrollador el 2026-11-15; los valores numéricos los eligió el agente y quedan abiertos a revisión):**
+  - **Coberturas fuera del entrenamiento:** `train_baseline.py` descarta las filas `fao_cobertura`. El dataset no se regenera. El bundle suma `cultivos_entrenados` (los 8 con rinde MAGyP).
+  - **Puntaje relativo:** para `vicia_cobertura`, `avena_cobertura` y `camelina`, `S = 50 + (Ky_cultivo / Ky_referencia) × (S_referencia − 50)`. La referencia es el promedio de los cultivos entrenados de la misma campaña (trigo y cebada), año análogo por año análogo. `Ky` sale de `ky_drought` en `ml/fao_labels.py`.
+  - **Penalización por demanda hídrica:** `penalizacion_demanda_hidrica(cultivo, gwetroot)` en `rotation_matrix.py`. Resta hasta 10 puntos a `S_hidroclimatico`: severidad lineal entre 45% y 25% de agua en las raíces, por demanda relativa entre 200 y 550 mm (`CONSUMO_AGUA_CICLO_MM`). Se aplica a todos los cultivos, en `predict_hydroclimatic_batch` y en `predict_ensemble` (con el `GWETROOT` del What-If si hay override).
+  - **Explicación:** si la mayor penalización es de 2 puntos o más, `explicacion` agrega una oración que lo dice.
+  - **Contrato:** sin cambios en `schemas.py` ni en el JSON de §5.
+  - **Las filas What-If (fórmula FAO) siguen en el entrenamiento.** Medir si conviene sacarlas queda en la hoja de ruta (CONTEXT §4.7).
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && .venv\Scripts\python.exe -m ml.train_baseline` (con `PYTHONIOENCODING=utf-8` si se redirige la salida).
+  - `cd backend && .venv\Scripts\python.exe -m pytest -q`.
+- **Resultado de la Verificación (2026-11-15):**
+  - **Reentrenamiento (solo cultivos con rinde MAGyP):** el mismo modelo gana la validación cruzada (`hgb_v1`, 708 iteraciones). MAE de validación cruzada 17.794, contra 17.755 en ML-7 y 18.918 de "año normal".
+  - **Test 2022–2024:**
+
+    | Régimen | MAE ML-10 | MAE ML-7 | AUC años malos |
+    | :--- | :---: | :---: | :---: |
+    | Producción, años análogos ponderados por ONI | 17.93 | 17.74 | 0.76 |
+    | What-If, clima observado | 14.95 | 14.76 | 0.80 |
+    | Línea base "año normal" | 18.35 | 18.35 | 0.52 |
+
+  - **Lectura:** sacar las coberturas empeora 0,2 puntos el MAE de los cultivos reales, dentro del ruido de la validación cruzada. Las filas de la fórmula FAO funcionaban como regularización leve, no como información. Se acepta a cambio de no mezclar dos escalas en el ranking.
+  - **Aceptación:** sigue fallando el mismo criterio que en ML-7 (producción contra "año normal": 2.3%, mínimo 5%), por eso `train_baseline` termina con código 1. Contra FAO 23.6% ✅, What-If 18.6% ✅. Monotonía OK, latencia p95 4.3 ms.
+  - **Efecto en el ranking (lote sintético con perfil seco, 30% de agua en las raíces, ONI −1):**
+    - Invierno, pilar hidroclimático: camelina 32.9, vicia 31.2, avena 31.0, trigo 22.1, cebada 18.3. En ML-7 era trigo 28.0 primero y coberturas 6–9. Con objetivo `equilibrio`, gana avena de cobertura.
+    - Verano: girasol 29.2, sorgo 23.2, maíz temprano 16.0, soja de primera 15.2, maíz tardío 8.7, soja de segunda 7.9. Con `equilibrio`, gana sorgo.
+    - Con perfil normal o húmedo no hay penalización y las coberturas quedan a menos de 2 puntos de trigo y cebada.
+  - **Tests:** `pytest -q` da 240 en verde (6 nuevos: 1 en `test_rotation_matrix.py`, 5 en `test_predictor.py`).
+
+---
+
+### `[x]` ML-8: Umbrales de riesgo en la escala MAGyP y cultivos fuera de ventana
+- **Objetivo:** Que el `riesgo` que ve el productor tenga sentido con el modelo de rindes reales. Con los cortes heredados de la escala FAO (`critico` si $S_{\text{hidro}} < 50$), la mitad de los casos salía `critico`, incluido el cultivo recomendado.
+- **Cambio de alcance:** la parte de "ranking híbrido con contraste FAO (λ por CV)" de la definición original no se hizo. La reemplazan las reglas explícitas de ML-10 (coberturas por `Ky` y demanda hídrica), más simples de explicar. Si hiciera falta, queda en la hoja de ruta de CONTEXT §4.7.
+- **Archivos Permitidos:** `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/ml/visualize_model.py`, `backend/routers/test_simulate.py` (un valor esperado), `backend/ml/TASKS_ML.md`, `CONTEXT.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):** a partir de la calibración del ensemble de producción en val + test (2019–2024; tasa base de años malos 25%):
+  - **Cortes:** `critico` < 40, `alto` 40–45, `medio` 45–50, `bajo` ≥ 50 sobre el promedio del ensemble (`HYDRO_RISK_THRESHOLDS`). Años malos reales por tramo: 52%, 33%, 23% y 13–16%.
+  - **Escalón por P10:** sube un nivel si P10 < 30 (`CRITICAL_HYDRO_THRESHOLD`).
+  - **`umbral_desfavorable`:** 40 (`DEFAULT_UMBRAL_DESFAVORABLE`).
+  - **Suelo:** $S_{\text{suelo}} < 35$ → al menos `alto`. Se eliminan los cortes sobre `score_final`, que mezclaban escalas; `classify_crop_risk(s_hidroclimatico, s_suelo)` ya no recibe `score_final`.
+- **Hallazgo en la prueba de punta a punta y corrección (propuesta por el agente):** el 15/11 el endpoint recomendaba Maíz Temprano en Pergamino y Tres Arroyos aunque su siembra terminó el 31/10. Ahora los cultivos con `fuera_de_ventana_siembra` van al final del ranking (siguen apareciendo, no se excluyen) y no pueden ser el ganador ni la alternativa. También se corrigió la frase "a diferencia del Maíz Temprano (riesgo crítico en floración)", que salía aunque su riesgo fuera `bajo`: ahora requiere riesgo `alto` o `critico`.
+- **`visualize_model.py`:** lee `dataset_magyp_test.csv.gz`, usa las 15 features y las métricas nuevas (producción, What-If y "año normal" por cultivo) y solo grafica los cultivos entrenados. Regenera los 7 gráficos en `backend/ml/reports/`.
+- **Resultado de la Verificación (2026-11-15):**
+  - `cd backend && .venv\Scripts\python.exe -m pytest -q`: 244 en verde.
+  - `POST /api/v1/simulate` con datos reales el 15/11 (verano, viniendo de soja de primera, objetivo `equilibrio`):
+
+    | Lugar | Agua en las raíces | Lluvia 90 días | Recomendado | Riesgo |
+    | :--- | :---: | :---: | :--- | :---: |
+    | Pergamino | 46% | −39% | Maíz Tardío (alternativa Sorgo) | `medio` |
+    | Río Cuarto | 42% | +27% | Maíz Tardío (alternativa Sorgo) | `bajo` |
+    | Tres Arroyos | 59% | −27% | Maíz Tardío (alternativa Sorgo) | `bajo` |
+
+    Repetir soja queda `alto` en los tres por el pilar suelo. Latencia: 9 s en frío, 1,5 s con caché.
+
+---
+
+### `[x]` ML-11: Lote ocupado por el antecesor de invierno (solo cultivos de segunda)
+- **Objetivo:** No recomendar cultivos imposibles. Al probar Marcos Juárez con antecesor trigo (15/11), el ranking ponía Soja de Primera segunda y como alternativa, y la estrategia testigo era "trigo → soja de primera". Esa secuencia no existe: el trigo se cosecha en noviembre-diciembre y la soja que va después es, por definición, de segunda. Lo mismo vale para girasol y maíz temprano.
+- **Decisión Acordada con el Desarrollador (2026-11-15):** marcar y mandar al final, no excluir. Campo nuevo y opcional `motivo_no_sembrable` en `ranking_cultivos` (texto o `null`), que también cubre la siembra terminada. `fuera_de_ventana_siembra` se mantiene con su significado (solo fecha).
+- **Regla (`services/rotation_matrix.motivo_lote_ocupado`):** campaña `verano` y antecesor en `CULTIVOS_INVIERNO_COSECHA` (`trigo`, `cebada`, `camelina`) → solo se pueden sembrar `CULTIVOS_DE_SEGUNDA` (`soja_segunda`, `maiz_tardio`, `sorgo`). Las coberturas, el barbecho o un antecesor de verano no restringen.
+- **Testigo:** con antecesor de invierno de cosecha, `compare_rotation_strategies("verano", ...)` usa `soja_segunda` (doble cultivo) en lugar de `soja_primera`.
+- **Archivos:** `backend/services/rotation_matrix.py`, `backend/ml/predictor.py`, `backend/schemas.py` (campo opcional, compatible), `backend/ml/test_predictor.py`, `backend/routers/test_simulate.py`, `CONTEXT.md`.
+- **También en este cambio:** el contraste "menor adaptación al escenario actual" de la explicación se toma del peor cultivo **sembrable**. Antes podía nombrar a uno que quedó último solo por fecha.
+- **Pendiente detectado (no resuelto):** las estrategias "defensiva" y "regenerativa" siguen proponiendo `vicia_cobertura (invierno)` antes del cultivo de verano aunque ese invierno ya fue trigo. Se lee como sugerencia para el año siguiente; conviene aclarar la redacción.
+- **Resultado de la Verificación (2026-11-15):** `pytest -q` da 247 en verde. Marcos Juárez, verano, antecesor trigo: Soja de Segunda (alternativa Maíz Tardío), riesgo bajo; Soja de Primera, Girasol y Maíz Temprano al final con "El lote está ocupado por Trigo hasta la cosecha (noviembre-diciembre): solo se pueden sembrar cultivos de segunda."
+
+---
+
+### `[x]` ML-12: Años análogos por fase ENSO y riesgo térmico coherente
+- **Origen:** revisión externa de la respuesta de Marcos Juárez (15/11/2026, ONI publicado +2,46, El Niño fuerte). Dos observaciones, ambas confirmadas:
+  1. **"Los 19 años análogos no son análogos".** El promedio sí estaba ponderado por ONI, pero con el peso gaussiano (σ = 0,5) y un ONI tan alto, el 81% del peso caía en 2015 y el 19% en 2023 (N efectivo 1,45). Mientras tanto, `anios_desfavorables`, `anios_evaluados` y `peor_escenario` se calculaban **sin pesos** sobre los 19 años. Por eso la explicación citaba como peor caso a 2022 (La Niña, 40 días de más de 34 °C), un año con peso cero.
+  2. **"Riesgo térmico alto" contra riesgo bajo en los cultivos.** `telemetria_nasa.riesgo_termico_verano` era el promedio histórico de días de calor de la celda (31,5 en Marcos Juárez → `alto`), sin mirar el ENSO. En los años El Niño esa zona tuvo 10,8 días de calor en el período crítico de la soja de segunda, contra 18,3 en los años La Niña.
+- **Decisión (propuesta por el agente a partir de la sugerencia del revisor; el desarrollador pidió continuar):**
+  - `providers/enso.py`: `fase_enso` y `pesos_por_fase`. Son análogos los años de la misma fase que hoy (umbral NOAA ±0,5), con peso 1; el resto, peso 0. Si la fase tiene menos de `MIN_ANIOS_ANALOGOS = 5` años, se completa con los de ONI más cercano. `pesos_por_oni` (gaussiano) queda sin uso en producción.
+  - `ml/escenarios.py`: `pesos_analogos` usa `pesos_por_fase`; `escenarios_por_cultivo` devuelve solo los años análogos. Así promedio, P10, P90, conteo, peor escenario y el escenario representativo de las anomalías salen del mismo conjunto. `train_baseline` evalúa con la misma función.
+  - `ml/predictor.py`: la oración de riesgo empieza con "Hoy rige El Niño (ONI +2.5); se comparó con los años de esa misma fase."
+  - `services/simulation_service.py`: en verano, `riesgo_termico_verano` es el que calcula el predictor con los días de calor de los años análogos. En invierno queda el climatológico.
+- **Resultado de la Verificación (2026-11-15):**
+  - `pytest -q`: 248 en verde.
+  - Marcos Juárez, verano, antecesor trigo: Soja de Segunda 72,7, riesgo bajo; 0 de 5 años análogos desfavorables; peor escenario 2023 (El Niño, 19 días de calor) con 51; riesgo térmico `bajo`.
+  - Test 2022–2024 en producción con el filtro por fase: MAE 17.9 (mejora 2,4% sobre "año normal"; con peso gaussiano era 17.93 y 2.3%), AUC de años malos 0,77. Sequía 2022/23: real 22.2, predicho 43.6 (antes 43.9). El modelo es el mismo de ML-10: solo cambia cómo se eligen los años análogos.
+- **Límite que queda:** entre 5 y 8 años por fase son pocos; el P10 es casi el peor año. No se verificó el pronóstico del SMN que cita el revisor: el sistema no usa pronósticos, solo la fase ENSO ya observada.
+
+---
+
+### `[x]` ML-13: Años análogos desde 1981
+- **Objetivo:** Con 19 años de histórico, cada fase ENSO tenía 5 a 8 años análogos y el P10 era casi el peor año. NASA POWER tiene clima diario desde 1981.
+- **Decisión (propuesta por el agente, aprobada por el desarrollador el 2026-11-15):** solo el calendario de años análogos se extiende a 1981–2025. La climatología de lluvia (feature `anomalia_lluvia_90d_pct`) y el promedio de días de calor siguen en 2006–2025: así ninguna feature del modelo cambia y no hace falta reentrenar por este motivo.
+- **Implementación:**
+  - `providers/nasa_telemetry.py`: `ANALOGOS_START = 1981-01-01`; `calcular_referencia` calcula la climatología y los días de calor sobre 2006–2025 (`recortar_serie`) y los calendarios sobre toda la serie. `VERSION_CALCULO = "telemetria-v4"` invalida las cachés viejas. El cálculo en vivo pide 1981–2025.
+  - `providers/generar_precache.py` regenera las 299 celdas de `climatologia_pampa.json` desde 1981 (7,5 → 15,8 MB; carga en 0,4 s).
+  - `ml/generate_dataset.py`: descarga aparte 1981 → 2005-09 de las 140 celdas de departamentos (`data/cache/nasa_analogos_1981/`, solo lluvia y temperaturas) y la antepone a la serie de cada celda.
+  - `ml/train_baseline.py --solo-evaluar`: reevalúa el modelo guardado en ~40 s, sin la búsqueda por CV ni el reentrenamiento (útil cuando cambia la evaluación y no el modelo).
+- **Verificación de que las features no cambian:** el dataset regenerado tiene las 284.500 filas anteriores con features y label idénticos (comparación numérica fila por fila). Test nuevo `test_referencia_desde_1981_no_cambia_climatologia_ni_dias_de_calor`. Marcos Juárez: 31,5 días de calor, igual que antes.
+- **Cambio no buscado:** al regenerar, San Vicente (06778) entró al dataset: estaba excluido porque SoilGrids no había respondido, y la corrida de descargas reintentó con éxito. 170 departamentos, 575 filas más en train y 46 en test. Por eso se reentrenó completo en lugar de usar `--solo-evaluar`: mismos hiperparámetros, 735 iteraciones (antes 708).
+- **Resultado de la Verificación (2026-11-15):**
+  - Años análogos para noviembre: El Niño 5 → 12 (se suman 1982, 1986, 1987, 1991, 1997, 2002, 2004), La Niña 6 → 10, neutro 8 → 22.
+  - Test 2022–2024:
+
+    | Producción | MAE | AUC años malos |
+    | :--- | :---: | :---: |
+    | Misma fase ENSO, 2006–2024 (ML-12) | 17.91 | 0.766 |
+    | **Misma fase ENSO, 1981–2024 (ML-13)** | **17.85** | **0.784** |
+    | Todos los años 1981–2024 sin filtrar | 18.18 | 0.748 |
+    | Línea base "año normal" | 18.36 | 0.516 |
+
+    Con más años, filtrar por fase ENSO ayuda de forma clara (17,85 contra 18,18 sin filtrar). Aceptación: producción contra "año normal" 2,8% (sigue debajo del 5%); FAO 23,0% ✅; What-If 19,1% ✅.
+  - Marcos Juárez (verano, tras trigo, 15/11): Soja de Segunda 72,1, riesgo bajo, 0 de 12 años El Niño desfavorables; riesgo térmico `medio` (antes `bajo` con 5 años).
+  - `pytest -q`: 250 en verde.
+- **Límite:** los veranos de los 80 y 90 tuvieron menos días de calor y la lluvia anterior a 2000 no tiene GPM; documentado en CONTEXT §4.7.
+
+---
+
+### `[x]` ML-14: Secuencias que respetan el invierno que ya pasó
+- **Objetivo:** La secuencia sugerida salía fija del perfil de cada cultivo. Tras trigo, la estrategia defensiva decía "vicia_cobertura (invierno) -> sorgo (verano)" aunque ese invierno ya había sido trigo.
+- **Implementación:** `rotation_matrix.secuencia_real(campana, cultivo_anterior, candidato)`. En verano la secuencia empieza por el invierno real: el antecesor si es de invierno, o `barbecho` si no lo es o no hay antecesor. Si el perfil propone otro invierno, se agrega `; próximo ciclo: <secuencia del perfil>`. En invierno la secuencia del perfil empieza por el propio candidato y se usa tal cual. La usan `secuencia_sugerida` y las estrategias defensiva y regenerativa.
+- **Ejemplo:** tras trigo, defensiva = "trigo (invierno) -> sorgo (verano); próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)".
+- **Verificación:** test nuevo `test_secuencia_real_respeta_el_invierno_que_ya_paso`; `pytest -q` 250 en verde.
+
+---
+
+### `[x]` ML-15: Explicación en lenguaje de productor
+- **Origen:** revisión del desarrollador de la respuesta para -33.935, -60.579 (verano, antecesor trigo, `equilibrio`, 15/11/2026). La recomendación (Soja de Segunda) era correcta, pero la explicación tenía cuatro problemas y faltaba decir qué no se puede sembrar.
+- **Cambios en `build_explanation` y `build_key_ml_factors` (`ml/predictor.py`), acordados con el desarrollador:**
+  1. **Escala:** "ofrece un 53% de aptitud hidroclimática y un 88% de beneficio edáfico" se leía como mediocre y venía de la escala FAO. Ahora: "tiene un rinde esperado levemente por encima de lo normal (53, donde 50 es un año normal) y un aporte al suelo y la rotación de 88 sobre 100" (`describir_rinde_esperado`).
+  2. **Contraste con números:** "A diferencia del Sorgo (menor adaptación al escenario actual)" pasa a dar el motivo: el P10 del ensemble si es más bajo ("rindes más variables en años como este: su peor 10% de años da 45, contra 50"), si no el puntaje esperado, si no el aporte al suelo.
+  3. **Reserva hídrica:** "baja" < 40%, "ajustada" < 50%, "adecuada" < 80%, "alta" desde 80% (`describir_reserva_hidrica`), en la explicación y en `factores_clave_ml`. Antes 46% salía como "rango adecuado" al lado de un déficit de lluvia del 39%.
+  4. **Práctica habitual:** si el ganador es el cultivo de la estrategia testigo y el antecesor es de la otra campaña, se agrega "Coincide con la práctica habitual después del Trigo: los datos de este año no muestran motivos para cambiarla."
+  5. **Cultivos no sembrables (pedido del desarrollador):** "Este verano no se pueden sembrar Soja de Primera, Maíz Temprano y Girasol: el lote está ocupado por el Trigo hasta la cosecha (noviembre-diciembre) y solo admite cultivos de segunda." Los de ventana cerrada van aparte: "Ya cerró la ventana de siembra de ...".
+- **Otros:** la alternativa ya no usa el texto fijo "(o Maíz Tardío precedido por Vicia)"; el contraste del Maíz Temprano no se menciona si no es sembrable. Las estrategias se calculan antes de la explicación para saber cuál es el testigo.
+- **Verificación (2026-11-15):** `pytest -q` 252 en verde (tests nuevos en `TestExplicacionML15`). Respuesta en vivo para las mismas coordenadas con los cinco cambios.
+

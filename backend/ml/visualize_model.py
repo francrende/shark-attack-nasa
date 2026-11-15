@@ -2,10 +2,10 @@
 Visualización del modelo entrenado (`modelo_agro.joblib`) — Herramienta de desarrollo ML.
 
 Genera en `backend/ml/reports/`:
-  01_importancia_global.png        Permutation importance global (val 2020-2022)
+  01_importancia_global.png        Permutation importance global (test 2022-2024, clima observado)
   02_importancia_por_cultivo.png   Heatmap de importancias normalizadas por cultivo
-  03_predicho_vs_real_test.png     Dispersión predicho vs real en Test (2023-2025)
-  04_error_por_cultivo.png         MAE por cultivo en Train / Val / Test
+  03_predicho_vs_real_test.png     Predicho vs rinde real MAGyP en test (clima del período crítico observado)
+  04_error_por_cultivo.png         MAE por cultivo: producción, What-If y línea base "año normal"
   05_curvas_respuesta_verano.png   Curvas de respuesta (PDP manual) de cultivos de verano
   06_curvas_respuesta_invierno.png Curvas de respuesta de cultivos de invierno
   07_arbol_ilustrativo.png         Primer árbol del ensamble HGB (profundidad limitada)
@@ -46,6 +46,9 @@ BASE_SCENARIO: dict[str, float] = {
     "pendiente_terreno_pct": 1.8,
     "elevacion_m": 78.5,
     "textura_arcilla_pct": 24.5,
+    "lluvia_periodo_critico_mm": 340.0,
+    "dias_hasta_siembra": 15,
+    "oni_actual": 0.0,
 }
 
 # Features a barrer en las curvas de respuesta: (nombre, min, max, etiqueta)
@@ -54,8 +57,8 @@ RESPONSE_SWEEPS: list[tuple[str, float, float, str]] = [
     ("anomalia_lluvia_90d_pct", -70, 80, "Anomalía de lluvia 90d (%)"),
     ("frecuencia_estres_termico", 0, 40, "Días con T2M_MAX > 34°C"),
     ("frecuencia_riesgo_helada", 0, 50, "Días con T2M_MIN < 2°C"),
-    ("pendiente_terreno_pct", 0, 8, "Pendiente SRTM (%)"),
-    ("textura_arcilla_pct", 8, 45, "Arcilla SoilGrids (%)"),
+    ("lluvia_periodo_critico_mm", 80, 700, "Lluvia del período crítico (mm)"),
+    ("oni_actual", -2, 2, "ONI (ENSO) publicado al decidir"),
 ]
 
 LABELS_ES: dict[str, str] = {
@@ -70,6 +73,9 @@ LABELS_ES: dict[str, str] = {
     "pendiente_terreno_pct": "Pendiente",
     "elevacion_m": "Elevación",
     "textura_arcilla_pct": "Arcilla",
+    "lluvia_periodo_critico_mm": "Lluvia período crítico",
+    "dias_hasta_siembra": "Días hasta siembra",
+    "oni_actual": "ONI (ENSO)",
     "cultivo_candidato": "Cultivo candidato",
 }
 
@@ -95,7 +101,9 @@ def _predict(bundle: dict[str, Any], X: np.ndarray) -> np.ndarray:
 
 
 def _crops(bundle: dict[str, Any], campana: str) -> list[str]:
-    return [c for c, v in bundle["crops_catalog"]["by_name"].items() if v["campana"] == campana]
+    """Cultivos de la campaña que puntúa el modelo (ML-10: solo los que tienen rinde MAGyP)."""
+    entrenados = set(bundle.get("cultivos_entrenados") or bundle["crops_catalog"]["by_name"])
+    return [c for c, v in bundle["crops_catalog"]["by_name"].items() if v["campana"] == campana and c in entrenados]
 
 
 # ---------------------------------------------------------------------------
@@ -133,15 +141,15 @@ def plot_importance_by_crop(bundle: dict[str, Any]) -> None:
 def plot_pred_vs_real(bundle: dict[str, Any], df_test: pd.DataFrame) -> None:
     y = df_test["s_hidroclimatico"].to_numpy()
     y_hat = _predict(bundle, _to_x(df_test, bundle))
-    m = bundle["metrics"]["test"]["global"]
+    m = bundle["metrics"]["test_whatif_observado"]["global"]
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
     for campana, color in (("invierno", "#1565c0"), ("verano", "#ef6c00")):
         mask = (df_test["campana"] == campana).to_numpy()
         axes[0].scatter(y[mask], y_hat[mask], s=6, alpha=0.35, color=color, label=campana)
     axes[0].plot([0, 100], [0, 100], "k--", lw=1)
-    axes[0].set_xlabel("S_hidroclimatico real (etiqueta FAO)")
+    axes[0].set_xlabel("Puntaje real (rinde MAGyP vs. tendencia, 50 = año normal)")
     axes[0].set_ylabel("S_hidroclimatico predicho")
-    axes[0].set_title(f"Test 2023-2025 | MAE={m['mae']:.2f}  RMSE={m['rmse']:.2f}  R²={m['r2']:.3f}")
+    axes[0].set_title(f"Test 2022-2024, clima observado | MAE={m['mae']:.2f}  RMSE={m['rmse']:.2f}  R²={m['r2']:.3f}")
     axes[0].legend()
     axes[0].set_xlim(-2, 102)
     axes[0].set_ylim(-2, 102)
@@ -157,17 +165,20 @@ def plot_pred_vs_real(bundle: dict[str, Any], df_test: pd.DataFrame) -> None:
 
 def plot_error_by_crop(bundle: dict[str, Any]) -> None:
     crops = _crops(bundle, "invierno") + _crops(bundle, "verano")
-    splits = [("train", "#a5d6a7"), ("val", "#42a5f5"), ("test", "#ef5350")]
+    splits = [
+        ("test_produccion_oni", "Producción (años análogos)", "#ef5350"),
+        ("test_whatif_observado", "What-If (clima observado)", "#42a5f5"),
+        ("base_anio_normal_test", 'Línea base "año normal"', "#9e9e9e"),
+    ]
     x = np.arange(len(crops))
     w = 0.27
     fig, ax = plt.subplots(figsize=(12, 5))
-    for k, (split, color) in enumerate(splits):
-        vals = [bundle["metrics"][split]["per_crop"][c]["mae"] for c in crops]
-        ax.bar(x + (k - 1) * w, vals, w, label=split, color=color)
-    ax.axhline(5.0, color="black", ls="--", lw=1, label="Umbral DoD MAE = 5")
+    for k, (clave, etiqueta, color) in enumerate(splits):
+        vals = [bundle["metrics"][clave]["por_cultivo"][c] for c in crops]
+        ax.bar(x + (k - 1) * w, vals, w, label=etiqueta, color=color)
     ax.set_xticks(x, crops, rotation=30, ha="right")
     ax.set_ylabel("MAE (pts)")
-    ax.set_title("Error absoluto medio por cultivo y split temporal")
+    ax.set_title("Error absoluto medio por cultivo en test 2022-2024")
     ax.legend()
     _save(fig, "04_error_por_cultivo.png")
 
@@ -178,7 +189,7 @@ def plot_response_curves(bundle: dict[str, Any], campana: str, filename: str) ->
     crops = _crops(bundle, campana)
     base = dict(BASE_SCENARIO)
     if campana == "invierno":
-        base.update({"frecuencia_estres_termico": 0, "frecuencia_riesgo_helada": 8})
+        base.update({"frecuencia_estres_termico": 0, "frecuencia_riesgo_helada": 8, "lluvia_periodo_critico_mm": 250.0})
     fig, axes = plt.subplots(2, 3, figsize=(15, 8.5))
     for ax, (feat, lo, hi, label) in zip(axes.ravel(), RESPONSE_SWEEPS):
         grid = np.linspace(lo, hi, 60)
@@ -260,7 +271,8 @@ def plot_tree(bundle: dict[str, Any], max_depth: int = 3) -> None:
 def main() -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     bundle = joblib.load(MODEL_PATH)
-    df_test = pd.read_csv(DATA_DIR / "test.csv")
+    df_test = pd.read_csv(DATA_DIR / "dataset_magyp_test.csv.gz", dtype={"departamento_id": str})
+    df_test = df_test[df_test["origen_muestra"] == "magyp_real"].reset_index(drop=True)
     print(f"Modelo: {bundle['model_name']} | entrenado: {bundle['trained_at']}")
     print("Generando gráficos en backend/ml/reports/ ...")
     plot_global_importance(bundle)

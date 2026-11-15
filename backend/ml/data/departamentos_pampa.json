@@ -1,0 +1,2898 @@
+{
+ "06014": {
+  "nombre": "Adolfo Gonzales Chaves",
+  "provincia": "Buenos Aires",
+  "lat": -37.96462,
+  "lon": -60.24828,
+  "suelo": {
+   "arcilla_pct": 32.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 193.0,
+   "pendiente_terreno_pct": 0.95,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06707": {
+  "nombre": "Saladillo",
+  "provincia": "Buenos Aires",
+  "lat": -35.67681,
+  "lon": -59.70266,
+  "suelo": {
+   "arcilla_pct": 21.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 36.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06455": {
+  "nombre": "Las Flores",
+  "provincia": "Buenos Aires",
+  "lat": -36.01583,
+  "lon": -59.17646,
+  "suelo": {
+   "arcilla_pct": 28.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 37.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06686": {
+  "nombre": "Rojas",
+  "provincia": "Buenos Aires",
+  "lat": -34.19282,
+  "lon": -60.78802,
+  "suelo": {
+   "arcilla_pct": 27.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 63.0,
+   "pendiente_terreno_pct": 0.58,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06056": {
+  "nombre": "Bahía Blanca",
+  "provincia": "Buenos Aires",
+  "lat": -38.58419,
+  "lon": -62.16942,
+  "suelo": {
+   "arcilla_pct": 28.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 104.0,
+   "pendiente_terreno_pct": 0.66,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06735": {
+  "nombre": "San Antonio de Areco",
+  "provincia": "Buenos Aires",
+  "lat": -34.22076,
+  "lon": -59.51944,
+  "suelo": {
+   "arcilla_pct": 28.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 40.0,
+   "pendiente_terreno_pct": 0.06,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06511": {
+  "nombre": "Maipú",
+  "provincia": "Buenos Aires",
+  "lat": -36.88693,
+  "lon": -57.58612,
+  "suelo": {
+   "arcilla_pct": 27.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 7.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06280": {
+  "nombre": "General Alvarado",
+  "provincia": "Buenos Aires",
+  "lat": -38.20263,
+  "lon": -58.07181,
+  "suelo": {
+   "arcilla_pct": 25.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 42.0,
+   "pendiente_terreno_pct": 0.38,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06357": {
+  "nombre": "General Pueyrredón",
+  "provincia": "Buenos Aires",
+  "lat": -37.96568,
+  "lon": -57.74303,
+  "suelo": {
+   "arcilla_pct": 27.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 83.0,
+   "pendiente_terreno_pct": 2.86,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06518": {
+  "nombre": "Mar Chiquita",
+  "provincia": "Buenos Aires",
+  "lat": -37.49864,
+  "lon": -57.64327,
+  "suelo": {
+   "arcilla_pct": 27.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 20.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06336": {
+  "nombre": "General Lavalle",
+  "provincia": "Buenos Aires",
+  "lat": -36.65075,
+  "lon": -56.941,
+  "suelo": {
+   "arcilla_pct": 30.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 0.0,
+   "pendiente_terreno_pct": 0.48,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06505": {
+  "nombre": "Magdalena",
+  "provincia": "Buenos Aires",
+  "lat": -35.1851,
+  "lon": -57.68613,
+  "suelo": {
+   "arcilla_pct": 31.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 21.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06672": {
+  "nombre": "Rauch",
+  "provincia": "Buenos Aires",
+  "lat": -36.57219,
+  "lon": -58.94414,
+  "suelo": {
+   "arcilla_pct": 27.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 65.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06791": {
+  "nombre": "Tandil",
+  "provincia": "Buenos Aires",
+  "lat": -37.33643,
+  "lon": -59.18198,
+  "suelo": {
+   "arcilla_pct": 29.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 244.0,
+   "pendiente_terreno_pct": 3.14,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06203": {
+  "nombre": "Coronel Suárez",
+  "provincia": "Buenos Aires",
+  "lat": -37.53486,
+  "lon": -61.88909,
+  "suelo": {
+   "arcilla_pct": 26.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 251.0,
+   "pendiente_terreno_pct": 0.54,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06721": {
+  "nombre": "Salliqueló",
+  "provincia": "Buenos Aires",
+  "lat": -36.67178,
+  "lon": -63.04797,
+  "suelo": {
+   "arcilla_pct": 18.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 126.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06343": {
+  "nombre": "General Paz",
+  "provincia": "Buenos Aires",
+  "lat": -35.46618,
+  "lon": -58.38965,
+  "suelo": {
+   "arcilla_pct": 33.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 22.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06308": {
+  "nombre": "General Guido",
+  "provincia": "Buenos Aires",
+  "lat": -36.66603,
+  "lon": -57.99574,
+  "suelo": {
+   "arcilla_pct": 27.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 18.0,
+   "pendiente_terreno_pct": 0.29,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06315": {
+  "nombre": "General Juan Madariaga",
+  "provincia": "Buenos Aires",
+  "lat": -37.15352,
+  "lon": -57.23066,
+  "suelo": {
+   "arcilla_pct": 32.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 4.0,
+   "pendiente_terreno_pct": 0.3,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06819": {
+  "nombre": "Tornquist",
+  "provincia": "Buenos Aires",
+  "lat": -38.25764,
+  "lon": -62.29057,
+  "suelo": {
+   "arcilla_pct": 26.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 247.0,
+   "pendiente_terreno_pct": 0.41,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06196": {
+  "nombre": "Coronel Pringles",
+  "provincia": "Buenos Aires",
+  "lat": -38.14792,
+  "lon": -61.26442,
+  "suelo": {
+   "arcilla_pct": 29.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 270.0,
+   "pendiente_terreno_pct": 1.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06875": {
+  "nombre": "Villarino",
+  "provincia": "Buenos Aires",
+  "lat": -39.12857,
+  "lon": -62.7246,
+  "suelo": {
+   "arcilla_pct": 11.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 40.0,
+   "pendiente_terreno_pct": 2.48,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06351": {
+  "nombre": "General Pinto",
+  "provincia": "Buenos Aires",
+  "lat": -34.66962,
+  "lon": -62.03985,
+  "suelo": {
+   "arcilla_pct": 19.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 101.0,
+   "pendiente_terreno_pct": 0.33,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06742": {
+  "nombre": "San Cayetano",
+  "provincia": "Buenos Aires",
+  "lat": -38.38907,
+  "lon": -59.58633,
+  "suelo": {
+   "arcilla_pct": 29.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 83.0,
+   "pendiente_terreno_pct": 0.59,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06833": {
+  "nombre": "Tres Arroyos",
+  "provincia": "Buenos Aires",
+  "lat": -38.51181,
+  "lon": -60.23742,
+  "suelo": {
+   "arcilla_pct": 30.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 74.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06189": {
+  "nombre": "Coronel Dorrego",
+  "provincia": "Buenos Aires",
+  "lat": -38.67082,
+  "lon": -61.09555,
+  "suelo": {
+   "arcilla_pct": 30.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 122.0,
+   "pendiente_terreno_pct": 0.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06581": {
+  "nombre": "Necochea",
+  "provincia": "Buenos Aires",
+  "lat": -38.25541,
+  "lon": -59.16739,
+  "suelo": {
+   "arcilla_pct": 30.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 88.0,
+   "pendiente_terreno_pct": 1.37,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06217": {
+  "nombre": "Chascomús",
+  "provincia": "Buenos Aires",
+  "lat": -35.61869,
+  "lon": -57.90398,
+  "suelo": {
+   "arcilla_pct": 30.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 12.0,
+   "pendiente_terreno_pct": 0.38,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06126": {
+  "nombre": "Campana",
+  "provincia": "Buenos Aires",
+  "lat": -34.13839,
+  "lon": -58.88296,
+  "suelo": {
+   "arcilla_pct": 44.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 3.0,
+   "pendiente_terreno_pct": 0.0,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06007": {
+  "nombre": "Adolfo Alsina",
+  "provincia": "Buenos Aires",
+  "lat": -37.19676,
+  "lon": -63.05606,
+  "suelo": {
+   "arcilla_pct": 21.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 112.0,
+   "pendiente_terreno_pct": 1.03,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06616": {
+  "nombre": "Pellegrini",
+  "provincia": "Buenos Aires",
+  "lat": -36.27119,
+  "lon": -63.22575,
+  "suelo": {
+   "arcilla_pct": 15.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 113.0,
+   "pendiente_terreno_pct": 0.29,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06623": {
+  "nombre": "Pergamino",
+  "provincia": "Buenos Aires",
+  "lat": -33.83607,
+  "lon": -60.54478,
+  "suelo": {
+   "arcilla_pct": 30.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 81.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06651": {
+  "nombre": "Puán",
+  "provincia": "Buenos Aires",
+  "lat": -38.07608,
+  "lon": -63.05743,
+  "suelo": {
+   "arcilla_pct": 21.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 204.0,
+   "pendiente_terreno_pct": 1.25,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06392": {
+  "nombre": "General Villegas",
+  "provincia": "Buenos Aires",
+  "lat": -34.77026,
+  "lon": -62.9542,
+  "suelo": {
+   "arcilla_pct": 19.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 122.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06168": {
+  "nombre": "Castelli",
+  "provincia": "Buenos Aires",
+  "lat": -36.04149,
+  "lon": -57.65743,
+  "suelo": {
+   "arcilla_pct": 33.5,
+   "fuente": "fallback_regional",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 5.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06413": {
+  "nombre": "Junín",
+  "provincia": "Buenos Aires",
+  "lat": -34.54648,
+  "lon": -61.00525,
+  "suelo": {
+   "arcilla_pct": 16.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 83.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06119": {
+  "nombre": "Brandsen",
+  "provincia": "Buenos Aires",
+  "lat": -35.22252,
+  "lon": -58.17523,
+  "suelo": {
+   "arcilla_pct": 29.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 12.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06224": {
+  "nombre": "Chivilcoy",
+  "provincia": "Buenos Aires",
+  "lat": -34.91549,
+  "lon": -59.95842,
+  "suelo": {
+   "arcilla_pct": 25.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 49.0,
+   "pendiente_terreno_pct": 0.32,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06021": {
+  "nombre": "Alberti",
+  "provincia": "Buenos Aires",
+  "lat": -35.03697,
+  "lon": -60.28198,
+  "suelo": {
+   "arcilla_pct": 21.6,
+   "fuente": "fallback_regional",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 58.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06112": {
+  "nombre": "Bragado",
+  "provincia": "Buenos Aires",
+  "lat": -35.06141,
+  "lon": -60.60405,
+  "suelo": {
+   "arcilla_pct": 21.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 66.0,
+   "pendiente_terreno_pct": 0.29,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06329": {
+  "nombre": "General Las Heras",
+  "provincia": "Buenos Aires",
+  "lat": -34.90942,
+  "lon": -58.99545,
+  "suelo": {
+   "arcilla_pct": 26.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 37.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06147": {
+  "nombre": "Carlos Casares",
+  "provincia": "Buenos Aires",
+  "lat": -35.74992,
+  "lon": -61.37438,
+  "suelo": {
+   "arcilla_pct": 17.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 81.0,
+   "pendiente_terreno_pct": 0.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06525": {
+  "nombre": "Marcos Paz",
+  "provincia": "Buenos Aires",
+  "lat": -34.814,
+  "lon": -58.84783,
+  "suelo": {
+   "arcilla_pct": 26.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 31.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06385": {
+  "nombre": "General Viamonte",
+  "provincia": "Buenos Aires",
+  "lat": -34.99778,
+  "lon": -61.04966,
+  "suelo": {
+   "arcilla_pct": 18.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 72.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06154": {
+  "nombre": "Carlos Tejedor",
+  "provincia": "Buenos Aires",
+  "lat": -35.37974,
+  "lon": -62.42979,
+  "suelo": {
+   "arcilla_pct": 18.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 94.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06854": {
+  "nombre": "25 de Mayo",
+  "provincia": "Buenos Aires",
+  "lat": -35.52721,
+  "lon": -60.23028,
+  "suelo": {
+   "arcilla_pct": 18.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 51.0,
+   "pendiente_terreno_pct": 0.0,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06588": {
+  "nombre": "9 de Julio",
+  "provincia": "Buenos Aires",
+  "lat": -35.48123,
+  "lon": -60.97543,
+  "suelo": {
+   "arcilla_pct": 19.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 77.0,
+   "pendiente_terreno_pct": 0.29,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06609": {
+  "nombre": "Pehuajó",
+  "provincia": "Buenos Aires",
+  "lat": -35.88362,
+  "lon": -61.92813,
+  "suelo": {
+   "arcilla_pct": 18.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 83.0,
+   "pendiente_terreno_pct": 0.37,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06798": {
+  "nombre": "Tapalqué",
+  "provincia": "Buenos Aires",
+  "lat": -36.34714,
+  "lon": -60.13107,
+  "suelo": {
+   "arcilla_pct": 25.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 91.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06826": {
+  "nombre": "Trenque Lauquen",
+  "provincia": "Buenos Aires",
+  "lat": -36.05677,
+  "lon": -62.63508,
+  "suelo": {
+   "arcilla_pct": 18.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 90.0,
+   "pendiente_terreno_pct": 0.35,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06301": {
+  "nombre": "General Belgrano",
+  "provincia": "Buenos Aires",
+  "lat": -35.83466,
+  "lon": -58.69808,
+  "suelo": {
+   "arcilla_pct": 27.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 25.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06547": {
+  "nombre": "Monte",
+  "provincia": "Buenos Aires",
+  "lat": -35.50983,
+  "lon": -58.76724,
+  "suelo": {
+   "arcilla_pct": 30.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 22.0,
+   "pendiente_terreno_pct": 0.21,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06693": {
+  "nombre": "Roque Pérez",
+  "provincia": "Buenos Aires",
+  "lat": -35.48164,
+  "lon": -59.35751,
+  "suelo": {
+   "arcilla_pct": 28.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 28.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06595": {
+  "nombre": "Olavarría",
+  "provincia": "Buenos Aires",
+  "lat": -36.85763,
+  "lon": -60.67021,
+  "suelo": {
+   "arcilla_pct": 30.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 165.0,
+   "pendiente_terreno_pct": 0.34,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06077": {
+  "nombre": "Arrecifes",
+  "provincia": "Buenos Aires",
+  "lat": -34.01181,
+  "lon": -60.06266,
+  "suelo": {
+   "arcilla_pct": 30.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 59.0,
+   "pendiente_terreno_pct": 0.83,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06140": {
+  "nombre": "Capitán Sarmiento",
+  "provincia": "Buenos Aires",
+  "lat": -34.14984,
+  "lon": -59.85401,
+  "suelo": {
+   "arcilla_pct": 30.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 44.0,
+   "pendiente_terreno_pct": 1.5,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06161": {
+  "nombre": "Carmen de Areco",
+  "provincia": "Buenos Aires",
+  "lat": -34.4068,
+  "lon": -59.88441,
+  "suelo": {
+   "arcilla_pct": 26.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 47.0,
+   "pendiente_terreno_pct": 1.0,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06714": {
+  "nombre": "Salto",
+  "provincia": "Buenos Aires",
+  "lat": -34.27108,
+  "lon": -60.30529,
+  "suelo": {
+   "arcilla_pct": 26.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 54.0,
+   "pendiente_terreno_pct": 0.56,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06266": {
+  "nombre": "Exaltación de la Cruz",
+  "provincia": "Buenos Aires",
+  "lat": -34.29513,
+  "lon": -59.15595,
+  "suelo": {
+   "arcilla_pct": 31.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 22.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06728": {
+  "nombre": "San Andrés de Giles",
+  "provincia": "Buenos Aires",
+  "lat": -34.43773,
+  "lon": -59.4732,
+  "suelo": {
+   "arcilla_pct": 30.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 54.0,
+   "pendiente_terreno_pct": 0.53,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06532": {
+  "nombre": "Mercedes",
+  "provincia": "Buenos Aires",
+  "lat": -34.69732,
+  "lon": -59.42048,
+  "suelo": {
+   "arcilla_pct": 26.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 42.0,
+   "pendiente_terreno_pct": 0.48,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06638": {
+  "nombre": "Pilar",
+  "provincia": "Buenos Aires",
+  "lat": -34.44816,
+  "lon": -58.90333,
+  "suelo": {
+   "arcilla_pct": 33.7,
+   "fuente": "isric_soilgrids_v2_vecino",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 26.0,
+   "pendiente_terreno_pct": 0.6,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06497": {
+  "nombre": "Luján",
+  "provincia": "Buenos Aires",
+  "lat": -34.56732,
+  "lon": -59.15846,
+  "suelo": {
+   "arcilla_pct": 29.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 28.0,
+   "pendiente_terreno_pct": 0.72,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06210": {
+  "nombre": "Chacabuco",
+  "provincia": "Buenos Aires",
+  "lat": -34.6182,
+  "lon": -60.35431,
+  "suelo": {
+   "arcilla_pct": 25.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 66.0,
+   "pendiente_terreno_pct": 0.34,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06847": {
+  "nombre": "Tres Lomas",
+  "provincia": "Buenos Aires",
+  "lat": -36.4971,
+  "lon": -62.86391,
+  "suelo": {
+   "arcilla_pct": 16.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 119.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06042": {
+  "nombre": "Ayacucho",
+  "provincia": "Buenos Aires",
+  "lat": -37.03543,
+  "lon": -58.44256,
+  "suelo": {
+   "arcilla_pct": 27.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 63.0,
+   "pendiente_terreno_pct": 0.21,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06399": {
+  "nombre": "Guaminí",
+  "provincia": "Buenos Aires",
+  "lat": -36.89068,
+  "lon": -62.41853,
+  "suelo": {
+   "arcilla_pct": 20.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 114.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06469": {
+  "nombre": "Lincoln",
+  "provincia": "Buenos Aires",
+  "lat": -35.07045,
+  "lon": -61.68246,
+  "suelo": {
+   "arcilla_pct": 19.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 90.0,
+   "pendiente_terreno_pct": 0.49,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06448": {
+  "nombre": "Laprida",
+  "provincia": "Buenos Aires",
+  "lat": -37.51651,
+  "lon": -60.76815,
+  "suelo": {
+   "arcilla_pct": 27.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 216.0,
+   "pendiente_terreno_pct": 0.6,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06084": {
+  "nombre": "Benito Juárez",
+  "provincia": "Buenos Aires",
+  "lat": -37.58611,
+  "lon": -59.8884,
+  "suelo": {
+   "arcilla_pct": 29.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 225.0,
+   "pendiente_terreno_pct": 0.3,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06175": {
+  "nombre": "Colón",
+  "provincia": "Buenos Aires",
+  "lat": -33.88586,
+  "lon": -61.06248,
+  "suelo": {
+   "arcilla_pct": 27.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 86.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06364": {
+  "nombre": "General Rodríguez",
+  "provincia": "Buenos Aires",
+  "lat": -34.65062,
+  "lon": -58.98785,
+  "suelo": {
+   "arcilla_pct": 25.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 24.0,
+   "pendiente_terreno_pct": 0.35,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06784": {
+  "nombre": "Suipacha",
+  "provincia": "Buenos Aires",
+  "lat": -34.74857,
+  "lon": -59.70339,
+  "suelo": {
+   "arcilla_pct": 25.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 49.0,
+   "pendiente_terreno_pct": 0.29,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06574": {
+  "nombre": "Navarro",
+  "provincia": "Buenos Aires",
+  "lat": -35.03048,
+  "lon": -59.42936,
+  "suelo": {
+   "arcilla_pct": 23.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 39.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06134": {
+  "nombre": "Cañuelas",
+  "provincia": "Buenos Aires",
+  "lat": -35.1448,
+  "lon": -58.69109,
+  "suelo": {
+   "arcilla_pct": 30.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 30.0,
+   "pendiente_terreno_pct": 0.65,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06483": {
+  "nombre": "Lobos",
+  "provincia": "Buenos Aires",
+  "lat": -35.21959,
+  "lon": -59.14574,
+  "suelo": {
+   "arcilla_pct": 28.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 26.0,
+   "pendiente_terreno_pct": 0.34,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06287": {
+  "nombre": "General Alvear",
+  "provincia": "Buenos Aires",
+  "lat": -36.03471,
+  "lon": -60.13315,
+  "suelo": {
+   "arcilla_pct": 27.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 57.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06630": {
+  "nombre": "Pila",
+  "provincia": "Buenos Aires",
+  "lat": -36.20298,
+  "lon": -58.34044,
+  "suelo": {
+   "arcilla_pct": 29.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 17.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06322": {
+  "nombre": "General La Madrid",
+  "provincia": "Buenos Aires",
+  "lat": -37.35613,
+  "lon": -61.34413,
+  "suelo": {
+   "arcilla_pct": 28.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 183.0,
+   "pendiente_terreno_pct": 0.21,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06105": {
+  "nombre": "Bolívar",
+  "provincia": "Buenos Aires",
+  "lat": -36.29895,
+  "lon": -61.14986,
+  "suelo": {
+   "arcilla_pct": 20.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 97.0,
+   "pendiente_terreno_pct": 0.25,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06063": {
+  "nombre": "Balcarce",
+  "provincia": "Buenos Aires",
+  "lat": -37.71462,
+  "lon": -58.27175,
+  "suelo": {
+   "arcilla_pct": 26.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 166.0,
+   "pendiente_terreno_pct": 13.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06406": {
+  "nombre": "Hipólito Yrigoyen",
+  "provincia": "Buenos Aires",
+  "lat": -36.25919,
+  "lon": -61.66019,
+  "suelo": {
+   "arcilla_pct": 17.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 114.0,
+   "pendiente_terreno_pct": 1.67,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06238": {
+  "nombre": "Dolores",
+  "provincia": "Buenos Aires",
+  "lat": -36.39894,
+  "lon": -57.63193,
+  "suelo": {
+   "arcilla_pct": 29.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 3.0,
+   "pendiente_terreno_pct": 0.25,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06049": {
+  "nombre": "Azul",
+  "provincia": "Buenos Aires",
+  "lat": -36.78594,
+  "lon": -59.69648,
+  "suelo": {
+   "arcilla_pct": 27.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 134.0,
+   "pendiente_terreno_pct": 0.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06231": {
+  "nombre": "Daireaux",
+  "provincia": "Buenos Aires",
+  "lat": -36.64087,
+  "lon": -61.89125,
+  "suelo": {
+   "arcilla_pct": 21.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 120.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06700": {
+  "nombre": "Saavedra",
+  "provincia": "Buenos Aires",
+  "lat": -37.77064,
+  "lon": -62.43438,
+  "suelo": {
+   "arcilla_pct": 23.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 328.0,
+   "pendiente_terreno_pct": 1.05,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06476": {
+  "nombre": "Lobería",
+  "provincia": "Buenos Aires",
+  "lat": -38.09005,
+  "lon": -58.69355,
+  "suelo": {
+   "arcilla_pct": 29.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 91.0,
+   "pendiente_terreno_pct": 0.38,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06882": {
+  "nombre": "Zárate",
+  "provincia": "Buenos Aires",
+  "lat": -33.99709,
+  "lon": -59.12822,
+  "suelo": {
+   "arcilla_pct": 42.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 6.0,
+   "pendiente_terreno_pct": 0.84,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06665": {
+  "nombre": "Ramallo",
+  "provincia": "Buenos Aires",
+  "lat": -33.58719,
+  "lon": -60.05751,
+  "suelo": {
+   "arcilla_pct": 28.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 33.0,
+   "pendiente_terreno_pct": 0.4,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06763": {
+  "nombre": "San Nicolás",
+  "provincia": "Buenos Aires",
+  "lat": -33.48299,
+  "lon": -60.29315,
+  "suelo": {
+   "arcilla_pct": 29.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 45.0,
+   "pendiente_terreno_pct": 0.45,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06462": {
+  "nombre": "Leandro N. Alem",
+  "provincia": "Buenos Aires",
+  "lat": -34.49857,
+  "lon": -61.61259,
+  "suelo": {
+   "arcilla_pct": 20.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 93.0,
+   "pendiente_terreno_pct": 0.65,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06294": {
+  "nombre": "General Arenales",
+  "provincia": "Buenos Aires",
+  "lat": -34.2379,
+  "lon": -61.28338,
+  "suelo": {
+   "arcilla_pct": 19.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 88.0,
+   "pendiente_terreno_pct": 1.63,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06679": {
+  "nombre": "Rivadavia",
+  "provincia": "Buenos Aires",
+  "lat": -35.58106,
+  "lon": -63.09476,
+  "suelo": {
+   "arcilla_pct": 17.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 105.0,
+   "pendiente_terreno_pct": 0.12,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06602": {
+  "nombre": "Patagones",
+  "provincia": "Buenos Aires",
+  "lat": -40.19638,
+  "lon": -62.8508,
+  "suelo": {
+   "arcilla_pct": 17.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 39.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06182": {
+  "nombre": "Coronel de Marina Leonardo Rosales",
+  "provincia": "Buenos Aires",
+  "lat": -38.84908,
+  "lon": -61.83558,
+  "suelo": {
+   "arcilla_pct": 24.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 42.0,
+   "pendiente_terreno_pct": 0.61,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06070": {
+  "nombre": "Baradero",
+  "provincia": "Buenos Aires",
+  "lat": -33.93196,
+  "lon": -59.49279,
+  "suelo": {
+   "arcilla_pct": 29.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 21.0,
+   "pendiente_terreno_pct": 0.78,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06770": {
+  "nombre": "San Pedro",
+  "provincia": "Buenos Aires",
+  "lat": -33.78099,
+  "lon": -59.78263,
+  "suelo": {
+   "arcilla_pct": 31.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 28.0,
+   "pendiente_terreno_pct": 0.77,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06277": {
+  "nombre": "Florentino Ameghino",
+  "provincia": "Buenos Aires",
+  "lat": -34.87411,
+  "lon": -62.40172,
+  "suelo": {
+   "arcilla_pct": 21.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 120.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14175": {
+  "nombre": "Tulumba",
+  "provincia": "Córdoba",
+  "lat": -30.21952,
+  "lon": -63.82879,
+  "suelo": {
+   "arcilla_pct": 24.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 386.0,
+   "pendiente_terreno_pct": 1.21,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14035": {
+  "nombre": "General Roca",
+  "provincia": "Córdoba",
+  "lat": -34.62313,
+  "lon": -64.37302,
+  "suelo": {
+   "arcilla_pct": 10.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 189.0,
+   "pendiente_terreno_pct": 0.66,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14147": {
+  "nombre": "Santa María",
+  "provincia": "Córdoba",
+  "lat": -31.70971,
+  "lon": -64.3059,
+  "suelo": {
+   "arcilla_pct": 30.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 498.0,
+   "pendiente_terreno_pct": 2.87,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14126": {
+  "nombre": "San Alberto",
+  "provincia": "Córdoba",
+  "lat": -31.70803,
+  "lon": -65.15651,
+  "suelo": {
+   "arcilla_pct": 28.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 1004.0,
+   "pendiente_terreno_pct": 4.88,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14119": {
+  "nombre": "Río Segundo",
+  "provincia": "Córdoba",
+  "lat": -31.73311,
+  "lon": -63.47486,
+  "suelo": {
+   "arcilla_pct": 24.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 245.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14140": {
+  "nombre": "San Justo",
+  "provincia": "Córdoba",
+  "lat": -31.24257,
+  "lon": -62.52759,
+  "suelo": {
+   "arcilla_pct": 37.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 93.0,
+   "pendiente_terreno_pct": 0.3,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14182": {
+  "nombre": "Unión",
+  "provincia": "Córdoba",
+  "lat": -32.87838,
+  "lon": -62.7916,
+  "suelo": {
+   "arcilla_pct": 24.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 130.0,
+   "pendiente_terreno_pct": 0.32,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14161": {
+  "nombre": "Tercero Arriba",
+  "provincia": "Córdoba",
+  "lat": -32.28768,
+  "lon": -63.779,
+  "suelo": {
+   "arcilla_pct": 22.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 309.0,
+   "pendiente_terreno_pct": 0.37,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14098": {
+  "nombre": "Río Cuarto",
+  "provincia": "Córdoba",
+  "lat": -33.33053,
+  "lon": -64.49313,
+  "suelo": {
+   "arcilla_pct": 16.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 438.0,
+   "pendiente_terreno_pct": 0.36,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14084": {
+  "nombre": "Presidente Roque Sáenz Peña",
+  "provincia": "Córdoba",
+  "lat": -34.14049,
+  "lon": -63.41887,
+  "suelo": {
+   "arcilla_pct": 13.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 138.0,
+   "pendiente_terreno_pct": 0.62,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14112": {
+  "nombre": "Río Seco",
+  "provincia": "Córdoba",
+  "lat": -30.04504,
+  "lon": -63.19902,
+  "suelo": {
+   "arcilla_pct": 31.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 77.0,
+   "pendiente_terreno_pct": 0.08,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14077": {
+  "nombre": "Pocho",
+  "provincia": "Córdoba",
+  "lat": -31.46274,
+  "lon": -65.43516,
+  "suelo": {
+   "arcilla_pct": 22.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 367.0,
+   "pendiente_terreno_pct": 2.38,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14154": {
+  "nombre": "Sobremonte",
+  "provincia": "Córdoba",
+  "lat": -29.76431,
+  "lon": -64.14252,
+  "suelo": {
+   "arcilla_pct": 18.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 588.0,
+   "pendiente_terreno_pct": 8.75,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14014": {
+  "nombre": "Capital",
+  "provincia": "Córdoba",
+  "lat": -31.41676,
+  "lon": -64.18358
+ },
+ "14056": {
+  "nombre": "Juárez Celman",
+  "provincia": "Córdoba",
+  "lat": -33.32957,
+  "lon": -63.60639,
+  "suelo": {
+   "arcilla_pct": 18.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 191.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14021": {
+  "nombre": "Colón",
+  "provincia": "Córdoba",
+  "lat": -31.14618,
+  "lon": -64.14909,
+  "suelo": {
+   "arcilla_pct": 28.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 531.0,
+   "pendiente_terreno_pct": 1.3,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14049": {
+  "nombre": "Ischilín",
+  "provincia": "Córdoba",
+  "lat": -30.39852,
+  "lon": -64.60993,
+  "suelo": {
+   "arcilla_pct": 17.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 469.0,
+   "pendiente_terreno_pct": 1.48,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14168": {
+  "nombre": "Totoral",
+  "provincia": "Córdoba",
+  "lat": -30.72634,
+  "lon": -63.9844,
+  "suelo": {
+   "arcilla_pct": 27.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 473.0,
+   "pendiente_terreno_pct": 1.2,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14042": {
+  "nombre": "General San Martín",
+  "provincia": "Córdoba",
+  "lat": -32.51432,
+  "lon": -63.25621,
+  "suelo": {
+   "arcilla_pct": 19.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 198.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14133": {
+  "nombre": "San Javier",
+  "provincia": "Córdoba",
+  "lat": -32.07609,
+  "lon": -65.14222,
+  "suelo": {
+   "arcilla_pct": 33.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 594.0,
+   "pendiente_terreno_pct": 1.85,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14105": {
+  "nombre": "Río Primero",
+  "provincia": "Córdoba",
+  "lat": -31.03152,
+  "lon": -63.43611,
+  "suelo": {
+   "arcilla_pct": 30.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 145.0,
+   "pendiente_terreno_pct": 0.29,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14063": {
+  "nombre": "Marcos Juárez",
+  "provincia": "Córdoba",
+  "lat": -33.03084,
+  "lon": -62.27759,
+  "suelo": {
+   "arcilla_pct": 23.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 107.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "14007": {
+  "nombre": "Calamuchita",
+  "provincia": "Córdoba",
+  "lat": -32.20206,
+  "lon": -64.61517,
+  "suelo": {
+   "arcilla_pct": 24.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 681.0,
+   "pendiente_terreno_pct": 11.32,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30015": {
+  "nombre": "Concordia",
+  "provincia": "Entre Ríos",
+  "lat": -31.2903,
+  "lon": -58.23787,
+  "suelo": {
+   "arcilla_pct": 26.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 35.0,
+   "pendiente_terreno_pct": 2.07,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30035": {
+  "nombre": "Federal",
+  "provincia": "Entre Ríos",
+  "lat": -30.99243,
+  "lon": -58.89186,
+  "suelo": {
+   "arcilla_pct": 36.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 70.0,
+   "pendiente_terreno_pct": 0.32,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30056": {
+  "nombre": "Gualeguaychú",
+  "provincia": "Entre Ríos",
+  "lat": -33.02235,
+  "lon": -58.78581,
+  "suelo": {
+   "arcilla_pct": 30.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 30.0,
+   "pendiente_terreno_pct": 1.06,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30105": {
+  "nombre": "Victoria",
+  "provincia": "Entre Ríos",
+  "lat": -32.78394,
+  "lon": -60.21807,
+  "suelo": {
+   "arcilla_pct": 34.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 6.0,
+   "pendiente_terreno_pct": 0.21,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30021": {
+  "nombre": "Diamante",
+  "provincia": "Entre Ríos",
+  "lat": -32.22804,
+  "lon": -60.52393,
+  "suelo": {
+   "arcilla_pct": 33.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 48.0,
+   "pendiente_terreno_pct": 1.47,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30098": {
+  "nombre": "Uruguay",
+  "provincia": "Entre Ríos",
+  "lat": -32.44776,
+  "lon": -58.58423,
+  "suelo": {
+   "arcilla_pct": 40.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 37.0,
+   "pendiente_terreno_pct": 0.99,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30084": {
+  "nombre": "Paraná",
+  "provincia": "Entre Ríos",
+  "lat": -31.69523,
+  "lon": -60.04117,
+  "suelo": {
+   "arcilla_pct": 32.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 64.0,
+   "pendiente_terreno_pct": 1.72,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30008": {
+  "nombre": "Colón",
+  "provincia": "Entre Ríos",
+  "lat": -32.01148,
+  "lon": -58.36991,
+  "suelo": {
+   "arcilla_pct": 44.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 46.0,
+   "pendiente_terreno_pct": 1.08,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30113": {
+  "nombre": "Villaguay",
+  "provincia": "Entre Ríos",
+  "lat": -31.64774,
+  "lon": -59.05947,
+  "suelo": {
+   "arcilla_pct": 42.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 47.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30088": {
+  "nombre": "San Salvador",
+  "provincia": "Entre Ríos",
+  "lat": -31.57688,
+  "lon": -58.48637,
+  "suelo": {
+   "arcilla_pct": 35.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 60.0,
+   "pendiente_terreno_pct": 1.48,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30077": {
+  "nombre": "Nogoyá",
+  "provincia": "Entre Ríos",
+  "lat": -32.21871,
+  "lon": -59.7697,
+  "suelo": {
+   "arcilla_pct": 35.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 47.0,
+   "pendiente_terreno_pct": 0.12,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30091": {
+  "nombre": "Tala",
+  "provincia": "Entre Ríos",
+  "lat": -32.31741,
+  "lon": -59.26729,
+  "suelo": {
+   "arcilla_pct": 36.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 57.0,
+   "pendiente_terreno_pct": 1.43,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30049": {
+  "nombre": "Gualeguay",
+  "provincia": "Entre Ríos",
+  "lat": -33.11924,
+  "lon": -59.60146,
+  "suelo": {
+   "arcilla_pct": 36.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 4.0,
+   "pendiente_terreno_pct": 0.3,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30028": {
+  "nombre": "Federación",
+  "provincia": "Entre Ríos",
+  "lat": -30.73485,
+  "lon": -58.15916,
+  "suelo": {
+   "arcilla_pct": 37.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 66.0,
+   "pendiente_terreno_pct": 0.74,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30070": {
+  "nombre": "La Paz",
+  "provincia": "Entre Ríos",
+  "lat": -30.89736,
+  "lon": -59.50043,
+  "suelo": {
+   "arcilla_pct": 33.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 35.0,
+   "pendiente_terreno_pct": 0.21,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "30042": {
+  "nombre": "Feliciano",
+  "provincia": "Entre Ríos",
+  "lat": -30.4139,
+  "lon": -58.72889,
+  "suelo": {
+   "arcilla_pct": 37.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 56.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42077": {
+  "nombre": "Hucal",
+  "provincia": "La Pampa",
+  "lat": -37.97923,
+  "lon": -63.95449,
+  "suelo": {
+   "arcilla_pct": 15.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 190.0,
+   "pendiente_terreno_pct": 0.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42056": {
+  "nombre": "Chapaleufú",
+  "provincia": "La Pampa",
+  "lat": -35.22989,
+  "lon": -63.66038,
+  "suelo": {
+   "arcilla_pct": 17.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 126.0,
+   "pendiente_terreno_pct": 0.32,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42133": {
+  "nombre": "Realicó",
+  "provincia": "La Pampa",
+  "lat": -35.23066,
+  "lon": -64.20985,
+  "suelo": {
+   "arcilla_pct": 16.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 167.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42105": {
+  "nombre": "Maracó",
+  "provincia": "La Pampa",
+  "lat": -35.67962,
+  "lon": -63.66249,
+  "suelo": {
+   "arcilla_pct": 17.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 126.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42147": {
+  "nombre": "Trenel",
+  "provincia": "La Pampa",
+  "lat": -35.63188,
+  "lon": -64.21438,
+  "suelo": {
+   "arcilla_pct": 16.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 177.0,
+   "pendiente_terreno_pct": 1.73,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42021": {
+  "nombre": "Capital",
+  "provincia": "La Pampa",
+  "lat": -36.49806,
+  "lon": -64.19813,
+  "suelo": {
+   "arcilla_pct": 18.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 201.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42028": {
+  "nombre": "Catriló",
+  "provincia": "La Pampa",
+  "lat": -36.58167,
+  "lon": -63.66487,
+  "suelo": {
+   "arcilla_pct": 15.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 142.0,
+   "pendiente_terreno_pct": 0.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42126": {
+  "nombre": "Rancul",
+  "provincia": "La Pampa",
+  "lat": -35.40832,
+  "lon": -64.79621,
+  "suelo": {
+   "arcilla_pct": 13.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 259.0,
+   "pendiente_terreno_pct": 0.58,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42007": {
+  "nombre": "Atreucó",
+  "provincia": "La Pampa",
+  "lat": -37.03249,
+  "lon": -63.77888,
+  "suelo": {
+   "arcilla_pct": 16.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 143.0,
+   "pendiente_terreno_pct": 0.75,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42070": {
+  "nombre": "Guatraché",
+  "provincia": "La Pampa",
+  "lat": -37.48365,
+  "lon": -63.78131,
+  "suelo": {
+   "arcilla_pct": 14.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 142.0,
+   "pendiente_terreno_pct": 4.93,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42035": {
+  "nombre": "Conhelo",
+  "provincia": "La Pampa",
+  "lat": -36.032,
+  "lon": -64.50865,
+  "suelo": {
+   "arcilla_pct": 15.6,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 211.0,
+   "pendiente_terreno_pct": 0.6,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42140": {
+  "nombre": "Toay",
+  "provincia": "La Pampa",
+  "lat": -36.66216,
+  "lon": -64.69221,
+  "suelo": {
+   "arcilla_pct": 14.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 274.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42119": {
+  "nombre": "Quemú Quemú",
+  "provincia": "La Pampa",
+  "lat": -36.13064,
+  "lon": -63.66373,
+  "suelo": {
+   "arcilla_pct": 13.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 124.0,
+   "pendiente_terreno_pct": 0.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "42154": {
+  "nombre": "Utracán",
+  "provincia": "La Pampa",
+  "lat": -37.33388,
+  "lon": -65.08283,
+  "suelo": {
+   "arcilla_pct": 10.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 374.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82007": {
+  "nombre": "Belgrano",
+  "provincia": "Santa Fe",
+  "lat": -32.61044,
+  "lon": -61.70474,
+  "suelo": {
+   "arcilla_pct": 26.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 118.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82049": {
+  "nombre": "General Obligado",
+  "provincia": "Santa Fe",
+  "lat": -28.67254,
+  "lon": -59.5267,
+  "suelo": {
+   "arcilla_pct": 28.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 50.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82133": {
+  "nombre": "Vera",
+  "provincia": "Santa Fe",
+  "lat": -28.97063,
+  "lon": -60.41367,
+  "suelo": {
+   "arcilla_pct": 30.8,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 64.0,
+   "pendiente_terreno_pct": 0.08,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82077": {
+  "nombre": "9 de Julio",
+  "provincia": "Santa Fe",
+  "lat": -28.84868,
+  "lon": -61.39799,
+  "suelo": {
+   "arcilla_pct": 32.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 71.0,
+   "pendiente_terreno_pct": 0.0,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82105": {
+  "nombre": "San Jerónimo",
+  "provincia": "Santa Fe",
+  "lat": -32.15377,
+  "lon": -61.04813,
+  "suelo": {
+   "arcilla_pct": 31.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 27.0,
+   "pendiente_terreno_pct": 0.42,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82070": {
+  "nombre": "Las Colonias",
+  "provincia": "Santa Fe",
+  "lat": -31.31534,
+  "lon": -61.10948,
+  "suelo": {
+   "arcilla_pct": 33.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 39.0,
+   "pendiente_terreno_pct": 0.21,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82112": {
+  "nombre": "San Justo",
+  "provincia": "Santa Fe",
+  "lat": -30.53042,
+  "lon": -60.48869,
+  "suelo": {
+   "arcilla_pct": 32.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 53.0,
+   "pendiente_terreno_pct": 0.26,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82091": {
+  "nombre": "San Cristóbal",
+  "provincia": "Santa Fe",
+  "lat": -30.22839,
+  "lon": -61.35994,
+  "suelo": {
+   "arcilla_pct": 35.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 79.0,
+   "pendiente_terreno_pct": 0.17,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82098": {
+  "nombre": "San Javier",
+  "provincia": "Santa Fe",
+  "lat": -30.10415,
+  "lon": -59.89807,
+  "suelo": {
+   "arcilla_pct": 27.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 30.0,
+   "pendiente_terreno_pct": 0.3,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82042": {
+  "nombre": "General López",
+  "provincia": "Santa Fe",
+  "lat": -33.92219,
+  "lon": -61.93968,
+  "suelo": {
+   "arcilla_pct": 24.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 108.0,
+   "pendiente_terreno_pct": 0.46,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82028": {
+  "nombre": "Constitución",
+  "provincia": "Santa Fe",
+  "lat": -33.48714,
+  "lon": -60.8374,
+  "suelo": {
+   "arcilla_pct": 27.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 77.0,
+   "pendiente_terreno_pct": 0.06,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82014": {
+  "nombre": "Caseros",
+  "provincia": "Santa Fe",
+  "lat": -33.22497,
+  "lon": -61.54286,
+  "suelo": {
+   "arcilla_pct": 33.3,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 98.0,
+   "pendiente_terreno_pct": 0.19,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82084": {
+  "nombre": "Rosario",
+  "provincia": "Santa Fe",
+  "lat": -33.11785,
+  "lon": -60.72324,
+  "suelo": {
+   "arcilla_pct": 27.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 37.0,
+   "pendiente_terreno_pct": 0.53,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82119": {
+  "nombre": "San Lorenzo",
+  "provincia": "Santa Fe",
+  "lat": -32.94133,
+  "lon": -60.96401,
+  "suelo": {
+   "arcilla_pct": 29.1,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 54.0,
+   "pendiente_terreno_pct": 0.32,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82056": {
+  "nombre": "Iriondo",
+  "provincia": "Santa Fe",
+  "lat": -32.70608,
+  "lon": -61.27339,
+  "suelo": {
+   "arcilla_pct": 32.0,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 75.0,
+   "pendiente_terreno_pct": 0.59,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82126": {
+  "nombre": "San Martín",
+  "provincia": "Santa Fe",
+  "lat": -32.01227,
+  "lon": -61.80907,
+  "suelo": {
+   "arcilla_pct": 30.2,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 110.0,
+   "pendiente_terreno_pct": 0.18,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82063": {
+  "nombre": "La Capital",
+  "provincia": "Santa Fe",
+  "lat": -31.47536,
+  "lon": -60.66948,
+  "suelo": {
+   "arcilla_pct": 28.5,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 20.0,
+   "pendiente_terreno_pct": 0.32,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82021": {
+  "nombre": "Castellanos",
+  "provincia": "Santa Fe",
+  "lat": -31.23146,
+  "lon": -61.65726,
+  "suelo": {
+   "arcilla_pct": 34.9,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 104.0,
+   "pendiente_terreno_pct": 0.25,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "82035": {
+  "nombre": "Garay",
+  "provincia": "Santa Fe",
+  "lat": -31.05464,
+  "lon": -60.12581,
+  "suelo": {
+   "arcilla_pct": 31.7,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 21.0,
+   "pendiente_terreno_pct": 0.24,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ },
+ "06778": {
+  "nombre": "San Vicente",
+  "provincia": "Buenos Aires",
+  "lat": -35.07151,
+  "lon": -58.43181,
+  "suelo": {
+   "arcilla_pct": 30.4,
+   "fuente": "isric_soilgrids_v2",
+   "reintentar": false
+  },
+  "topografia": {
+   "elevacion_m": 17.0,
+   "pendiente_terreno_pct": 0.13,
+   "fuente": "opentopodata_srtm30m",
+   "reintentar": false
+  }
+ }
+}

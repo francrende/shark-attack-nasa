@@ -52,6 +52,14 @@ FEATURES_FUTURAS: tuple[str, ...] = (
     "frecuencia_estres_termico",
     "frecuencia_riesgo_helada",
 )
+# ML-7: las futuras se miden en el período crítico de cada cultivo y suman la lluvia acumulada.
+FEATURE_LLUVIA_CRITICA = "lluvia_periodo_critico_mm"
+FEATURES_PERIODO_CRITICO: tuple[str, ...] = (*FEATURES_FUTURAS, FEATURE_LLUVIA_CRITICA)
+
+# Calendario de lluvia diaria: 2 caracteres base 64 por día, en décimas de mm (tope 409,5 mm/día).
+_B64 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
+LLUVIA_ESCALA_MM = 0.1
+LLUVIA_MAX_UNIDADES = 64 * 64 - 1
 
 # (mínimo, máximo, decimales | None = entero)
 TOPES: dict[str, tuple[float, float, int | None]] = {
@@ -63,6 +71,7 @@ TOPES: dict[str, tuple[float, float, int | None]] = {
     "frecuencia_tormentas_extremas": (0, 12, None),
     "frecuencia_estres_termico": (0, 45, None),
     "frecuencia_riesgo_helada": (0, 55, None),
+    "lluvia_periodo_critico_mm": (0.0, 1500.0, 1),
     "pendiente_terreno_pct": (0.10, 8.2, 2),
     "elevacion_m": (6.0, 580.0, 1),
     "textura_arcilla_pct": (9.0, 52.0, 2),
@@ -156,6 +165,63 @@ def calendario_eventos(
     return {anio: "".join(chars) for anio, chars in por_anio.items()}
 
 
+def codificar_lluvia(mm: float | None) -> str:
+    unidades = 0 if mm is None else int(round(max(0.0, mm) / LLUVIA_ESCALA_MM))
+    unidades = min(unidades, LLUVIA_MAX_UNIDADES)
+    return _B64[unidades // 64] + _B64[unidades % 64]
+
+
+def decodificar_lluvia(texto: str) -> list[float]:
+    idx = {c: i for i, c in enumerate(_B64)}
+    return [(idx[texto[i]] * 64 + idx[texto[i + 1]]) * LLUVIA_ESCALA_MM for i in range(0, len(texto), 2)]
+
+
+def calendario_lluvia(fechas: Sequence[date], prectotcorr: Sequence[float | None]) -> dict[int, str]:
+    """Lluvia diaria por año (2 caracteres por día), con huecos rellenos por ffill/bfill."""
+    p = ffill_bfill(prectotcorr)
+    por_anio: dict[int, list[str]] = {}
+    for i, dia in enumerate(fechas):
+        por_anio.setdefault(dia.year, []).append(codificar_lluvia(p[i]))
+    return {anio: "".join(chars) for anio, chars in por_anio.items()}
+
+
+def _tramo(calendario: dict[int, str], inicio: date, dias: int, ancho: int = 1) -> str | None:
+    """Caracteres de ``[inicio, inicio+dias-1]`` (``ancho`` caracteres por día), o None si falta algo."""
+    fin = inicio + timedelta(days=dias - 1)
+    partes: list[str] = []
+    for a in range(inicio.year, fin.year + 1):
+        texto = calendario.get(a)
+        if texto is None:
+            return None
+        desde = (inicio - date(a, 1, 1)).days if a == inicio.year else 0
+        hasta = (fin - date(a, 1, 1)).days if a == fin.year else len(texto) // ancho - 1
+        if hasta >= len(texto) // ancho:
+            return None
+        partes.append(texto[desde * ancho : (hasta + 1) * ancho])
+    tramo = "".join(partes)
+    return tramo if len(tramo) == dias * ancho else None
+
+
+def features_ventana(
+    calendario_eventos: dict[int, str],
+    calendario_lluvia: dict[int, str],
+    inicio: date,
+    dias: int = VENTANA_FUTURA_DIAS,
+) -> dict[str, Any] | None:
+    """Tormentas, calor, heladas y lluvia acumulada de ``[inicio, inicio+dias-1]`` (con topes).
+
+    Función única para entrenamiento (período crítico observado) y producción (años análogos).
+    """
+    eventos = _tramo(calendario_eventos, inicio, dias)
+    lluvia = _tramo(calendario_lluvia, inicio, dias, ancho=2)
+    if eventos is None or lluvia is None:
+        return None
+    tormentas, calor, helada = _contar(eventos)
+    return aplicar_topes(
+        dict(zip(FEATURES_PERIODO_CRITICO, (tormentas, calor, helada, round(sum(decodificar_lluvia(lluvia)), 1))))
+    )
+
+
 def _contar(chars: Iterable[str]) -> tuple[int, int, int]:
     tormentas = calor = helada = 0
     for ch in chars:
@@ -181,19 +247,8 @@ def escenarios_ventana_futura(
         except ValueError:
             base = date(anio, 2, 28)
         inicio = base + timedelta(days=1)
-        fin = inicio + timedelta(days=dias - 1)
-
-        chars: list[str] = []
-        completo = True
-        for a in range(inicio.year, fin.year + 1):
-            texto = calendario.get(a)
-            desde = (inicio - date(a, 1, 1)).days if a == inicio.year else 0
-            hasta = (fin - date(a, 1, 1)).days if a == fin.year else None
-            if texto is None or (hasta is not None and hasta >= len(texto)) or (hasta is None and desde > len(texto)):
-                completo = False
-                break
-            chars.extend(texto[desde : (hasta + 1 if hasta is not None else None)])
-        if not completo or len(chars) != dias:
+        chars = _tramo(calendario, inicio, dias)
+        if chars is None:
             continue
 
         tormentas, calor, helada = _contar(chars)
@@ -219,6 +274,11 @@ class InsumosML:
     perfil_suelo: Any  # providers.soilgrids.PerfilSueloSatelital
     topografia: Any  # providers.srtm.TopografiaSrtm
     advertencias: tuple[str, ...] = field(default_factory=tuple)
+    # ML-7: calendarios diarios 2006–2025 de la celda (escenarios por cultivo en su período
+    # crítico) y ONI publicado al corte (ponderación de años análogos y feature del modelo).
+    calendario_eventos: dict[int, str] = field(default_factory=dict)
+    calendario_lluvia: dict[int, str] = field(default_factory=dict)
+    oni_actual: float | None = None
 
 
 def _columna_ventana(serie: Any, param: str, fechas_ventana: list[date], corte: date) -> list[float | None]:
@@ -227,6 +287,51 @@ def _columna_ventana(serie: Any, param: str, fechas_ventana: list[date], corte: 
     valores = ffill_bfill([serie.series.get(param, {}).get(d) for d in fechas])
     por_fecha = dict(zip(fechas, valores))
     return [por_fecha.get(d) for d in fechas_ventana]
+
+
+def features_actuales_desde_series(
+    reciente: Any,
+    corte: date,
+    clim_por_doy: dict[int, float],
+    *,
+    pendiente_terreno_pct: float,
+    elevacion_m: float,
+    textura_arcilla_pct: float,
+) -> dict[str, Any]:
+    """Las 8 features actuales (con topes) a partir de la serie diaria hasta ``corte``.
+
+    Función pura compartida por producción (``construir_insumos_ml``) y entrenamiento
+    (``ml/generate_dataset.py``, ML-6) para que ambos calculen exactamente igual.
+    ``reciente`` es una ``NasaPowerDailySeries`` que cubre al menos los 100 días previos.
+
+    Raises:
+        NasaPowerUnavailable: sin datos válidos suficientes en la ventana.
+    """
+    from providers.nasa_power import NasaPowerUnavailable
+    from providers.nasa_telemetry import anomalia_lluvia_90d_pct, tendencia_humedad_15d_pct, ventana_90d_rellena
+
+    ventana = ventana_90d_rellena(reciente, corte)
+    evptrns = _columna_ventana(reciente, "EVPTRNS", ventana.fechas, corte)
+    tmax = _columna_ventana(reciente, "T2M_MAX", ventana.fechas, corte)
+    tmin = _columna_ventana(reciente, "T2M_MIN", ventana.fechas, corte)
+    if any(v is None for v in tmax + tmin) and sum(v for v in evptrns if v is not None) < EVAP_MIN_TOTAL_MM:
+        raise NasaPowerUnavailable("Sin EVPTRNS ni temperaturas válidas para el índice de aridez")
+    gwetroot = reciente.series["GWETROOT"].get(corte)
+    gwettop = reciente.series["GWETTOP"].get(corte)
+    if gwetroot is None or gwettop is None:
+        raise NasaPowerUnavailable(f"Sin GWETROOT/GWETTOP válidos en el corte {corte}")
+
+    crudas = {
+        "gwetroot_saturacion_pct": gwetroot * 100.0,
+        "gwettop_saturacion_pct": gwettop * 100.0,
+        "tendencia_humedad_15d_pct": tendencia_humedad_15d_pct(ventana),
+        "anomalia_lluvia_90d_pct": anomalia_lluvia_90d_pct(ventana, clim_por_doy, corte),
+        "indice_aridez_evaporativa": indice_aridez(ventana.lluvia, evptrns, tmax, tmin),  # type: ignore[arg-type]
+        "pendiente_terreno_pct": pendiente_terreno_pct,
+        "elevacion_m": elevacion_m,
+        "textura_arcilla_pct": textura_arcilla_pct,
+    }
+    return aplicar_topes(crudas)
 
 
 async def construir_insumos_ml(
@@ -244,14 +349,13 @@ async def construir_insumos_ml(
     """
     import httpx as _httpx
 
-    from providers.nasa_power import NasaPowerUnavailable, _validar_coordenadas
+    from providers.nasa_power import _validar_coordenadas
     from providers.nasa_telemetry import (
         build_telemetria_nasa,
         obtener_referencia_historica,
         obtener_ventana_reciente,
-        tendencia_humedad_15d_pct,
-        ventana_90d_rellena,
     )
+    from providers.enso import oni_al
     from providers.soilgrids import fetch_perfil_suelo
     from providers.srtm import fetch_topografia
 
@@ -269,31 +373,25 @@ async def construir_insumos_ml(
         referencia = await obtener_referencia_historica(lat, lon, c)
 
         corte = telemetria.fecha_ultimo_dato_valido
-        ventana = ventana_90d_rellena(reciente, corte)
-        evptrns = _columna_ventana(reciente, "EVPTRNS", ventana.fechas, corte)
-        tmax = _columna_ventana(reciente, "T2M_MAX", ventana.fechas, corte)
-        tmin = _columna_ventana(reciente, "T2M_MIN", ventana.fechas, corte)
-        if any(v is None for v in tmax + tmin) and sum(v for v in evptrns if v is not None) < EVAP_MIN_TOTAL_MM:
-            raise NasaPowerUnavailable("Sin EVPTRNS ni temperaturas válidas para el índice de aridez")
-
-        crudas = {
-            "gwetroot_saturacion_pct": reciente.series["GWETROOT"][corte] * 100.0,
-            "gwettop_saturacion_pct": reciente.series["GWETTOP"][corte] * 100.0,
-            "tendencia_humedad_15d_pct": tendencia_humedad_15d_pct(ventana),
-            "anomalia_lluvia_90d_pct": telemetria.anomalia_lluvia_90d_pct,
-            "indice_aridez_evaporativa": indice_aridez(ventana.lluvia, evptrns, tmax, tmin),  # type: ignore[arg-type]
-            "pendiente_terreno_pct": topo.pendiente_terreno_pct,
-            "elevacion_m": topo.elevacion_m,
-            "textura_arcilla_pct": perfil.arcilla_pct,
-        }
+        features = features_actuales_desde_series(
+            reciente,
+            corte,
+            referencia.clim_por_doy,
+            pendiente_terreno_pct=topo.pendiente_terreno_pct,
+            elevacion_m=topo.elevacion_m,
+            textura_arcilla_pct=perfil.arcilla_pct,
+        )
         return InsumosML(
-            features_actuales=aplicar_topes(crudas),
+            features_actuales=features,
             escenarios_historicos=escenarios_ventana_futura(referencia.calendario_eventos, corte),
             fecha_corte=corte,
             telemetria=telemetria,
             perfil_suelo=perfil,
             topografia=topo,
             advertencias=tuple(perfil.advertencias) + tuple(topo.advertencias),
+            calendario_eventos=referencia.calendario_eventos,
+            calendario_lluvia=referencia.calendario_lluvia,
+            oni_actual=oni_al(corte),
         )
 
     if client is None:

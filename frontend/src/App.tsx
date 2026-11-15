@@ -53,7 +53,7 @@ import {
 import type {
   Campana,
   Coordenadas,
-  CultivoId,
+  CultivoAnterior,
   ObjetivoProductor,
   SimulacionWhatIf,
   SimulateResponse,
@@ -165,7 +165,7 @@ export function App() {
 
   // Estado agronómico y simulación What-If (campaña y cultivo anterior inician sin selección)
   const [campana, setCampana] = useState<Campana | null>(null)
-  const [cultivoAnterior, setCultivoAnterior] = useState<CultivoId | null>(null)
+  const [cultivoAnterior, setCultivoAnterior] = useState<CultivoAnterior | null>(null)
   const [objetivoProductor, setObjetivoProductor] =
     useState<ObjetivoProductor>('equilibrio')
   const [whatIf, setWhatIf] = useState<SimulacionWhatIf>({

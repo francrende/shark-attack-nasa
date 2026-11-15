@@ -24,6 +24,7 @@ import httpx
 from providers.cache import PASO_LAT_POWER, PASO_LON_POWER, clave_celda_power
 from providers.nasa_power import fetch_daily_range
 from providers.nasa_telemetry import (
+    ANALOGOS_START,
     HIST_END,
     HIST_PARAMETROS,
     HIST_START,
@@ -88,7 +89,10 @@ async def generar_nasa(ruta: Path = RUTA_PRECALCULO) -> None:
             {
                 "version_calculo": VERSION_CALCULO,
                 "generado_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "fuente": f"NASA POWER daily {HIST_START}..{HIST_END} ({', '.join(HIST_PARAMETROS)})",
+                "fuente": (
+                    f"NASA POWER daily {ANALOGOS_START}..{HIST_END} ({', '.join(HIST_PARAMETROS)}); "
+                    f"climatología y días de calor {HIST_START}..{HIST_END}"
+                ),
                 "region": {"lat": [LAT_MIN, LAT_MAX], "lon": [LON_MIN, LON_MAX]},
                 "celdas": celdas,
             },
@@ -101,7 +105,7 @@ async def generar_nasa(ruta: Path = RUTA_PRECALCULO) -> None:
             t0 = time.perf_counter()
             try:
                 serie = await asyncio.wait_for(
-                    fetch_daily_range(la, lo, HIST_START, HIST_END, HIST_PARAMETROS, client=client),
+                    fetch_daily_range(la, lo, ANALOGOS_START, HIST_END, HIST_PARAMETROS, client=client),
                     timeout=TIMEOUT_CELDA_S,
                 )
                 entrada = referencia_a_dict(calcular_referencia(serie))

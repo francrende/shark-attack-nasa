@@ -11,7 +11,9 @@ from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from ml.escenarios import escenarios_por_cultivo
 from ml.predictor import run_recommendation
+from services.rotation_matrix import get_crops_for_campaign
 from providers.features import InsumosML, construir_insumos_ml
 from providers.nasa_power import NasaPowerUnavailable
 from schemas import Campana, SimulateRequest
@@ -67,10 +69,22 @@ def armar_respuesta(insumos: InsumosML, request: SimulateRequest) -> dict[str, A
     perfil = insumos.perfil_suelo
     topo = insumos.topografia
     what_if = request.simulacion_what_if.model_dump() if request.simulacion_what_if else None
+    escenarios: Any = insumos.escenarios_historicos
+    if insumos.calendario_eventos and insumos.calendario_lluvia:
+        # ML-7: años análogos del período crítico de cada cultivo, ponderados por ONI.
+        escenarios = escenarios_por_cultivo(
+            insumos.calendario_eventos,
+            insumos.calendario_lluvia,
+            get_crops_for_campaign(request.campana),
+            insumos.fecha_corte,
+            oni_actual=insumos.oni_actual,
+        )
+        if not all(escenarios.values()):
+            raise NasaPowerUnavailable(MSG_SIN_ESCENARIOS)
 
     respuesta = run_recommendation(
         features=insumos.features_actuales,
-        escenarios_historicos=insumos.escenarios_historicos,
+        escenarios_historicos=escenarios,
         campana=request.campana,
         cultivo_anterior=request.cultivo_anterior,
         objetivo_productor=request.objetivo_productor,
@@ -80,10 +94,17 @@ def armar_respuesta(insumos: InsumosML, request: SimulateRequest) -> dict[str, A
         fecha_ultimo_dato_valido=insumos.fecha_corte.isoformat(),
         ubicacion={"lat": request.coordenadas.lat, "lon": request.coordenadas.lon},
         simulacion_what_if=what_if,
+        fecha_corte=insumos.fecha_corte,
+        oni_actual=insumos.oni_actual,
     )
 
     # Bloques descriptivos: dato satelital real, sin los topes del modelo ni el What-If.
+    riesgo_termico_analogos = respuesta["telemetria_nasa"]["riesgo_termico_verano"]
     respuesta["telemetria_nasa"] = insumos.telemetria.model_dump(mode="json")
+    if request.campana == "verano":
+        # ML-12: días de calor esperados en los años análogos (misma fase ENSO), no el promedio
+        # de todos los años, para que no contradiga el riesgo de los cultivos.
+        respuesta["telemetria_nasa"]["riesgo_termico_verano"] = riesgo_termico_analogos
     respuesta["topografia_srtm"].update(
         elevacion_m=round(float(topo.elevacion_m), 1),
         pendiente_terreno_pct=round(float(topo.pendiente_terreno_pct), 1),

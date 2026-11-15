@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 
 from providers.cache import clave_celda_power, obtener_cache
-from providers.features import calendario_eventos
+from providers.features import calendario_eventos, calendario_lluvia
 from providers.nasa_power import (
     NasaPowerDailySeries,
     NasaPowerUnavailable,
@@ -38,8 +38,13 @@ VENTANA_ANOMALIA_DIAS = 90
 MIN_DIAS_VALIDOS = 75  # = min_periods del rolling del script de ML
 PARAMS_CORTE = ("PRECTOTCORR", "GWETROOT", "GWETTOP")
 
+# Climatología de lluvia (feature anomalia_lluvia_90d_pct) y días de calor promedio: 2006–2025,
+# el mismo período con el que se entrenó el modelo.
 HIST_START = date(2006, 1, 1)
 HIST_END = date(2025, 12, 31)
+# ML-13: el calendario de años análogos (escenarios del ensemble) arranca en 1981, primer año
+# de NASA POWER diario. No cambia ninguna feature del modelo: solo suma escenarios.
+ANALOGOS_START = date(1981, 1, 1)
 HIST_PARAMETROS = ["PRECTOTCORR", "T2M_MAX", "T2M_MIN"]  # T2M_MIN: heladas (BACK-6)
 
 # Constantes de generate_dataset.py
@@ -64,7 +69,7 @@ RIESGO_ALTO_HASTA = 40.0  # [25, 40] -> alto ; > 40 -> critico
 # Caché (BACK-4): clave = celda de la grilla de NASA POWER (0,5° × 0,625°)
 # Cambiar si cambia el cálculo de la climatología, los días de calor o el calendario de eventos.
 # v2 (BACK-6): agrega T2M_MIN y el calendario de eventos diarios para los escenarios del ensemble.
-VERSION_CALCULO = "telemetria-v2"
+VERSION_CALCULO = "telemetria-v4"  # v3: + calendario de lluvia diaria (ML-7); v4: análogos desde 1981 (ML-13)
 ESPACIO_HIST = "nasa_hist"
 ESPACIO_RECIENTE = "nasa_reciente"
 TTL_RECIENTE_S = 6 * 3600.0
@@ -237,22 +242,39 @@ class ReferenciaHistorica:
     dias_calor_verano_promedio: float
     # año -> un carácter por día con los bits tormenta/calor/helada (providers.features)
     calendario_eventos: dict[int, str] = field(default_factory=dict)
+    calendario_lluvia: dict[int, str] = field(default_factory=dict)  # 2 caracteres por día (ML-7)
+
+
+def recortar_serie(serie: NasaPowerDailySeries, desde: date, hasta: date) -> NasaPowerDailySeries:
+    """Sub-serie con los días en [desde, hasta]."""
+    inicio, fin = max(desde, serie.start), min(hasta, serie.end)
+    return NasaPowerDailySeries(
+        lat=serie.lat,
+        lon=serie.lon,
+        start=inicio,
+        end=fin,
+        series={p: {d: v for d, v in vals.items() if inicio <= d <= fin} for p, vals in serie.series.items()},
+        elevacion_m=serie.elevacion_m,
+    )
 
 
 def calcular_referencia(serie_hist: NasaPowerDailySeries) -> ReferenciaHistorica:
+    """Climatología y días de calor sobre 2006–2025; calendarios de análogos sobre toda la serie."""
+    clima = recortar_serie(serie_hist, HIST_START, HIST_END)
     lluvia = serie_hist.series.get("PRECTOTCORR", {})
     tmax = serie_hist.series.get("T2M_MAX", {})
     tmin = serie_hist.series.get("T2M_MIN", {})
     fechas = sorted(lluvia)
     return ReferenciaHistorica(
-        clim_por_doy=climatologia_lluvia_90d_por_doy(serie_hist),
-        dias_calor_verano_promedio=dias_calor_verano_promedio(serie_hist),
+        clim_por_doy=climatologia_lluvia_90d_por_doy(clima),
+        dias_calor_verano_promedio=dias_calor_verano_promedio(clima),
         calendario_eventos=calendario_eventos(
             fechas,
             [lluvia.get(d) for d in fechas],
             [tmax.get(d) for d in fechas],
             [tmin.get(d) for d in fechas],
         ),
+        calendario_lluvia=calendario_lluvia(fechas, [lluvia.get(d) for d in fechas]),
     )
 
 
@@ -267,6 +289,7 @@ def referencia_a_dict(ref: ReferenciaHistorica) -> dict[str, Any]:
         # Solo referencia: al leer se reclasifica con los umbrales vigentes.
         "riesgo_termico_verano": clasificar_riesgo_termico(ref.dias_calor_verano_promedio),
         "calendario_eventos": {str(anio): texto for anio, texto in sorted(ref.calendario_eventos.items())},
+        "calendario_lluvia": {str(anio): texto for anio, texto in sorted(ref.calendario_lluvia.items())},
     }
 
 
@@ -282,6 +305,7 @@ def dict_a_referencia(datos: Any) -> ReferenciaHistorica | None:
             clim_por_doy={doy: float(v) for doy, v in enumerate(lista, start=1) if v is not None},
             dias_calor_verano_promedio=float(datos["dias_calor_verano_promedio"]),
             calendario_eventos={int(a): str(t) for a, t in datos.get("calendario_eventos", {}).items()},
+            calendario_lluvia={int(a): str(t) for a, t in datos.get("calendario_lluvia", {}).items()},
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -308,7 +332,7 @@ def reiniciar_estado(precalculo: dict[str, Any] | None = None) -> None:
 
 
 async def obtener_referencia_historica(lat: float, lon: float, client: httpx.AsyncClient) -> ReferenciaHistorica:
-    """Caché por celda -> JSON precalculado -> cálculo en vivo (2006–2025)."""
+    """Caché por celda -> JSON precalculado -> cálculo en vivo (1981–2025)."""
     cache = obtener_cache()
     clave = clave_celda_power(lat, lon)
 
@@ -319,7 +343,7 @@ async def obtener_referencia_historica(lat: float, lon: float, client: httpx.Asy
     entrada_pre = cargar_climatologia_precalculada().get(clave)
     ref = dict_a_referencia(entrada_pre) if entrada_pre is not None else None
     if ref is None:
-        serie = await fetch_daily_range(lat, lon, HIST_START, HIST_END, HIST_PARAMETROS, client=client)
+        serie = await fetch_daily_range(lat, lon, ANALOGOS_START, HIST_END, HIST_PARAMETROS, client=client)
         ref = calcular_referencia(serie)
 
     entrada = referencia_a_dict(ref)

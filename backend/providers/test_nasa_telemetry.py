@@ -10,11 +10,13 @@ from providers import nasa_telemetry
 from providers.cache import CacheEnCapas, CacheMemoria, clave_celda_power, configurar_cache, obtener_cache
 from providers.nasa_power import NasaPowerDailySeries, NasaPowerUnavailable
 from providers.nasa_telemetry import (
+    ANALOGOS_START,
     HIST_END,
     HIST_START,
     Ventana90d,
     anomalia_lluvia_90d_pct,
     build_telemetria_nasa,
+    calcular_referencia,
     clasificar_riesgo_termico,
     climatologia_lluvia_90d_por_doy,
     dias_calor_verano_promedio,
@@ -307,7 +309,7 @@ def _run_build(reciente: NasaPowerDailySeries, historico: NasaPowerDailySeries):
 
     def handler(req):
         llamadas.append(dict(req.url.params))
-        if req.url.params["start"] == HIST_START.strftime("%Y%m%d"):
+        if req.url.params["start"] == ANALOGOS_START.strftime("%Y%m%d"):
             return httpx.Response(200, json=_payload(historico))
         return httpx.Response(200, json=_payload(reciente))
 
@@ -341,8 +343,8 @@ def test_build_telemetria_punta_a_punta():
 
     # 2 requests: reciente de 100 días + histórico 2006–2025
     starts = sorted(p["start"] for p in llamadas)
-    assert starts == ["20060101", (HOY - timedelta(days=99)).strftime("%Y%m%d")]
-    hist_call = next(p for p in llamadas if p["start"] == "20060101")
+    assert starts == ["19810101", (HOY - timedelta(days=99)).strftime("%Y%m%d")]
+    hist_call = next(p for p in llamadas if p["start"] == "19810101")
     assert hist_call["end"] == "20251231"
     assert hist_call["parameters"] == "PRECTOTCORR,T2M_MAX,T2M_MIN"  # T2M_MIN desde BACK-6
 
@@ -366,7 +368,7 @@ def test_build_sin_gwetroot_valido_lanza():
 
 def test_build_si_historico_falla_lanza():
     def handler(req):
-        if req.url.params["start"] == "20060101":
+        if req.url.params["start"] == "19810101":
             return httpx.Response(503)
         return httpx.Response(200, json=_payload(_reciente()))
 
@@ -383,7 +385,7 @@ def test_build_si_historico_falla_lanza():
 
 def _handler_contador(reciente, historico, llamadas):
     def handler(req):
-        es_hist = req.url.params["start"] == HIST_START.strftime("%Y%m%d")
+        es_hist = req.url.params["start"] == ANALOGOS_START.strftime("%Y%m%d")
         llamadas.append("hist" if es_hist else "reciente")
         return httpx.Response(200, json=_payload(historico if es_hist else reciente))
 
@@ -485,3 +487,14 @@ def test_nasa_caida_mensaje_claro():
 
     with pytest.raises(NasaPowerUnavailable, match="NASA POWER no está respondiendo"):
         _build(handler)
+
+
+def test_referencia_desde_1981_no_cambia_climatologia_ni_dias_de_calor():
+    """ML-13: los años 1981–2005 solo suman análogos; climatología y días de calor siguen en 2006–2025."""
+    tmax = lambda d: 36.0 if d.year < 2006 else (35.0 if d.month == 1 and d.day <= 10 else 30.0)  # noqa: E731
+    corta = calcular_referencia(_serie(HIST_START, HIST_END, {"PRECTOTCORR": _lluvia_hist, "T2M_MAX": tmax, "T2M_MIN": lambda d: 10.0}))
+    larga = calcular_referencia(_serie(ANALOGOS_START, HIST_END, {"PRECTOTCORR": _lluvia_hist, "T2M_MAX": tmax, "T2M_MIN": lambda d: 10.0}))
+    assert larga.clim_por_doy == corta.clim_por_doy
+    assert larga.dias_calor_verano_promedio == corta.dias_calor_verano_promedio == 10.0
+    assert min(larga.calendario_eventos) == 1981 and min(corta.calendario_eventos) == 2006
+    assert {a: t for a, t in larga.calendario_eventos.items() if a >= 2006} == corta.calendario_eventos
