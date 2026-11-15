@@ -67,7 +67,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-29` | Endpoint `GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento`: seguimiento semanal de una campaña sembrada | `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/services/seguimiento_service.py` (nuevo), `backend/routers/test_seguimiento.py` (nuevo), `CONTEXT.md`, `backend/TASKS_BACKEND.md` | `ML-18`, `BACK-28` | `[x]` |
 | `BACK-30` | Cerrar y borrar campañas: validación de fecha de cosecha (no anterior a la siembra ni futura) en `POST`/`PATCH` y tests del CRUD | `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/routers/test_campaigns.py` (nuevo), `backend/TASKS_BACKEND.md` | `BACK-29` | `[x]` |
 | `BACK-31` | Endpoint `GET /api/v1/historial`: lluvia y agua en raíces por campaña agrícola desde 2006/07 (NASA POWER mensual + diario), rinde de la zona (MAGyP) y cosechas guardadas del lote | `backend/providers/nasa_power.py`, `backend/providers/cache_supabase.py`, `backend/ml/rinde.py`, `backend/services/historial_service.py` (nuevo), `backend/routers/historial.py` (nuevo), `backend/schemas.py`, `backend/main.py`, `backend/routers/test_historial.py` (nuevo) | `BACK-28`, `ML-17` | `[x]` |
-| `BACK-32` | Modo segundo plano en SoilGrids/SRTM para la cola de reintentos: timeout largo, espera de cupo y sin tocar el corte automático | `backend/providers/soilgrids.py`, `backend/providers/srtm.py`, `backend/services/reintentos_campos.py`, tests | `BACK-25` | `[~]` |
+| `BACK-32` | Modo segundo plano en SoilGrids/SRTM para la cola de reintentos: timeout largo, espera de cupo y sin tocar el corte automático | `backend/providers/soilgrids.py`, `backend/providers/srtm.py`, `backend/services/reintentos_campos.py`, tests | `BACK-25` | `[x]` |
 
 ---
 
@@ -1386,7 +1386,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 > **Numeración:** se especificó como BACK-27 en la rama `dolfi` el mismo día en que `main` incorporó BACK-27 a BACK-31 de otra persona; al mergear se renumeró a BACK-32.
 
-### `[~]` BACK-32: Modo segundo plano de SoilGrids/SRTM para la cola de reintentos
+### `[x]` BACK-32: Modo segundo plano de SoilGrids/SRTM para la cola de reintentos
+> **Render (15/11/2026, `main` en `edcd901`):** a las 21:21 UTC había **13 campos** con el suelo pendiente (6 con grilla, 1 con GeoINTA y 6 sin suelo). A las 22:18 UTC, después del deploy de BACK-32, quedan **0 pendientes**: los 19 campos tienen suelo ISRIC y topografía SRTM reales. No se midió ronda por ronda, así que parte puede venir de las rondas previas con el código de BACK-25 (1 por ronda) o de que ISRIC haya respondido más rápido. Igual, 13 → 0 en menos de una hora no era alcanzable con 1 campo por ronda.
 > **Implementación (15/11/2026):**
 > - **`soilgrids.py`:** `segundo_plano` en `fetch_perfil_suelo` y `_cascada_segundo_plano`, con timeout de 60 s, espera de cupo (`_esperar_cupo`, con `_dormir` inyectable) y vecinos de a uno. `_consultar` gana `registrar_corte`.
 > - **`srtm.py`:** `segundo_plano` en `fetch_topografia`, `_resolver` y `_cascada`, con timeout de 30 s y sin tocar el corte.
