@@ -251,3 +251,25 @@ def test_alta_con_dato_real_no_encola(cola_global):
     creado, leido = _crear_campo({**suelo_a_columnas_field(PERFIL_REAL), **topografia_a_columnas_field(TOPO_REAL)})
     assert creado.json()["reintento_en_curso"] is False
     assert not cola_global.en_curso(FIELD_ID)
+
+
+# ---------- BACK-27: la cola usa el modo segundo plano ----------
+
+
+def test_cola_llama_a_los_providers_en_segundo_plano(monkeypatch):
+    vistos = {}
+
+    async def suelo(lat, lon, **kw):
+        vistos["suelo"] = kw
+        return PERFIL_REAL
+
+    async def topo(lat, lon, **kw):
+        vistos["topo"] = kw
+        return TOPO_REAL
+
+    monkeypatch.setattr(reintentos_campos, "fetch_perfil_suelo", suelo)
+    monkeypatch.setattr(reintentos_campos, "fetch_topografia", topo)
+    cola = ColaReintentos(lambda *_: None)
+    cola.encolar("f1", -33.9, -60.5, suelo=True, topo=True)
+    asyncio.run(cola.ciclo())
+    assert vistos == {"suelo": {"segundo_plano": True}, "topo": {"segundo_plano": True}}

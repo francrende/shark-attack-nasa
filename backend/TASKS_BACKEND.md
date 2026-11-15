@@ -62,6 +62,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-24` | Servicio único de datos del lote para `/telemetry` y `/simulate` (política de la sección 4.5) y `field_id` en `/simulate` | `backend/services/datos_lote.py`, `backend/services/telemetry_service.py`, `backend/services/simulation_service.py`, `backend/providers/features.py`, `backend/routers/simulate.py`, `backend/routers/telemetry.py`, `backend/schemas.py`, tests | `BACK-26`, `BACK-22`, `BACK-23` | `[~]` |
 | `BACK-25` | Reintento en segundo plano de ISRIC/SRTM para campos con dato aproximado (cada 5 min, hasta 1 h) y estado visible para el frontend | `backend/services/reintentos_campos.py`, `backend/services/test_reintentos_campos.py`, `backend/routers/fields.py`, `backend/schemas.py`, `backend/main.py` | `BACK-22`, `BACK-18` | `[~]` |
 | `BACK-26` | Clima histórico por celda en Supabase, leído bajo demanda, con `climatologia_pampa.json` como respaldo | `backend/providers/nasa_telemetry.py`, `backend/providers/cache_supabase.py`, `backend/providers/generar_precache.py`, `backend/main.py`, tests | `BACK-18` | `[x]` |
+| `BACK-27` | Modo segundo plano en SoilGrids/SRTM para la cola de reintentos: timeout largo, espera de cupo y sin tocar el corte automático | `backend/providers/soilgrids.py`, `backend/providers/srtm.py`, `backend/services/reintentos_campos.py`, tests | `BACK-25` | `[~]` |
 
 ---
 
@@ -1233,6 +1234,54 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     - `/health` sigue arrancando rápido, sin bajar `nasa_hist`.
     - Un `/simulate` en una celda pampeana lee esa celda de Supabase.
     - Con `SUPABASE_SECRET_KEY` inválida, sigue funcionando desde el JSON.
+
+### `[~]` BACK-27: Modo segundo plano de SoilGrids/SRTM para la cola de reintentos
+> **Implementación (15/11/2026):**
+> - **`soilgrids.py`:** `segundo_plano` en `fetch_perfil_suelo` y `_cascada_segundo_plano`, con timeout de 60 s, espera de cupo (`_esperar_cupo`, con `_dormir` inyectable) y vecinos de a uno. `_consultar` gana `registrar_corte`.
+> - **`srtm.py`:** `segundo_plano` en `fetch_topografia`, `_resolver` y `_cascada`, con timeout de 30 s y sin tocar el corte.
+> - **`reintentos_campos.py`:** los providers por defecto son `suelo_segundo_plano` y `topografia_segundo_plano`.
+> - **Tests:** 7 nuevos. La suite completa da **335 en verde**, y los tests en vivo existentes no cambiaron.
+> - **En vivo, contra ISRIC real:** (−29,0, −60,0) respondió con dato real en **16,5 s** y (−31,9, −63,4) en **25,6 s**. Con el timeout en vivo de 8 s, los dos habrían caído al respaldo. El corte quedó cerrado.
+> - **Falta:** el deploy y el DoD en Render (más de un campo resuelto por ronda).
+- **Objetivo:** Que la cola de BACK-25 resuelva varios campos por ronda cuando ISRIC está lento, en lugar de uno solo.
+- **Origen (15/11/2026, Render):**
+  - Entre las 21:14 y las 21:21 UTC la cola pasó solo **1 de 14** campos pendientes a dato real (`61de2725`).
+  - **Por qué:** el worker usa el timeout de las consultas en vivo (8 s) y ISRIC tarda entre 5 y 19 s. El primer timeout activa el corte automático de 5 minutos, y el resto de la ronda cae al respaldo sin consultar.
+  - **Consecuencia:** a lo sumo 1 campo por ronda, así que con 12 rondas varios campos terminan la hora sin dato real.
+- **Archivos Permitidos:** `backend/providers/soilgrids.py`, `backend/providers/srtm.py`, `backend/services/reintentos_campos.py`, `backend/providers/test_soilgrids.py`, `backend/providers/test_srtm.py` y `backend/services/test_reintentos_campos.py`.
+- **Decisiones Acordadas con la Desarrolladora (15/11/2026):**
+  - En segundo plano nadie espera la respuesta, así que el worker usa un **timeout largo** (ISRIC 60 s, como el generador de la grilla) y **no activa el corte automático**.
+  - Las consultas en vivo (alta de campo, `/telemetry` y `/simulate`) no cambian: 8 s y corte de 5 min.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Parámetro nuevo** `segundo_plano: bool = False` en `fetch_perfil_suelo` y `fetch_topografia`. Con `True`:
+    - Se ignora el corte automático: el worker prueba aunque el tráfico en vivo lo haya abierto.
+    - Un timeout o un 429 **no** abren el corte, y un éxito **no** lo cierra. El estado del corte lo maneja solo el tráfico en vivo.
+    - Timeout: **60 s** en ISRIC y **30 s** en OpenTopoData (responde en menos de 1 s, pero mantiene el margen).
+    - **Límite de 5 llamadas por minuto de ISRIC:** el limitador es compartido. En segundo plano, si no hay cupo, se **espera** (de a 2 s, hasta 70 s) en lugar de ir al respaldo. Los vecinos (píxel sin dato) se consultan de a uno, esperando cupo.
+    - OpenTopoData mantiene su espera mínima de 1 s entre llamadas y el tope diario.
+  - **`reintentos_campos.py`:** los providers por defecto se llaman con `segundo_plano=True`.
+  - **Duración de una ronda:** con 13 campos y ISRIC a unos 15 s, una ronda dura unos 3–4 minutos. El intervalo de 5 minutos se cuenta **después** de terminar la ronda (ya es así).
+- **Especificación Técnica:**
+  1. `soilgrids.py`:
+     - `TIMEOUT_SEGUNDO_PLANO_S = 60.0`
+     - `_consultar(..., timeout_s, registrar_corte=True)`
+     - `_esperar_cupo(cantidad)`
+     - `_cascada(..., segundo_plano)`
+     - `fetch_perfil_suelo(..., segundo_plano=False)`
+  2. `srtm.py`:
+     - `TIMEOUT_SEGUNDO_PLANO_S = 30.0`
+     - `_cascada(..., segundo_plano)`, `_resolver(...)` y `fetch_topografia(..., segundo_plano=False)`
+  3. `reintentos_campos.py`: los proveedores por defecto llaman con `segundo_plano=True`.
+  4. Tests:
+     - Con el corte activo, el modo segundo plano igual consulta.
+     - Un timeout en segundo plano no abre el corte.
+     - Se usa el timeout largo.
+     - Sin cupo, espera y después consulta.
+     - El modo en vivo no cambia (los tests existentes siguen en verde).
+     - La cola llama a los providers con `segundo_plano=True`.
+- **Definition of Done:**
+  - `cd backend && python -m pytest -q` en verde.
+  - En Render, con ISRIC lento, una ronda de la cola resuelve **más de un** campo pendiente (se compara la foto de `fields` antes y después de una ronda).
 
 ---
 

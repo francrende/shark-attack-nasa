@@ -34,6 +34,7 @@ BASE_URL = "https://api.opentopodata.org/v1/srtm30m"
 PASO_M = 300.0
 METROS_POR_GRADO_LAT = 111_320.0
 TIMEOUT_S = 5.0
+TIMEOUT_SEGUNDO_PLANO_S = 30.0  # BACK-27: cola de reintentos
 INTERVALO_MIN_S = 1.0  # OpenTopoData público: 1 llamada/segundo
 LIMITE_DIARIO = 1000  # OpenTopoData público: 1000 llamadas/día
 DURACION_CORTE_S = 300.0
@@ -185,10 +186,13 @@ async def _fallback_regional(
     )
 
 
-async def _cascada(client: httpx.AsyncClient, lat: float, lon: float, clave: str) -> TopografiaSrtm:
+async def _cascada(
+    client: httpx.AsyncClient, lat: float, lon: float, clave: str, segundo_plano: bool = False
+) -> TopografiaSrtm:
+    """``segundo_plano`` (BACK-27): ignora el corte, no lo abre ni lo cierra y espera más."""
     cache = obtener_cache()
 
-    if not _corte.permite_llamada():
+    if not segundo_plano and not _corte.permite_llamada():
         return await _fallback_regional(lat, lon, client, "corte automático activo", transitorio=True)
     if not _contador.reservar():
         return await _fallback_regional(lat, lon, client, "tope diario de OpenTopoData", transitorio=True)
@@ -199,16 +203,18 @@ async def _cascada(client: httpx.AsyncClient, lat: float, lon: float, clave: str
         resp = await client.get(
             BASE_URL,
             params={"locations": "|".join(f"{a:.6f},{b:.6f}" for a, b in puntos)},
-            timeout=TIMEOUT_S,
+            timeout=TIMEOUT_SEGUNDO_PLANO_S if segundo_plano else TIMEOUT_S,
         )
     except httpx.TimeoutException:
-        _corte.registrar_falla()
+        if not segundo_plano:
+            _corte.registrar_falla()
         return await _fallback_regional(lat, lon, client, "timeout", transitorio=True)
     except httpx.TransportError as exc:
         return await _fallback_regional(lat, lon, client, f"error de red: {exc}", transitorio=True)
 
     if resp.status_code == 429:
-        _corte.registrar_falla()
+        if not segundo_plano:
+            _corte.registrar_falla()
         return await _fallback_regional(lat, lon, client, "HTTP 429", transitorio=True)
     if resp.status_code != 200:
         return await _fallback_regional(lat, lon, client, f"HTTP {resp.status_code}", transitorio=True)
@@ -221,7 +227,8 @@ async def _cascada(client: httpx.AsyncClient, lat: float, lon: float, clave: str
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         return await _fallback_regional(lat, lon, client, f"respuesta inválida: {exc}", transitorio=True)
 
-    _corte.registrar_exito()
+    if not segundo_plano:
+        _corte.registrar_exito()
     if any(e is None for e in elevaciones):
         # Mar o fuera de la cobertura de SRTM: determinístico, se cachea y no se reintenta.
         cache.set(ESPACIO_TOPO, clave, _SIN_DATO)
@@ -241,7 +248,7 @@ async def _cascada(client: httpx.AsyncClient, lat: float, lon: float, clave: str
 
 
 async def fetch_topografia(
-    lat: float, lon: float, *, client: httpx.AsyncClient | None = None
+    lat: float, lon: float, *, client: httpx.AsyncClient | None = None, segundo_plano: bool = False
 ) -> TopografiaSrtm:
     """Elevación y pendiente del punto (SRTM 30 m), con caché y cascada de respaldo.
 
@@ -255,15 +262,20 @@ async def fetch_topografia(
 
     if client is None:
         async with httpx.AsyncClient() as propio:
-            return await _resolver(propio, lat, lon, clave, cacheado)
-    return await _resolver(client, lat, lon, clave, cacheado)
+            return await _resolver(propio, lat, lon, clave, cacheado, segundo_plano)
+    return await _resolver(client, lat, lon, clave, cacheado, segundo_plano)
 
 
 async def _resolver(
-    client: httpx.AsyncClient, lat: float, lon: float, clave: str, cacheado: Any
+    client: httpx.AsyncClient,
+    lat: float,
+    lon: float,
+    clave: str,
+    cacheado: Any,
+    segundo_plano: bool = False,
 ) -> TopografiaSrtm:
     if cacheado == _SIN_DATO:
         return await _fallback_regional(lat, lon, client, "puntos sin dato en SRTM (caché)", transitorio=False)
     if cacheado is not None:
         return dict_a_topografia(cacheado)
-    return await _cascada(client, lat, lon, clave)
+    return await _cascada(client, lat, lon, clave, segundo_plano)
