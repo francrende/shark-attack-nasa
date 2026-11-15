@@ -511,6 +511,11 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 > - **`simulation_service`:** arma los años análogos del período crítico de cada cultivo, ponderados por ONI (`ml/escenarios.py`), y pasa `fecha_corte` y `oni_actual`. `ItemRanking` gana `fuera_de_ventana_siembra`.
 
 ### `[x]` BACK-13: Endpoint `POST /api/v1/simulate` *(antes BACK-7)*
+> **Actualización (15/11/2026) — se incorporan tres ideas de la versión paralela de BACK-7 de Dolfina (rama `dolfi`, commit `a1bdfd5`):**
+> - **Predictor fuera del event loop:** `simular` corre `armar_respuesta` (el ensemble, CPU y síncrono) con `run_in_threadpool`, para que el servidor siga atendiendo login y campos mientras calcula.
+> - **503 con el servicio que falló:** `{"detail": <mensaje>, "fuente": "nasa_power" | "soilgrids" | "srtm"}` (antes solo `detail`). Compatible: `detail` se mantiene.
+> - **`routers/check_simulate_live.py`:** prueba de punta a punta con APIs reales desde la terminal, adaptada al ensemble: `python -m routers.check_simulate_live -33.935 -60.579 trigo`.
+> - **No se incorporan:** el modo interino "escenario mediano" (reemplazado por el ensemble por fase ENSO), el bloque `calidad_datos` (cubierto por `advertencias`) y la carga del modelo en segundo plano (hoy carga en ~1,4 s).
 > **Verificación (15/11/2026):**
 > - **Tests:** 22 nuevos en `routers/test_simulate.py`, incluido uno de punta a punta con los providers reales y HTTP mockeado. La suite completa del backend da 203 en verde.
 > - **En vivo, Pergamino** (corte 11/11): 200 OK, 19 años análogos, gana sorgo (88,2, riesgo bajo, P10 81,2). Primer pedido con caché vacía 1,96 s; los siguientes 0,18 s.

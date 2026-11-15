@@ -11,6 +11,8 @@ from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
+
 from ml.escenarios import escenarios_por_cultivo
 from ml.predictor import run_recommendation
 from services.rotation_matrix import get_crops_for_campaign
@@ -133,4 +135,6 @@ async def simular(
     today = today or datetime.now(timezone.utc).date()
     validar_campana(request.campana, today)
     insumos = await construir(request.coordenadas.lat, request.coordenadas.lon, today=today)
-    return armar_respuesta(insumos, request)
+    # El ensemble del modelo es CPU y síncrono: en un hilo aparte, para que el servidor siga
+    # atendiendo otros pedidos (login, campos) mientras calcula. Idea de BACK-7 de Dolfina.
+    return await run_in_threadpool(armar_respuesta, insumos, request)
