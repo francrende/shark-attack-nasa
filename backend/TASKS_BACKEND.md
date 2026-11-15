@@ -36,7 +36,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 | ID | Tarea Atómica | Archivos Involucrados | Depende de | Estado |
 | :--- | :--- | :--- | :---: | :---: |
-| BACK-1 | Provider crudo NASA POWER (ventana 30 días + filtro `-999`) | `backend/providers/nasa_power.py`, `backend/providers/test_nasa_power.py`, `backend/providers/check_nasa_power_live.py` | — | `[x]` |
+| `BACK-1` | Estructura base FastAPI, config y cliente Supabase | `backend/main.py`, `backend/config.py`, `backend/providers/supabase_client.py`, `backend/requirements.txt`, `backend/.env.example` | — | `[x]` |
+| `BACK-2` | Esquema SQL en Supabase (`profiles`, `fields`, `campaigns` + RLS) | `backend/sql/schema.sql` | `BACK-1` | `[x]` |
+| `BACK-3` | Endpoints de Auth y dependencia JWT (Supabase Auth) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/main.py` | `BACK-1`, `BACK-2` | `[x]` |
+| `BACK-4` | CRUD de Campos y Campañas/Resultados por Campo | `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py` | `BACK-2`, `BACK-3` | `[x]` |
+| `BACK-5` | Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email | `backend/TASKS_BACKEND.md` | `BACK-3` | `[x]` |
+| `BACK-6` | Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`) | `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md` | `BACK-4` | `[x]` |
+| BACK-1 (Providers) | Provider crudo NASA POWER (ventana 30 días + filtro `-999`) | `backend/providers/nasa_power.py`, `backend/providers/test_nasa_power.py`, `backend/providers/check_nasa_power_live.py` | — | `[x]` |
 | BACK-2 | Bloque `telemetria_nasa` (humedad, tendencia de 15 días, anomalía de lluvia de 90 días, tormentas extremas, riesgo térmico de verano) | `backend/schemas.py`, `backend/providers/nasa_power.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/check_nasa_power_live.py` | BACK-1 | `[x]` |
 | BACK-3 | Provider ISRIC SoilGrids (0–30 cm ponderado, vecinos ante `null`, fallback GeoINTA, caché) | `backend/providers/soilgrids.py`, `backend/providers/test_soilgrids.py`, `backend/providers/check_soilgrids_live.py` | — | `[x]` |
 | BACK-4 | Resiliencia y latencia: caché en capas, caché de NASA por celda de grilla, climatología pampeana precalculada, corte automático de SoilGrids, lotes de ejemplo | `backend/providers/cache.py`, `backend/providers/nasa_telemetry.py`, `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/data/*.json`, `backend/providers/test_cache.py`, `backend/providers/test_nasa_telemetry.py`, `backend/providers/test_soilgrids.py` | BACK-2, BACK-3 | `[x]` |
@@ -47,7 +53,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
-## 3.1. Especificación de Tareas
+## 3.1. Especificación de Tareas (Providers NASA / SoilGrids / SRTM)
 
 ### `[x]` BACK-1: Provider crudo de NASA POWER API
 - **Objetivo:** Cliente HTTP aislado que trae la serie diaria de los últimos 30 días de NASA POWER para un `lat`/`lon`, limpia los valores `-999` y expone el último valor válido de cada parámetro. No calcula métricas derivadas ni expone endpoints.

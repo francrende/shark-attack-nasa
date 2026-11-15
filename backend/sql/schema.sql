@@ -6,6 +6,9 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text,
   nombre text,
+  created_at timestamptz not null default now()
+);
+
   -- Provincias elegidas en el filtro inicial (Región Pampeana). NULL = aún no completó el filtro.
   provincias text[],
   created_at timestamptz not null default now()

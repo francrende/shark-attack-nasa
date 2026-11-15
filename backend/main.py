@@ -23,7 +23,8 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    get_predictor()  # carga modelo_agro.joblib una sola vez, antes del primer pedido
+    """Precarga el modelo ML antes del primer request."""
+    get_predictor()
     yield
 
 
