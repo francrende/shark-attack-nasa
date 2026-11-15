@@ -1,24 +1,33 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   AlertCircle,
+  AlertTriangle,
   Check,
   CheckCircle2,
   Eye,
   EyeOff,
   Globe,
+  Loader2,
   Lock,
   LogOut,
   Mail,
   MapPin,
   Maximize2,
   MoreVertical,
+  RotateCcw,
   Save,
   User,
   X,
 } from 'lucide-react'
+import { ArgentinaProvinces3DMap } from './ArgentinaProvinces3DMap'
 import { updateCurrentUser } from '../services/authClient'
 import { getFieldColorByIndex } from '../theme/mapColors'
 import type { UserField, UserProfile, UserUpdateRequest } from '../types/api'
+import {
+  PAMPEAN_PROVINCE_IDS,
+  getProvinceById,
+  isPointInProvinces,
+} from '../utils/geo'
 
 type SettingsTabId = 'usuario' | 'campos' | 'expandir_mapa' | 'idioma'
 
@@ -27,8 +36,12 @@ interface UserSettingsModalProps {
   user: UserProfile | null
   accessToken: string | null
   fields: UserField[]
+  selectedProvinces: string[]
+  isSavingProvinces: boolean
+  provincesError: string | null
   onClose: () => void
   onUserUpdated: (user: UserProfile) => void
+  onSaveProvinces: (provinceIds: string[]) => Promise<boolean>
   onRenameField: (fieldId: string, nombre: string) => Promise<void>
   onEditFieldPolygon: (field: UserField) => void
   onDeleteField: (fieldId: string) => Promise<void>
@@ -36,18 +49,11 @@ interface UserSettingsModalProps {
 }
 
 const PLACEHOLDER_TABS: {
-  id: Exclude<SettingsTabId, 'usuario' | 'campos'>
+  id: Exclude<SettingsTabId, 'usuario' | 'campos' | 'expandir_mapa'>
   label: string
   icon: typeof Globe
   placeholder: string
 }[] = [
-  {
-    id: 'expandir_mapa',
-    label: 'Expandir mapa',
-    icon: Maximize2,
-    placeholder:
-      'El control para ampliar el visor del mapa a pantalla completa se completará en la próxima etapa.',
-  },
   {
     id: 'idioma',
     label: 'Idioma',
@@ -64,16 +70,307 @@ const ALL_TABS: {
 }[] = [
   { id: 'usuario', label: 'Usuario', icon: User },
   { id: 'campos', label: 'Campos', icon: MapPin },
+  { id: 'expandir_mapa', label: 'Expandir mapa', icon: Maximize2 },
   ...PLACEHOLDER_TABS.map(({ id, label, icon }) => ({ id, label, icon })),
 ]
+
+function RegionExpansionPanel({
+  initialSelected,
+  fields,
+  isSaving,
+  errorMsg,
+  onSave,
+}: {
+  initialSelected: string[]
+  fields: UserField[]
+  isSaving: boolean
+  errorMsg: string | null
+  onSave: (provinceIds: string[]) => Promise<void>
+}) {
+  const [draftSelected, setDraftSelected] = useState<string[]>(() =>
+    initialSelected.filter((id) =>
+      (PAMPEAN_PROVINCE_IDS as readonly string[]).includes(id)
+    )
+  )
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  useEffect(() => {
+    if (!showDeleteConfirm) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (!isSaving) {
+        setShowDeleteConfirm(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, { capture: true })
+    return () =>
+      window.removeEventListener('keydown', handleKeyDown, { capture: true })
+  }, [showDeleteConfirm, isSaving])
+
+  const toggleProvince = (id: string) => {
+    if (isSaving) return
+    setDraftSelected((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+    )
+  }
+
+  const hasChanges =
+    draftSelected.length !== initialSelected.length ||
+    draftSelected.some((id) => !initialSelected.includes(id))
+
+  const affectedFields = fields.filter(
+    (field) => !isPointInProvinces(field.lat, field.lon, draftSelected)
+  )
+
+  const removedProvincesWithFields = initialSelected
+    .filter((id) => !draftSelected.includes(id))
+    .filter((id) =>
+      affectedFields.some((field) =>
+        isPointInProvinces(field.lat, field.lon, [id])
+      )
+    )
+    .map((id) => getProvinceById(id)?.properties.nombre ?? id)
+
+  const canSave = draftSelected.length > 0 && hasChanges && !isSaving
+
+  const handleSaveClick = () => {
+    if (!canSave) return
+    if (affectedFields.length > 0) {
+      setShowDeleteConfirm(true)
+      return
+    }
+    void onSave(draftSelected)
+  }
+
+  return (
+    <div className="settings-placeholder-card settings-region-card">
+      <div className="settings-region-header">
+        <div className="settings-placeholder-head">
+          <Maximize2 size={18} aria-hidden="true" />
+          <h2>Expandir mapa</h2>
+        </div>
+        <span className="coords-pill" aria-live="polite">
+          <code>
+            {draftSelected.length}/{PAMPEAN_PROVINCE_IDS.length}
+          </code>
+          <span className="coords-ha">provincias</span>
+        </span>
+      </div>
+
+      <p className="settings-placeholder-text">
+        Active o desactive las provincias habilitadas para gestionar sus campos.
+      </p>
+
+      <div className="settings-region-grid">
+        <div
+          className="settings-region-map-pane"
+          aria-label="Mapa 3D de provincias de Argentina"
+        >
+          <ArgentinaProvinces3DMap
+            compact
+            showLegend={false}
+            selected={draftSelected}
+            disabled={isSaving}
+            onToggleProvince={toggleProvince}
+          />
+        </div>
+
+        <div className="settings-region-controls">
+          <div className="province-control-header">
+            <span className="control-label">
+              <MapPin size={14} aria-hidden="true" />
+              <span>Provincias seleccionadas</span>
+            </span>
+            <button
+              type="button"
+              className="reset-whatif-btn province-reset-btn"
+              disabled={draftSelected.length === 0 || isSaving}
+              onClick={() => setDraftSelected([])}
+            >
+              <RotateCcw size={13} aria-hidden="true" />
+              <span>Limpiar</span>
+            </button>
+          </div>
+
+          <div
+            className={`what-if-box province-selection-box settings-region-selection-box ${
+              draftSelected.length === 0 ? 'is-empty' : ''
+            }`}
+          >
+            {draftSelected.length === 0 ? (
+              <p className="empty-rotation-text">
+                Seleccione al menos una provincia en el mapa.
+              </p>
+            ) : (
+              <ul className="province-chip-list">
+                {draftSelected.map((id) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      className="province-chip"
+                      onClick={() => toggleProvince(id)}
+                      disabled={isSaving}
+                      aria-label={`Quitar ${getProvinceById(id)?.properties.nombre ?? id}`}
+                    >
+                      <Check size={13} aria-hidden="true" />
+                      <span>{getProvinceById(id)?.properties.nombre ?? id}</span>
+                      <X size={13} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div
+            className={`settings-region-notice ${
+              affectedFields.length > 0 ? 'warning' : ''
+            }`}
+            role={affectedFields.length > 0 ? 'status' : undefined}
+          >
+            <AlertTriangle size={14} aria-hidden="true" />
+            <span>
+              {affectedFields.length > 0
+                ? affectedFields.length === 1
+                  ? `Al guardar, se eliminará el campo "${affectedFields[0].nombre}" ubicado en la provincia desmarcada.`
+                  : `Al guardar, se eliminarán ${affectedFields.length} campos ubicados en las provincias desmarcadas.`
+                : 'Quitar una provincia eliminará también los campos registrados en ella.'}
+            </span>
+          </div>
+
+          {errorMsg && (
+            <div className="settings-alert settings-alert-error" role="alert">
+              <AlertCircle size={15} aria-hidden="true" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          <div className="settings-region-footer">
+            <button
+              type="button"
+              className="settings-save-btn settings-region-save-btn"
+              disabled={!canSave}
+              onClick={handleSaveClick}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 size={15} className="province-spin" aria-hidden="true" />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <>
+                  <Save size={15} aria-hidden="true" />
+                  <span>Guardar cambios</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {showDeleteConfirm && affectedFields.length > 0 && (
+        <div
+          className="settings-region-confirm-backdrop"
+          onClick={() => {
+            if (!isSaving) setShowDeleteConfirm(false)
+          }}
+        >
+          <div
+            className="settings-region-confirm-card"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="region-confirm-title"
+            aria-describedby="region-confirm-desc"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-region-confirm-head">
+              <span className="settings-region-confirm-icon" aria-hidden="true">
+                <AlertTriangle size={18} />
+              </span>
+              <h3 id="region-confirm-title">
+                {affectedFields.length === 1
+                  ? '¿Eliminar provincia con un campo cargado?'
+                  : '¿Eliminar provincias con campos cargados?'}
+              </h3>
+            </div>
+
+            <p id="region-confirm-desc" className="settings-region-confirm-text">
+              {affectedFields.length === 1
+                ? `Si quita ${removedProvincesWithFields[0] ?? 'esta provincia'}, también se eliminará de forma permanente el siguiente campo:`
+                : `Si quita ${
+                    removedProvincesWithFields.length > 0
+                      ? removedProvincesWithFields.join(', ')
+                      : 'estas provincias'
+                  }, también se eliminarán de forma permanente los siguientes campos:`}
+            </p>
+
+            <ul className="settings-region-confirm-list">
+              {affectedFields.map((field) => (
+                <li key={field.id}>
+                  <span className="settings-region-confirm-field-name">
+                    {field.nombre}
+                  </span>
+                  {field.hectareas !== null && (
+                    <span className="settings-region-confirm-field-meta">
+                      {Math.round(field.hectareas)} ha
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            {errorMsg && (
+              <div className="settings-alert settings-alert-error" role="alert">
+                <AlertCircle size={15} aria-hidden="true" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <div className="settings-region-confirm-actions">
+              <button
+                type="button"
+                className="settings-cancel-delete-btn settings-region-confirm-btn"
+                disabled={isSaving}
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                className="settings-confirm-delete-btn settings-region-confirm-btn"
+                disabled={isSaving}
+                onClick={() => void onSave(draftSelected)}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 size={14} className="province-spin" aria-hidden="true" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  'Confirmar y eliminar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function UserSettingsModal({
   isOpen,
   user,
   accessToken,
   fields,
+  selectedProvinces,
+  isSavingProvinces,
+  provincesError,
   onClose,
   onUserUpdated,
+  onSaveProvinces,
   onRenameField,
   onEditFieldPolygon,
   onDeleteField,
@@ -102,6 +399,34 @@ export function UserSettingsModal({
   const [busyFieldId, setBusyFieldId] = useState<string | null>(null)
   const [fieldsError, setFieldsError] = useState<string | null>(null)
   const [fieldsSuccess, setFieldsSuccess] = useState<string | null>(null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const bodyEl = bodyRef.current
+    const contentEl = contentRef.current
+    if (!isOpen || !bodyEl || !contentEl) return
+
+    bodyEl.style.height = `${contentEl.offsetHeight}px`
+    const rafId = requestAnimationFrame(() => {
+      bodyEl.classList.add('is-height-animated')
+    })
+
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            bodyEl.style.height = `${contentEl.offsetHeight}px`
+          })
+        : null
+    observer?.observe(contentEl)
+
+    return () => {
+      cancelAnimationFrame(rafId)
+      observer?.disconnect()
+      bodyEl.classList.remove('is-height-animated')
+      bodyEl.style.height = ''
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) return
@@ -343,8 +668,10 @@ export function UserSettingsModal({
           </button>
         </div>
 
-        <div className="settings-folder-body" role="tabpanel">
-          {activeTab === 'usuario' ? (
+        <div ref={bodyRef} className="settings-folder-body" role="tabpanel">
+          <div ref={contentRef} className="settings-folder-content">
+            <div key={activeTab} className="settings-tab-stage">
+              {activeTab === 'usuario' ? (
             <div className="settings-placeholder-card">
               <div className="settings-placeholder-head">
                 <User size={18} aria-hidden="true" />
@@ -678,6 +1005,18 @@ export function UserSettingsModal({
                 </div>
               )}
             </div>
+          ) : activeTab === 'expandir_mapa' ? (
+            <RegionExpansionPanel
+              key={`${isOpen}-${selectedProvinces.join(',')}`}
+              initialSelected={selectedProvinces}
+              fields={fields}
+              isSaving={isSavingProvinces}
+              errorMsg={provincesError}
+              onSave={async (provinceIds) => {
+                const ok = await onSaveProvinces(provinceIds)
+                if (ok) onClose()
+              }}
+            />
           ) : (
             activePlaceholder && (
               <div className="settings-placeholder-card">
@@ -691,6 +1030,8 @@ export function UserSettingsModal({
               </div>
             )
           )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
