@@ -92,7 +92,8 @@ app.include_router(simulate_router)
 app.include_router(telemetry_router)
 
 
-@app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
+@app.head("/health", include_in_schema=False)  # BACK-16: pings con HEAD; fuera del OpenAPI (sin ID duplicado)
+@app.get("/health", tags=["Health"])
 def health_check() -> dict[str, str | bool | int]:
     """Verifica el estado del servidor y si Supabase está configurado.
 

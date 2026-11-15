@@ -275,6 +275,9 @@ class SimulateRequest(_Estricto):
     cultivo_anterior: str | None = None
     objetivo_productor: ObjetivoProductor = "equilibrio"
     simulacion_what_if: SimulacionWhatIf | None = None
+    # BACK-24: campo guardado. Con él, suelo y topografía salen de public.fields (si son reales)
+    # y lo que falte se busca y se guarda. Requiere Bearer token. Sin él, todo sigue como §5.
+    field_id: UUID | None = None
 
     @field_validator("cultivo_anterior")
     @classmethod

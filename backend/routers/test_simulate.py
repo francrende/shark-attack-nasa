@@ -312,3 +312,146 @@ def test_punta_a_punta_con_providers_mockeados():
     dist = data["recomendacion_principal"]["distribucion_hidroclimatica"]
     assert 4 <= dist["anios_evaluados"] <= 20  # ML-12: solo los años de la misma fase ENSO
     assert set(FEATURES_FUTURAS) <= set(dist["peor_escenario"])
+
+
+# ---------- BACK-24: regresión del ensemble (respuesta idéntica antes y después) ----------
+
+import json as _json  # noqa: E402
+import os as _os  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+RUTA_GOLDEN_BACK24 = _Path(__file__).parent / "data" / "simulate_golden_back24.json"
+
+
+def _simular_con_providers_mockeados(body, **kw_construir):
+    async def construir(lat, lon, **kw):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(_handler([]))) as client:
+            kw.pop("today", None)
+            return await construir_insumos_ml(lat, lon, client=client, today=HOY, **{**kw, **kw_construir})
+
+    app.dependency_overrides[get_constructor_insumos] = lambda: construir
+    app.dependency_overrides[get_hoy] = lambda: HOY
+    try:
+        with TestClient(app) as c:
+            return c.post("/api/v1/simulate", json=body)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_regresion_ensemble_back24():
+    """Ranking, scores, P10/P90 y años análogos por cultivo idénticos a los de antes de BACK-24.
+
+    La referencia se generó con el código previo a la refactorización
+    (``GENERAR_GOLDEN_BACK24=1 pytest -k regresion_ensemble``).
+    """
+    r = _simular_con_providers_mockeados(BODY)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    if _os.environ.get("GENERAR_GOLDEN_BACK24") == "1":
+        RUTA_GOLDEN_BACK24.parent.mkdir(exist_ok=True)
+        RUTA_GOLDEN_BACK24.write_text(_json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
+    golden = _json.loads(RUTA_GOLDEN_BACK24.read_text(encoding="utf-8"))
+    assert data == golden
+
+
+# ---------- BACK-24: field_id en /simulate ----------
+
+from routers.telemetry import get_field_store  # noqa: E402
+from services.field_enrichment_service import suelo_a_columnas_field, topografia_a_columnas_field  # noqa: E402
+
+FIELD_ID = "33333333-3333-3333-3333-333333333333"
+AUTH = {"Authorization": "Bearer fake-token"}
+
+
+class _StoreFalso:
+    def __init__(self, fila):
+        self.fila = fila
+        self.actualizaciones: list[dict] = []
+
+    def get_field(self, fid, _token):
+        return self.fila if self.fila is not None and str(fid) == FIELD_ID else None
+
+    def update_field(self, _fid, _token, cambios):
+        self.actualizaciones.append(cambios)
+
+
+def _fila_con_datos_del_mock(**extra) -> dict:
+    """Fila de public.fields con el suelo y la topografía que dan los providers mockeados."""
+    import asyncio as _asyncio
+
+    async def _go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(_handler([]))) as client:
+            return await construir_insumos_ml(BODY["coordenadas"]["lat"], BODY["coordenadas"]["lon"], client=client, today=HOY)
+
+    insumos = _asyncio.run(_go())
+    fila = {"id": FIELD_ID, "lat": BODY["coordenadas"]["lat"], "lon": BODY["coordenadas"]["lon"]}
+    fila.update(suelo_a_columnas_field(insumos.perfil_suelo))
+    fila.update(topografia_a_columnas_field(insumos.topografia))
+    fila.update(extra)
+    # Caché vacía: así una consulta a ISRIC/SRTM en el POST queda registrada por el handler.
+    from providers.cache import CacheEnCapas, CacheMemoria, configurar_cache
+
+    configurar_cache(CacheEnCapas(CacheMemoria()))
+    return fila
+
+
+def _post_con_campo(fila, *, body=None, headers=AUTH, registro=None):
+    registro = [] if registro is None else registro
+    store = _StoreFalso(fila)
+
+    async def construir(lat, lon, **kw):
+        kw.pop("today", None)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(_handler(registro))) as client:
+            return await construir_insumos_ml(lat, lon, client=client, today=HOY, **kw)
+
+    app.dependency_overrides[get_constructor_insumos] = lambda: construir
+    app.dependency_overrides[get_hoy] = lambda: HOY
+    app.dependency_overrides[get_field_store] = lambda: store
+    try:
+        with TestClient(app) as c:
+            r = c.post("/api/v1/simulate", json=body or {**BODY, "field_id": FIELD_ID}, headers=headers)
+    finally:
+        app.dependency_overrides.clear()
+    return r, store, registro
+
+
+def test_field_id_con_datos_reales_no_llama_isric_ni_srtm_y_da_lo_mismo():
+    fila = _fila_con_datos_del_mock()
+    r, store, registro = _post_con_campo(fila)
+    assert r.status_code == 200, r.text
+    assert "suelo" not in registro and "srtm" not in registro
+    assert store.actualizaciones == []
+    golden = _json.loads(RUTA_GOLDEN_BACK24.read_text(encoding="utf-8"))
+    assert r.json() == golden  # mismo ranking, P10/P90 y años análogos que sin field_id
+
+
+def test_field_id_con_suelo_aproximado_busca_isric_y_persiste():
+    fila = _fila_con_datos_del_mock(suelo_fuente="grilla_isric", reintentar_soilgrids=True)
+    r, store, registro = _post_con_campo(fila)
+    assert r.status_code == 200, r.text
+    assert "suelo" in registro and "srtm" not in registro
+    assert len(store.actualizaciones) == 1
+    assert store.actualizaciones[0]["reintentar_soilgrids"] is False
+
+
+def test_field_id_sin_token_401():
+    r, _, _ = _post_con_campo(_fila_con_datos_del_mock(), headers={})
+    assert r.status_code == 401
+
+
+def test_field_id_inexistente_404():
+    r, _, _ = _post_con_campo(None)
+    assert r.status_code == 404
+
+
+def test_field_id_coordenadas_distintas_422():
+    body = {**BODY, "field_id": FIELD_ID, "coordenadas": {"lat": -33.90, "lon": -60.57}}
+    r, _, registro = _post_con_campo(_fila_con_datos_del_mock(), body=body)
+    assert r.status_code == 422
+    assert registro == []  # se rechaza antes de consultar providers
+
+
+def test_sin_field_id_no_cambia_el_contrato():
+    r, store, _ = _post_con_campo(None, body=BODY, headers={})
+    assert r.status_code == 200
+    assert store.actualizaciones == []

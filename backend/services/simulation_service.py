@@ -125,6 +125,8 @@ async def simular(
     *,
     construir: ConstructorInsumos = construir_insumos_ml,
     today: date | None = None,
+    campo: dict[str, Any] | None = None,
+    persistir_campo: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """Pipeline online completo: providers en paralelo → features → ensemble ML → respuesta §5.
 
@@ -134,7 +136,9 @@ async def simular(
     """
     today = today or datetime.now(timezone.utc).date()
     validar_campana(request.campana, today)
-    insumos = await construir(request.coordenadas.lat, request.coordenadas.lon, today=today)
+    # BACK-24: con campo guardado, el servicio único usa sus datos fijos y guarda lo que falte.
+    extra = {"campo": campo, "persistir_campo": persistir_campo} if campo is not None else {}
+    insumos = await construir(request.coordenadas.lat, request.coordenadas.lon, today=today, **extra)
     # El ensemble del modelo es CPU y síncrono: en un hilo aparte, para que el servidor siga
     # atendiendo otros pedidos (login, campos) mientras calcula. Idea de BACK-7 de Dolfina.
     return await run_in_threadpool(armar_respuesta, insumos, request)

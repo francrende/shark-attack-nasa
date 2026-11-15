@@ -340,61 +340,49 @@ async def construir_insumos_ml(
     *,
     client: httpx.AsyncClient | None = None,
     today: date | None = None,
+    campo: Any = None,
+    persistir_campo: Any = None,
 ) -> InsumosML:
-    """Consulta en paralelo NASA POWER, SoilGrids y SRTM y arma las entradas del modelo.
+    """Arma las entradas del modelo con el servicio único de datos del lote (BACK-24).
+
+    ``campo`` (fila de ``public.fields``) y ``persistir_campo`` son opcionales: con ellos se
+    aplica la política del campo (datos fijos guardados, búsqueda y guardado de lo que falte).
+    Sin ellos, el comportamiento es el de siempre (providers con su caché).
 
     Raises:
         ValueError: coordenadas fuera de rango.
         NasaPowerUnavailable / SoilGridsUnavailable / SrtmUnavailable: según el provider.
     """
-    import httpx as _httpx
-
-    from providers.nasa_power import _validar_coordenadas
-    from providers.nasa_telemetry import (
-        build_telemetria_nasa,
-        obtener_referencia_historica,
-        obtener_ventana_reciente,
-    )
+    # Import diferido: services.datos_lote importa providers (evita el ciclo al cargar).
     from providers.enso import oni_al
-    from providers.soilgrids import fetch_perfil_suelo
-    from providers.srtm import fetch_topografia
+    from providers.nasa_telemetry import armar_telemetria
+    from services.datos_lote import obtener_datos_lote
 
-    _validar_coordenadas(lat, lon)
-    today = today or datetime.now(timezone.utc).date()
+    datos = await obtener_datos_lote(
+        lat, lon, campo=campo, persistir_campo=persistir_campo, client=client, today=today, exigir_todo=True
+    )
+    reciente, referencia = datos.reciente, datos.referencia
+    perfil, topo = datos.perfil_suelo, datos.topografia
 
-    async def _armar(c: _httpx.AsyncClient) -> InsumosML:
-        telemetria, perfil, topo = await asyncio.gather(
-            build_telemetria_nasa(lat, lon, client=c, today=today),
-            fetch_perfil_suelo(lat, lon, client=c),
-            fetch_topografia(lat, lon, client=c),
-        )
-        # Ya quedaron en caché por build_telemetria_nasa: no generan requests nuevos.
-        reciente = await obtener_ventana_reciente(lat, lon, c, today)
-        referencia = await obtener_referencia_historica(lat, lon, c)
-
-        corte = telemetria.fecha_ultimo_dato_valido
-        features = features_actuales_desde_series(
-            reciente,
-            corte,
-            referencia.clim_por_doy,
-            pendiente_terreno_pct=topo.pendiente_terreno_pct,
-            elevacion_m=topo.elevacion_m,
-            textura_arcilla_pct=perfil.arcilla_pct,
-        )
-        return InsumosML(
-            features_actuales=features,
-            escenarios_historicos=escenarios_ventana_futura(referencia.calendario_eventos, corte),
-            fecha_corte=corte,
-            telemetria=telemetria,
-            perfil_suelo=perfil,
-            topografia=topo,
-            advertencias=tuple(perfil.advertencias) + tuple(topo.advertencias),
-            calendario_eventos=referencia.calendario_eventos,
-            calendario_lluvia=referencia.calendario_lluvia,
-            oni_actual=oni_al(corte),
-        )
-
-    if client is None:
-        async with _httpx.AsyncClient() as propio:
-            return await _armar(propio)
-    return await _armar(client)
+    telemetria = armar_telemetria(reciente, referencia)
+    corte = telemetria.fecha_ultimo_dato_valido
+    features = features_actuales_desde_series(
+        reciente,
+        corte,
+        referencia.clim_por_doy,
+        pendiente_terreno_pct=topo.pendiente_terreno_pct,
+        elevacion_m=topo.elevacion_m,
+        textura_arcilla_pct=perfil.arcilla_pct,
+    )
+    return InsumosML(
+        features_actuales=features,
+        escenarios_historicos=escenarios_ventana_futura(referencia.calendario_eventos, corte),
+        fecha_corte=corte,
+        telemetria=telemetria,
+        perfil_suelo=perfil,
+        topografia=topo,
+        advertencias=tuple(perfil.advertencias) + tuple(topo.advertencias),
+        calendario_eventos=referencia.calendario_eventos,
+        calendario_lluvia=referencia.calendario_lluvia,
+        oni_actual=oni_al(corte),
+    )

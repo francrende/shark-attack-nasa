@@ -436,15 +436,34 @@ async def build_telemetria_nasa(
     except NasaPowerUnavailable as exc:
         raise NasaPowerUnavailable(f"{MSG_NASA_CAIDA} (detalle: {exc})") from exc
 
+    return armar_telemetria(reciente, referencia)
+
+
+def indicadores_telemetria(
+    reciente: NasaPowerDailySeries, referencia: ReferenciaHistorica | None
+) -> dict[str, Any]:
+    """BACK-24: los indicadores del bloque ``telemetria_nasa``, en un solo lugar (función pura).
+
+    Los usan ``/simulate`` (``armar_telemetria``) y ``/telemetry`` (Info general). Sin
+    ``referencia``, la anomalía de lluvia y el riesgo térmico quedan en ``None``.
+    """
     corte = fecha_de_corte(reciente)
     ventana = ventana_90d_rellena(reciente, corte)
+    return {
+        "fecha_ultimo_dato_valido": corte,
+        "indice_humedad_radicular_pct": round(reciente.series["GWETROOT"][corte] * 100.0, 1),
+        "indice_humedad_superficial_pct": round(reciente.series["GWETTOP"][corte] * 100.0, 1),
+        "tendencia_humedad_15d_pct": tendencia_humedad_15d_pct(ventana),
+        "anomalia_lluvia_90d_pct": (
+            None if referencia is None else anomalia_lluvia_90d_pct(ventana, referencia.clim_por_doy, corte)
+        ),
+        "frecuencia_tormentas_extremas_90d": tormentas_extremas_90d(ventana),
+        "riesgo_termico_verano": (
+            None if referencia is None else clasificar_riesgo_termico(referencia.dias_calor_verano_promedio)
+        ),
+    }
 
-    return TelemetriaNasa(
-        fecha_ultimo_dato_valido=corte,
-        indice_humedad_radicular_pct=round(reciente.series["GWETROOT"][corte] * 100.0, 1),
-        indice_humedad_superficial_pct=round(reciente.series["GWETTOP"][corte] * 100.0, 1),
-        tendencia_humedad_15d_pct=tendencia_humedad_15d_pct(ventana),
-        anomalia_lluvia_90d_pct=anomalia_lluvia_90d_pct(ventana, referencia.clim_por_doy, corte),
-        frecuencia_tormentas_extremas_90d=tormentas_extremas_90d(ventana),
-        riesgo_termico_verano=clasificar_riesgo_termico(referencia.dias_calor_verano_promedio),
-    )
+
+def armar_telemetria(reciente: NasaPowerDailySeries, referencia: ReferenciaHistorica) -> TelemetriaNasa:
+    """Bloque ``telemetria_nasa`` completo del contrato §5 (necesita la referencia histórica)."""
+    return TelemetriaNasa(**indicadores_telemetria(reciente, referencia))

@@ -61,7 +61,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-23` | Integración de `GET /api/v1/telemetry` con datos propios de `public.fields` (`field_id`) y reintento automático | `backend/routers/telemetry.py`, `backend/services/telemetry_service.py`, `backend/services/field_enrichment_service.py`, `backend/schemas.py`, `backend/routers/test_telemetry.py`, `backend/TASKS_BACKEND.md` | `BACK-20`, `BACK-22` | `[x]` |
 | `BACK-24` | Servicio único de datos del lote para `/telemetry` y `/simulate` (política de la sección 4.5) y `field_id` en `/simulate` | `backend/services/datos_lote.py`, `backend/services/telemetry_service.py`, `backend/services/simulation_service.py`, `backend/providers/features.py`, `backend/routers/simulate.py`, `backend/routers/telemetry.py`, `backend/schemas.py`, tests | `BACK-26`, `BACK-22`, `BACK-23` | `[~]` |
 | `BACK-25` | Reintento en segundo plano de ISRIC/SRTM para campos con dato aproximado (cada 5 min, hasta 1 h) y estado visible para el frontend | `backend/services/reintentos_campos.py`, `backend/services/test_reintentos_campos.py`, `backend/routers/fields.py`, `backend/schemas.py`, `backend/main.py` | `BACK-22`, `BACK-18` | `[~]` |
-| `BACK-26` | Clima histórico por celda en Supabase, leído bajo demanda, con `climatologia_pampa.json` como respaldo | `backend/providers/nasa_telemetry.py`, `backend/providers/cache_supabase.py`, `backend/providers/generar_precache.py`, `backend/main.py`, tests | `BACK-18` | `[~]` |
+| `BACK-26` | Clima histórico por celda en Supabase, leído bajo demanda, con `climatologia_pampa.json` como respaldo | `backend/providers/nasa_telemetry.py`, `backend/providers/cache_supabase.py`, `backend/providers/generar_precache.py`, `backend/main.py`, tests | `BACK-18` | `[x]` |
 
 ---
 
@@ -1040,6 +1040,25 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 > - **Coordinación:** BACK-24 y BACK-25 modifican archivos de BACK-22 y BACK-23, que son de otra persona del equipo. Avisarle antes de mergear.
 
 ### `[~]` BACK-24: Servicio único de datos del lote (`/telemetry` y `/simulate`) con `field_id` en `/simulate`
+> **Implementación (15/11/2026):**
+> - **`services/datos_lote.py` (nuevo):** `obtener_datos_lote` y `DatosLote`, con la política de la sección 4.5, en modo estricto y tolerante.
+>   - Suelo y topografía salen del campo si son reales. Si no, del provider, guardando lo obtenido en el campo. Si el provider falla, se usa el aproximado guardado.
+>   - Clima histórico con `obtener_referencia_historica`; NASA reciente siempre en vivo.
+> - **`nasa_telemetry.py`:** `indicadores_telemetria` (función pura, tolera la falta del histórico) y `armar_telemetria`. Las usan `build_telemetria_nasa`, `/simulate` y `/telemetry`.
+> - **`features.construir_insumos_ml`:** delega en el servicio único y gana `campo` y `persistir_campo`; el armado de features no cambió.
+> - **`telemetry_service.py`:** se reescribió sobre el servicio, con el mismo contrato. Se borraron `obtener_telemetria_nasa_ligera` y `_obtener_referencia_climatica_rapida` (la búsqueda ligera 2006–2025, sin calendarios).
+> - **`/simulate` con `field_id`:**
+>   - `schemas.SimulateRequest.field_id`. El router lee el campo con el token (RLS) en un thread, reutilizando el `FieldStore` de `routers/telemetry.py`.
+>   - Sin token `401`, campo inexistente `404`, coordenadas a más de 0,001° del campo `422` (antes de consultar providers). Se usan las coordenadas del campo.
+> - **Extra:** `HEAD /health` sale del OpenAPI (`include_in_schema=False`). Antes generaba un `operation_id` duplicado (aviso de FastAPI desde BACK-16).
+> - **Tests:** suite completa **316 en verde**.
+>   - **Regresión del ensemble:** `routers/data/simulate_golden_back24.json` se generó con el código **anterior** a la refactorización. Después, `/simulate` da la respuesta idéntica, y también con `field_id` y los mismos datos en el campo (sin llamar a ISRIC ni a SRTM).
+>   - 9 tests de política en `services/test_datos_lote.py` y 6 de `field_id` en `test_simulate.py`.
+>   - En `test_telemetry.py` se cambiaron solo los parches, que ahora apuntan al servicio único; las aserciones son las mismas.
+> - **En vivo, local** (−33,40, −62,80):
+>   - `/telemetry` y `/simulate` coinciden en fecha, humedad radicular y superficial, tendencia, **anomalía (−46,41)** y tormentas.
+>   - `riesgo_termico_verano` difiere (medio contra bajo) **por diseño de ML-12**: en verano, `/simulate` usa los años análogos de la fase ENSO y `/telemetry` el promedio histórico. Ya pasaba antes de BACK-24. Si se quiere que Info general muestre lo mismo, es una decisión aparte con el track de ML.
+> - **Falta:** deploy, el DoD con `field_id` en Render (requiere que el frontend lo mande) y avisar a quien tiene BACK-20 a BACK-23.
 - **Objetivo:** Que `GET /api/v1/telemetry` y `POST /api/v1/simulate` obtengan los datos del lote con **un solo servicio** que aplique la política de la sección 4.5:
   - Datos fijos desde el campo, si son reales; si no, desde los providers, guardando en el campo lo que se consiga.
   - Clima histórico de la celda, con una sola búsqueda.
@@ -1139,7 +1158,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     1. Crear un campo con ISRIC lento: queda con `suelo_fuente = 'grilla_isric'` y `reintento_en_curso = true`.
     2. Cuando ISRIC responde (dentro de la hora), pasa solo a `isric_soilgrids_v2` y `reintento_en_curso = false`.
 
-### `[~]` BACK-26: Clima histórico por celda en Supabase
+### `[x]` BACK-26: Clima histórico por celda en Supabase
 > **Implementación (15/11/2026):**
 > - **`nasa_telemetry.py`:** `configurar_lector_hist` y `_leer_hist_supabase` (timeout de 2 s, nunca lanza). El orden queda memoria → Supabase → JSON → NASA en vivo.
 > - **`cache_supabase.py`:**
@@ -1154,7 +1173,10 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 >   - La celda (−34,5, −61,875) se leyó de Supabase en 546 ms la primera vez y en 0,3 ms desde memoria la segunda.
 >   - Trae los calendarios 1981–2025 idénticos al JSON, y **el JSON no se cargó en memoria**.
 >   - La precarga quedó en 99 filas, sin `nasa_hist`.
-> - **Falta:** el deploy y el DoD en Render.
+> - **Render (15/11/2026, `main` en `4e79f1e`):**
+>   - `/health` da `cache_filas_precargadas: 99` (sin `nasa_hist`, que antes de BACK-26 se habría precargado) y `grilla_suelo_puntos: 83`.
+>   - `/simulate` en (−35,20, −61,30): 200 con 12 años análogos. Tardó 9,0 s en frío (incluye el timeout de ISRIC) y 0,44 s la segunda vez.
+>   - Desde afuera no se ve si la celda salió de Supabase o del JSON (los dos dan lo mismo, por el test de paridad). El camino de Supabase quedó verificado en local contra la misma base.
 - **Objetivo:** Que el clima histórico de cada celda de NASA POWER (climatología de lluvia, días de calor y calendarios de eventos y de lluvia 1981–2025) viva en Supabase, se lea **solo cuando se consulta esa celda** y mantenga `climatologia_pampa.json` como respaldo si Supabase no responde.
 - **Archivos Permitidos:**
   - `backend/providers/nasa_telemetry.py`

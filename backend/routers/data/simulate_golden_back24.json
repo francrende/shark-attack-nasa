@@ -1,0 +1,258 @@
+{
+ "advertencias": [],
+ "anomalias_detectadas": [],
+ "cobertura_12_meses": {
+  "calendario": [
+   {
+    "estado": "cultivo_candidato",
+    "mes": 1,
+    "nombre": "Ene"
+   },
+   {
+    "estado": "cultivo_candidato",
+    "mes": 2,
+    "nombre": "Feb"
+   },
+   {
+    "estado": "cultivo_candidato",
+    "mes": 3,
+    "nombre": "Mar"
+   },
+   {
+    "estado": "cultivo_candidato",
+    "mes": 4,
+    "nombre": "Abr"
+   },
+   {
+    "estado": "rastrojo_protector",
+    "mes": 5,
+    "nombre": "May"
+   },
+   {
+    "estado": "rastrojo_protector",
+    "mes": 6,
+    "nombre": "Jun"
+   },
+   {
+    "estado": "rastrojo_protector",
+    "mes": 7,
+    "nombre": "Jul"
+   },
+   {
+    "estado": "rastrojo_protector",
+    "mes": 8,
+    "nombre": "Ago"
+   },
+   {
+    "estado": "suelo_desnudo",
+    "mes": 9,
+    "nombre": "Sep"
+   },
+   {
+    "estado": "suelo_desnudo",
+    "mes": 10,
+    "nombre": "Oct"
+   },
+   {
+    "estado": "suelo_desnudo",
+    "mes": 11,
+    "nombre": "Nov"
+   },
+   {
+    "estado": "cultivo_candidato",
+    "mes": 12,
+    "nombre": "Dic"
+   }
+  ],
+  "meses_suelo_desnudo": 3
+ },
+ "comparacion_estrategias": [
+  {
+   "cultivo_evaluado": "soja_primera",
+   "estrategia_id": "rotacion_actual_testigo",
+   "meses_suelo_desnudo": 6,
+   "reduccion_suelo_desnudo_vs_testigo": 0,
+   "resumen_beneficios_riesgos": "Monocultivo repetido (Soja de Primera → Soja de Primera): aumenta presión de malezas, plagas y degradación edáfica.",
+   "riesgo_erosion_suelo": "bajo",
+   "s_hidroclimatico": 58.3,
+   "s_suelo": 21.0,
+   "score_final": 37.3,
+   "secuencia_anual": "barbecho_desnudo (invierno) -> soja_primera (repetido)",
+   "titulo": "Estrategia Testigo (Repetir Cultivo / Barbecho Desnudo)"
+  },
+  {
+   "cultivo_evaluado": "sorgo",
+   "estrategia_id": "resiliencia_hidrica",
+   "meses_suelo_desnudo": 3,
+   "reduccion_suelo_desnudo_vs_testigo": 3,
+   "resumen_beneficios_riesgos": "Rotación virtuosa leguminosa → gramínea (Soja de Primera → Sorgo): capitaliza nitrógeno residual y recompone rastrojo tras soja.",
+   "riesgo_erosion_suelo": "bajo",
+   "s_hidroclimatico": 53.8,
+   "s_suelo": 91.0,
+   "score_final": 72.4,
+   "secuencia_anual": "barbecho (invierno) -> sorgo (verano); próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)",
+   "titulo": "Estrategia Defensiva Hídrica y Estabilidad"
+  },
+  {
+   "cultivo_evaluado": "maiz_tardio",
+   "estrategia_id": "regenerativa_suelo",
+   "meses_suelo_desnudo": 3,
+   "reduccion_suelo_desnudo_vs_testigo": 3,
+   "resumen_beneficios_riesgos": "Rotación virtuosa leguminosa → gramínea (Soja de Primera → Maíz Tardío): capitaliza nitrógeno residual y recompone rastrojo tras soja.",
+   "riesgo_erosion_suelo": "bajo",
+   "s_hidroclimatico": 58.1,
+   "s_suelo": 91.0,
+   "score_final": 74.5,
+   "secuencia_anual": "barbecho (invierno) -> maiz_tardio (verano); próximo ciclo: vicia_cobertura (invierno) -> maiz_tardio (verano)",
+   "titulo": "Estrategia Regenerativa de Suelo y Cobertura Continua"
+  }
+ ],
+ "perfil_suelo": {
+  "arcilla_pct": 23.4,
+  "carbono_organico_g_kg": 17.9,
+  "condicion_rotacion_previa": "deficit_rastrojo_por_soja",
+  "textura_predominante": "franco_limoso"
+ },
+ "ranking_cultivos": [
+  {
+   "anios_desfavorables": 0,
+   "anios_evaluados": 5,
+   "cultivo": "maiz_tardio",
+   "fuera_de_ventana_siembra": false,
+   "motivo_no_sembrable": null,
+   "riesgo": "bajo",
+   "score_final": 74.5,
+   "score_hidroclimatico_p10": 58.1,
+   "sub_scores": {
+    "hidroclimatico": 58.1,
+    "suelo": 91.0
+   }
+  },
+  {
+   "anios_desfavorables": 0,
+   "anios_evaluados": 5,
+   "cultivo": "sorgo",
+   "fuera_de_ventana_siembra": false,
+   "motivo_no_sembrable": null,
+   "riesgo": "bajo",
+   "score_final": 72.4,
+   "score_hidroclimatico_p10": 53.8,
+   "sub_scores": {
+    "hidroclimatico": 53.8,
+    "suelo": 91.0
+   }
+  },
+  {
+   "anios_desfavorables": 0,
+   "anios_evaluados": 5,
+   "cultivo": "girasol",
+   "fuera_de_ventana_siembra": false,
+   "motivo_no_sembrable": null,
+   "riesgo": "medio",
+   "score_final": 58.2,
+   "score_hidroclimatico_p10": 49.4,
+   "sub_scores": {
+    "hidroclimatico": 49.4,
+    "suelo": 67.0
+   }
+  },
+  {
+   "anios_desfavorables": 0,
+   "anios_evaluados": 5,
+   "cultivo": "soja_segunda",
+   "fuera_de_ventana_siembra": false,
+   "motivo_no_sembrable": null,
+   "riesgo": "alto",
+   "score_final": 39.9,
+   "score_hidroclimatico_p10": 59.4,
+   "sub_scores": {
+    "hidroclimatico": 59.4,
+    "suelo": 24.0
+   }
+  },
+  {
+   "anios_desfavorables": 0,
+   "anios_evaluados": 5,
+   "cultivo": "soja_primera",
+   "fuera_de_ventana_siembra": false,
+   "motivo_no_sembrable": null,
+   "riesgo": "alto",
+   "score_final": 37.3,
+   "score_hidroclimatico_p10": 58.3,
+   "sub_scores": {
+    "hidroclimatico": 58.3,
+    "suelo": 21.0
+   }
+  },
+  {
+   "anios_desfavorables": 0,
+   "anios_evaluados": 5,
+   "cultivo": "maiz_temprano",
+   "fuera_de_ventana_siembra": true,
+   "motivo_no_sembrable": "La ventana de siembra de Maíz Temprano terminó el 31/10.",
+   "riesgo": "medio",
+   "score_final": 69.3,
+   "score_hidroclimatico_p10": 47.7,
+   "sub_scores": {
+    "hidroclimatico": 47.7,
+    "suelo": 91.0
+   }
+  }
+ ],
+ "recomendacion_principal": {
+  "cultivo": "maiz_tardio",
+  "distribucion_hidroclimatica": {
+   "anios_desfavorables": 0,
+   "anios_evaluados": 5,
+   "p10": 58.1,
+   "p90": 58.1,
+   "peor_escenario": {
+    "anio": 2006,
+    "frecuencia_estres_termico": 0,
+    "frecuencia_riesgo_helada": 0,
+    "frecuencia_tormentas_extremas": 0,
+    "score": 58.1
+   },
+   "promedio": 58.1,
+   "umbral_desfavorable": 40.0
+  },
+  "explicacion": "Recomendación: Sembrar Maíz Tardío (o Sorgo como alternativa). Detectamos vía satélite una reserva hídrica ajustada en las raíces (46% de saturación), un déficit de lluvias del 6% en los últimos 90 días y una pendiente del 0.1% (SRTM). A diferencia de repetir Soja de Primera (degradación de carbono y riesgo de erosión por suelo desnudo), el Maíz Tardío tiene un rinde esperado por encima de lo normal (58, donde 50 es un año normal) y un aporte al suelo y la rotación de 91 sobre 100. Ya cerró la ventana de siembra de Maíz Temprano. Hoy rige El Niño (ONI +2.5); se comparó con los años de esa misma fase. En los 5 años análogos el puntaje hidroclimático se mantuvo en 40 o más; el peor escenario (como en 2006) da 58.",
+  "factores_clave_ml": [
+   "Reserva hídrica ajustada en zona radicular (46%, NASA SMAP/GLDAS)",
+   "Rotación virtuosa leguminosa → gramínea (Soja de Primera → Maíz Tardío): capitaliza nitrógeno residual y recompone rastrojo tras soja."
+  ],
+  "perfil_mercado": "Estabilidad superior ante golpes de calor de enero; alto aporte de rastrojo de lenta descomposición.",
+  "score_final": 74.5,
+  "secuencia_sugerida": "barbecho (invierno) -> maiz_tardio (verano); próximo ciclo: vicia_cobertura (invierno) -> maiz_tardio (verano)",
+  "sub_scores": {
+   "hidroclimatico": 58.1,
+   "suelo": 91.0
+  }
+ },
+ "telemetria_nasa": {
+  "anomalia_lluvia_90d_pct": -6.17,
+  "fecha_ultimo_dato_valido": "2026-11-11",
+  "frecuencia_tormentas_extremas_90d": 0,
+  "indice_humedad_radicular_pct": 46.0,
+  "indice_humedad_superficial_pct": 35.0,
+  "riesgo_termico_verano": "bajo",
+  "tendencia_humedad_15d_pct": 0.0
+ },
+ "topografia_srtm": {
+  "elevacion_m": 69.0,
+  "pendiente_terreno_pct": 0.0,
+  "riesgo_erosion_escorrentia": "bajo"
+ },
+ "ubicacion": {
+  "lat": -33.95,
+  "lon": -60.57
+ },
+ "validacion_local_requerida": {
+  "brechas_informacion": [
+   "No mide profundidad de napa freática local ni compactación subsuperficial (piso de arado)",
+   "No reemplaza el pronóstico meteorológico estacional ni el análisis químico de laboratorio (Fósforo/Nitrógeno)"
+  ],
+  "nota_resolucion_satelital": "Humedad satelital (NASA POWER/SMAP) estimada a escala regional (~9 km), topografía SRTM a 30 m y suelo a 250 m.",
+  "recomendacion_experto": "Validar agua útil real con muestreo de barreno a 1 metro y consultar al ingeniero agrónomo local antes de definir la densidad de siembra."
+ }
+}
