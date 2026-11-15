@@ -15,6 +15,7 @@ from backend.services.rotation_matrix import (
     evaluate_soil_and_rotation,
     get_crop_numeric_id,
     get_crops_for_campaign,
+    penalizacion_demanda_hidrica,
 )
 
 
@@ -139,6 +140,20 @@ class TestRotationMatrix(unittest.TestCase):
         self.assertLess(testigo.s_suelo, defensiva.s_suelo)
         self.assertLess(testigo.s_suelo, regenerativa.s_suelo)
         self.assertGreater(defensiva.reduccion_suelo_desnudo_vs_testigo, 0)
+
+    def test_penalizacion_demanda_hidrica(self) -> None:
+        """ML-10: sin penalización con perfil cargado; con perfil seco pesa más el que más consume."""
+        for cultivo in ALL_CROPS:
+            self.assertEqual(penalizacion_demanda_hidrica(cultivo, 45.0), 0.0)
+            self.assertEqual(penalizacion_demanda_hidrica(cultivo, 80.0), 0.0)
+            self.assertLessEqual(penalizacion_demanda_hidrica(cultivo, 0.0), 10.0)
+        self.assertEqual(penalizacion_demanda_hidrica("maiz_temprano", 25.0), 10.0)
+        self.assertGreater(
+            penalizacion_demanda_hidrica("trigo", 30.0), penalizacion_demanda_hidrica("vicia_cobertura", 30.0)
+        )
+        self.assertGreater(
+            penalizacion_demanda_hidrica("trigo", 25.0), penalizacion_demanda_hidrica("trigo", 35.0)
+        )
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ Para no construir código descartable en la hackathon pero tampoco bloquear el e
 | **Topografía y Terreno** | **NASA SRTM (30m)** vía **OpenTopoData API** (con fallback a la elevación embebida en `NASA POWER`) para pendiente y escorrentía. | Modelo Digital de Elevación (DEM) intralote de alta resolución para mapas de flujo de agua y microcuencas de anegamiento. |
 | **Datos de Suelo** | **ISRIC SoilGrids API** (o fallback regional pre-cacheado de la Pampa Húmeda) para textura, pH y carbono orgánico. | Integración con cartas de suelo locales (**GeoINTA** en Argentina / **USDA SSURGO & WSS** en EE.UU.) + análisis de laboratorio. |
 | **Imágenes Satelitales** | Capas globales **NASA GIBS** (MODIS / VIIRS / SMAP / IMERG) vía WMTS directo en el mapa. | Recorte por lote en alta resolución (10m–30m) usando **NASA HLS (Landsat 8/9 + Copernicus Sentinel-2)** vía STAC/COG para mapeo de suelo desnudo (*bare soil*) y variabilidad intralote. |
-| **Entrenamiento del ML** | Modelo entrenado con **rindes reales departamentales de MAGyP** (169 departamentos pampeanos, 2006/07–2024/25) + **NASA POWER**, **SRTM**, **SoilGrids** y el índice **ENSO (ONI de NOAA)**. FAO GAEZ v4 / FAO-56 queda solo para coberturas sin dato y para el What-If (ML-6/ML-7). | Re-entrenamiento continuo con **rindes a escala de lote** (mapas de rinde, seguros), más campañas (1990+), NDVI en la campaña y feedback real de cosecha. |
+| **Entrenamiento del ML** | Modelo entrenado con **rindes reales departamentales de MAGyP** (169 departamentos pampeanos, 2006/07–2024/25) + **NASA POWER**, **SRTM**, **SoilGrids** y el índice **ENSO (ONI de NOAA)**. FAO GAEZ v4 / FAO-56 queda para la sensibilidad del What-If y, vía el factor `Ky`, para puntuar los cultivos sin rinde MAGyP fuera del modelo (ML-10). | Re-entrenamiento continuo con **rindes a escala de lote** (mapas de rinde, seguros), más campañas (1990+), NDVI en la campaña y feedback real de cosecha. |
 | **Unidad de Recomendación** | Ranking de cultivos por campaña (`invierno` vs `verano`, fecha temprana/tardía) y comparación de secuencias anuales (incluyendo la rotación actual). | Planificador plurianual (rotación a 3–5 años) con balance acumulado de Carbono, Nitrógeno, Fósforo, huella hídrica y margen de mercado. |
 
 ---
@@ -67,7 +67,7 @@ Cruza las observaciones satelitales de la NASA con las propiedades físicas y qu
 
 #### D. FAO GAEZ v4 (Global Agro-Ecological Zones) & FAO-56 — *[Base de Conocimiento Ecofisiológico Offline - Fase 1 y 2]*
 Recurso oficial del challenge que define las curvas de aptitud agroclimática, requerimientos térmicos/hídricos, restricciones edáficas/topográficas y factores de reducción de rinde ($K_y$) para decenas de cultivos a escala global.
-- **Modo de consumo (Latencia 0 ms):** Para no penalizar el tiempo de respuesta con descargas raster pesadas en vivo, los umbrales fenológicos y curvas de respuesta de **FAO GAEZ v4 y FAO-56** se integran de forma tabulada en `backend/ml/fao_labels.py` y en el motor agronómico (`backend/services/rotation_matrix.py`). Desde ML-6 el modelo se entrena con rindes reales; las curvas FAO solo etiquetan los cultivos de cobertura sin dato MAGyP, dan la sensibilidad de las filas What-If y sirven de línea base de comparación.
+- **Modo de consumo (Latencia 0 ms):** Para no penalizar el tiempo de respuesta con descargas raster pesadas en vivo, los umbrales fenológicos y curvas de respuesta de **FAO GAEZ v4 y FAO-56** se integran de forma tabulada en `backend/ml/fao_labels.py` y en el motor agronómico (`backend/services/rotation_matrix.py`). Desde ML-6 el modelo se entrena con rindes reales. Las curvas FAO dan la sensibilidad de las filas What-If y sirven de línea base de comparación. Desde ML-10 los cultivos sin dato MAGyP (coberturas y camelina) ya no entran al modelo: se puntúan con el factor `Ky` de FAO-56 relativo a los cultivos con rinde real (§4.5).
 
 #### E. NASA AppEEARS API (MODIS, SMAP, ECOSTRESS y HLS) — *[Prioridad Media - Fase 2 / Pre-caché Offline]*
 API de LP DAAC que extrae series históricas de sensores como **MODIS/VIIRS**, **SMAP**, **ECOSTRESS** (temperatura superficial LST y evapotranspiración a 70m) y **HLS**.
@@ -122,14 +122,15 @@ Para evitar el error agronómico de comparar cultivos de invierno contra cultivo
 - **Qué predice:** El **Puntaje de Aptitud Hidroclimática ($S_{\text{hidroclimatico}}$, de 0 a 100)** de cada cultivo candidato: el **rinde esperado respecto de la tendencia normal del lugar** (50 = año normal, 30 = 20% menos, 70 = 20% más), aprendido de rindes reales de MAGyP. Las entradas son la telemetría satelital de la NASA (`GWETROOT`, `GWETTOP`, `PRECTOTCORR`, `T2M_MAX`, `T2M_MIN`, `EVPTRNS`), la pendiente (`SRTM`), la textura del suelo (`SoilGrids`), el clima del período crítico del cultivo y el ENSO.
 - **Por qué ensambles de árboles:** Capturan interacciones no lineales críticas (ej. caída abrupta de aptitud cuando `T2M_MAX > 34°C` coincide con `GWETROOT < 0.30`, o pérdida de eficiencia de lluvia cuando `pendiente_terreno_pct > 2.0%` en suelos con baja infiltración), no requieren GPU, corren en `< 15 ms` en producción y proveen explicabilidad (`feature_importances_`).
 - **Con qué datos se entrena (Estrategia en 2 Fases):**
-  1. **Fase 1 (ML-1/ML-2, reemplazada en ML-6/ML-7):** el target salía de las curvas FAO GAEZ v4 / FAO-56 aplicadas a 15 localidades. El modelo solo imitaba la fórmula (R² 0,99 contra ella), y contra rindes reales predecía peor que decir "año normal". La fórmula queda en `ml/fao_labels.py`, solo para los cultivos de cobertura y las filas What-If.
+  1. **Fase 1 (ML-1/ML-2, reemplazada en ML-6/ML-7):** el target salía de las curvas FAO GAEZ v4 / FAO-56 aplicadas a 15 localidades. El modelo solo imitaba la fórmula (R² 0,99 contra ella), y contra rindes reales predecía peor que decir "año normal". La fórmula queda en `ml/fao_labels.py`, solo para las filas What-If y como línea base.
   2. **Fase 2 (implementada en ML-6/ML-7, `generate_dataset.py` + `train_baseline.py`):**
+     - **Cultivos que entran al modelo (ML-10):** solo los 8 con rinde MAGyP (`trigo`, `cebada`, `maiz_temprano`, `maiz_tardio`, `soja_primera`, `soja_segunda`, `girasol`, `sorgo`). `vicia_cobertura`, `avena_cobertura` y `camelina` se puntúan fuera del modelo (§4.5).
      - **Label:** rinde real departamental de **MAGyP** en 169 departamentos pampeanos, campañas 2006/07–2024/25. El rinde se ajusta por la superficie abandonada respecto de la típica del departamento y se compara contra su tendencia de largo plazo (Theil–Sen): `puntaje = 50 + 100 × (rinde/tendencia − 1)`. **50 es un año normal** y 30 es un rinde 20% bajo la tendencia.
      - **Features:** las mismas fórmulas que producción (`providers/features.py`). El suelo sale de SoilGrids y la topografía de SRTM, por departamento.
      - **Elección del modelo:** HistGradientBoosting con monotonía en calor y heladas, elegido por validación cruzada dejando una campaña afuera.
      - **Resultado en test 2022–2024 (MAE):**
-       - Producción con años análogos ponderados por ONI: 17.7.
-       - What-If con el clima del período crítico observado: 14.8.
+       - Producción con años análogos ponderados por ONI: 17.9 (17.7 en ML-7, con las coberturas dentro del modelo).
+       - What-If con el clima del período crítico observado: 14.9.
        - Línea base "año normal": 18.4. Línea base FAO: 23.5.
      - **Detección de años malos:** AUC 0.76, contra 0.52 de "año normal".
      - **Límite conocido:** antes de sembrar, la predictibilidad está acotada por el clima del período crítico, que todavía no ocurrió. El ranking entre cultivos de un mismo año es débil (ver ML-8 y ML-9).
@@ -174,13 +175,18 @@ En su lugar, el backend combina la telemetría de los últimos 90 días con la e
    - El sistema reporta la frecuencia estadística histórica de golpes de calor y heladas en esa coordenada.
    - **No se genera un pronóstico estacional propio.** Se usa el **estado ENSO ya observado y publicado por NOAA** (ONI): los años análogos con la misma fase (La Niña / Neutro / El Niño) pesan más en el ensemble. Es evidencia, no adivinación: las sequías 2008/09, 2017/18 y 2022/23 fueron años La Niña.
    - Para evaluar qué pasaría si la campaña resulta atípicamente seca o húmeda, se proveen **Presets Climáticos en el simulador *What-If***, para que el productor o su agrónomo evalúen la sensibilidad de cada rotación bajo cada escenario.
-   - **Límite honesto (ML-7):** antes de sembrar, el rinde es poco predecible, porque depende del clima del período crítico. El modelo mejora un 3–4% sobre "año normal" en producción y un 20% con el clima conocido (What-If). Por eso la respuesta muestra un **rango** (P10–P90, años desfavorables) y no un número único.
+   - **Límite honesto (ML-7):** antes de sembrar, el rinde es poco predecible, porque depende del clima del período crítico. El modelo mejora un 2–3% sobre "año normal" en producción y un 19% con el clima conocido (What-If) (ver §4.7). Por eso la respuesta muestra un **rango** (P10–P90, años desfavorables) y no un número único.
 
 ### 4.5. Los 2 Pilares del Puntaje, Viabilidad de Mercado y Fórmula Dinámica
 Para mantener la transparencia matemática, el sistema separa el cálculo en **2 pilares cuantitativos** complementados con metadatos de riesgo, mercado y validación local:
 
-1. **$S_{\text{hidroclimatico}}$ (Clima + Agua + Topografía Hídrica — Calculado 100% por el Modelo de ML):** Evalúa qué tan viable es el cultivo según la reserva radicular (`GWETROOT`), el secado reciente, la anomalía de lluvias (`PRECTOTCORR`), el estrés térmico (`T2M_MAX`/`T2M_MIN`), la demanda evaporativa (`EVPTRNS`) y la eficiencia de infiltración según pendiente (`SRTM`) y arcilla (`SoilGrids`).
+1. **$S_{\text{hidroclimatico}}$ (Clima + Agua + Topografía Hídrica — Modelo de ML + dos reglas agronómicas explícitas, ver abajo):** Evalúa qué tan viable es el cultivo según la reserva radicular (`GWETROOT`), el secado reciente, la anomalía de lluvias (`PRECTOTCORR`), el estrés térmico (`T2M_MAX`/`T2M_MIN`), la demanda evaporativa (`EVPTRNS`) y la eficiencia de infiltración según pendiente (`SRTM`) y arcilla (`SoilGrids`).
 2. **$S_{\text{suelo}}$ (Salud del Suelo, Cobertura y Control de Erosión — Calculado por Matriz Agronómica + SoilGrids + SRTM):** Evalúa la transición `cultivo_anterior -> cultivo_candidato` (balance de Carbono/Nitrógeno, aporte de rastrojo, reducción de meses de suelo desnudo y corte de ciclo de plagas) ajustada por el nivel actual de Carbono Orgánico (`soc`) y penalizando doblemente los cultivos de baja cobertura en lotes con pendiente elevada (`pendiente_terreno_pct` de SRTM).
+
+**Reglas agronómicas sobre $S_{\text{hidroclimatico}}$ (ML-10).** El modelo aprende cuánto se desvía cada cultivo de **su propio** rinde normal. No sabe cuánta agua consume un cultivo ni puede puntuar cultivos sin rinde histórico. Dos reglas determinísticas y explicables cubren eso:
+
+- **Cultivos sin rinde MAGyP (`vicia_cobertura`, `avena_cobertura`, `camelina`):** no pasan por el modelo. Su puntaje parte del promedio de los cultivos con rinde real de la misma campaña (trigo y cebada) y escala el desvío respecto de un año normal por el factor de respuesta del rinde de FAO-56: $S = 50 + \frac{K_{y,\text{cultivo}}}{K_{y,\text{referencia}}} \cdot (S_{\text{referencia}} - 50)$. Con $K_y$ menor (0,62–0,76 contra 1,05), una cobertura se aleja menos de 50 que el trigo, para bien y para mal. Se calcula año análogo por año análogo, así que también tiene P10, P90 y años desfavorables.
+- **Demanda hídrica con perfil seco (`penalizacion_demanda_hidrica` en `services/rotation_matrix.py`):** si el agua en las raíces (`GWETROOT`) está por debajo de 45%, a cada cultivo se le restan hasta 10 puntos según su consumo de agua del ciclo (`CONSUMO_AGUA_CICLO_MM`, de 220 mm en vicia a 550 mm en maíz temprano): `10 × severidad × demanda_relativa`, con severidad 0 en 45% y 1 en 25% o menos. Representa el agua que el cultivo le saca al perfil y no le deja al siguiente, algo que el rinde del propio cultivo no mide. Cuando aplica, la `explicacion` lo dice. Los consumos son orientativos (rangos FAO ajustados al ciclo pampeano) y requieren validación local.
 
 $$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\text{suelo}} \cdot S_{\text{suelo}}$$
 
@@ -198,9 +204,56 @@ $$\text{Score Final} = w_{\text{clima}} \cdot S_{\text{hidroclimatico}} + w_{\te
   3. Calcula las 8 features actuales (`BACK-6`), el ONI publicado y, para cada cultivo de la campaña, los **años análogos de su período crítico ponderados por ENSO** (`ml/escenarios.py`), más `dias_hasta_siembra`.
      - Evalúa las alertas de anomalías físicas en curso, sin forzar predicciones sin sustento.
      - Ejecuta en memoria el ensemble `predict_ensemble` (`ML-5`/`ML-7`) en un único batch de `años × cultivos`. Así obtiene $S_{\text{hidroclimatico}}$ (promedio ponderado) y su distribución (P10, P90 y años desfavorables).
-     - El riesgo se clasifica con el promedio y sube un nivel si el P10 cae en zona crítica. Los umbrales se recalibran en ML-8.
-     - Los cultivos cuya siembra ya terminó se marcan con `fuera_de_ventana_siembra`.
+     - Puntúa los cultivos sin rinde MAGyP relativo a los que sí tienen, y descuenta la demanda hídrica si el perfil está seco (ML-10, §4.5).
+     - El riesgo se clasifica con el promedio y sube un nivel si el P10 cae en zona crítica (umbrales de ML-8, abajo).
+     - Los cultivos cuya siembra ya terminó se marcan con `fuera_de_ventana_siembra` y van al final del ranking: nunca son el cultivo recomendado ni la alternativa.
+
+**Umbrales de riesgo (ML-8, escala MAGyP).** Calibrados con el ensemble de producción en 2019–2024, donde en promedio 1 de cada 4 años es malo (rinde real 15% o más bajo la tendencia):
+
+| `riesgo` | Puntaje hidroclimático esperado | % de casos | Años malos reales |
+| :--- | :---: | :---: | :---: |
+| `critico` | < 40 | 15% | 1 de cada 2 |
+| `alto` | 40–45 | 17% | 1 de cada 3 |
+| `medio` | 45–50 | 22% | 1 de cada 4 |
+| `bajo` | ≥ 50 | 46% | 1 de cada 7 |
+
+- **Escalón por P10:** si el peor 10% de los años análogos queda debajo de 30, el riesgo sube un nivel (pasa en el 18% de los casos, y en ellos 4 de cada 10 años son malos).
+- **Suelo:** con $S_{\text{suelo}} < 35$ (por ejemplo, repetir soja en pendiente) el riesgo es al menos `alto`.
+- **Año análogo desfavorable** (`anios_desfavorables`): puntaje menor a 40. El modelo achata hacia la media, así que 40 en sus predicciones equivale a un año malo real.
   4. Cruza cada cultivo con la **Matriz de Rotación y Pendiente** para obtener $S_{\text{suelo}}$, aplica los pesos ($w_{\text{clima}}, w_{\text{suelo}}$) e incluye las notas de incertidumbre y validación agronómica local requeridas por el challenge.
+
+### 4.7. Límites Conocidos del Modelo y Hoja de Ruta
+Esta sección registra qué hace bien el modelo, qué no, y qué se puede mejorar. El challenge no pide predecir rinde: pide una herramienta de apoyo que compare estrategias de rotación, explique la evidencia y muestre la incertidumbre. El modelo es un insumo de esa comparación, no el producto.
+
+**Qué quedó validado (test 2022/23–2024/25 y validación cruzada por campaña):**
+- **Campaña correcta:** el predictor solo evalúa los cultivos de la campaña pedida y el backend rechaza la campaña que no corresponde a la fecha. No depende del modelo.
+- **Reacción al estado del suelo:** con perfil seco bajan todos los cultivos y más los sensibles. En verano el orden es agronómicamente razonable (girasol y sorgo arriba, sojas abajo).
+- **Detección de años malos:** AUC 0,76 en producción, contra 0,52 de la línea base "año normal".
+- **Contra la fórmula FAO:** el modelo es un 24% mejor. La fórmula sola predice peor que decir "año normal".
+
+**Problemas conocidos:**
+
+| Problema | Evidencia | Consecuencia |
+| :--- | :--- | :--- |
+| Antes de sembrar, el rinde es poco predecible | En producción el MAE es 17,9 contra 18,4 de "año normal" (2,3%). Con el clima del período crítico conocido baja a 14,9 | La respuesta muestra un rango (P10–P90), no un número. No se debe prometer "predicción de rinde" |
+| Pocas campañas independientes | El rinde de un año está muy correlacionado entre departamentos: son 16 campañas, no 200 mil filas. Las 4 configuraciones probadas dan el mismo MAE | Cambiar hiperparámetros no ayuda; hacen falta más años |
+| El test depende de un solo año | Casi toda la ganancia viene de la sequía 2022/23. En validación cruzada, con clima observado, la mejora es 6% | Con 3 años de test no se distingue 3% de 5% |
+| En producción la predicción se achata | En 2022/23 el puntaje real fue 22 y el predicho 44 | Anticipa la dirección, no la magnitud |
+| Ranking débil entre cultivos del mismo año | Spearman 0,05. `maiz_temprano` y `maiz_tardio` comparten el rinde "maíz" | El orden fino entre cultivos lo deciden el pilar suelo y las reglas de §4.5 |
+| Features gruesas del período crítico | `indice_aridez_evaporativa` usa `EVPTRNS` (evapotranspiración real, no demanda) y casi no aporta; calendario único para toda la región; un solo umbral de calor (34 °C) | El techo con clima conocido es bajo (R² 0,30) |
+| El ONI funciona en parte como "identificador de año" | La curva de respuesta al ONI (`ml/reports/05_curvas_respuesta_verano.png`) es irregular, con saltos entre −1,5 y 0: con 16 campañas, cada valor de ONI corresponde casi a un año puntual | Sobreajuste posible en la ponderación por ENSO. Con más campañas (hoja de ruta 4) o con el ONI agrupado en fases (Niña / Neutro / Niño) se suaviza |
+| Filas What-If con fórmula FAO | Cerca del 4% del peso de entrenamiento todavía sale de la fórmula | Falta medir si conviene quitarlas (ablación) |
+
+**Qué se corrigió en ML-10:** las coberturas tenían label de fórmula FAO y en sequía caían a 6–8 puntos, lo que dejaba al trigo primero aunque fuera el más demandante. Ahora se puntúan relativo a los cultivos reales (FAO-56 `Ky`) y se descuenta la demanda hídrica con perfil seco (§4.5).
+
+**Hoja de ruta, en orden de costo/beneficio:**
+1. **Medir en el régimen correcto:** validación cruzada dejando una campaña afuera sobre las 19 campañas y con años análogos (producción), con el resultado por año. Hoy la selección usa clima observado.
+2. **Modelo directo para producción:** un segundo modelo entrenado solo con lo conocido al decidir (estado actual, ONI, cultivo, días a siembra). El actual queda para el What-If.
+3. **Más años análogos:** NASA POWER llega a 1981. Pasar de 19 a unos 44 años análogos mejora el P10 y la ponderación por ENSO, sin depender de MAGyP.
+4. **Más campañas con rinde (ML-9, 1990+):** con tendencia flexible en lugar de lineal (siembra directa, soja RR), asignando el rinde "maíz" anterior a 2010 solo a `maiz_temprano`, y verificando desde cuándo MAGyP separa soja de primera y de segunda.
+5. **Mejores features del período crítico:** lluvia menos demanda (ET0 por Hargreaves), `GWETROOT` y temperatura máxima media dentro del período, sub-ventanas de 30 días, umbral de calor por cultivo y calendario corrido por latitud.
+6. **Ponderar por superficie sembrada:** hoy un departamento con 1.000 ha pesa igual que uno con 200.000 ha.
+7. **Escala de lote (fase comercial):** rindes de mapas de cosecha, NDVI en la campaña (MODIS / HLS) y consumo de agua medido (ECOSTRESS) en lugar de la tabla orientativa.
 
 ---
 
@@ -271,7 +324,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
       "p90": 94.0,
       "anios_desfavorables": 1, // años con score < umbral_desfavorable
       "anios_evaluados": 19,
-      "umbral_desfavorable": 50.0,
+      "umbral_desfavorable": 40.0,
       "peor_escenario": {
         "anio": 2008,
         "score": 44.0,
@@ -290,7 +343,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   },
   "ranking_cultivos": [
     // ML-5: score_hidroclimatico_p10, anios_desfavorables y anios_evaluados solo vienen si hay escenarios_historicos
-    // ML-7: "fuera_de_ventana_siembra": true si la siembra de ese cultivo ya terminó (se marca, no se excluye)
+    // ML-7: "fuera_de_ventana_siembra": true si la siembra de ese cultivo ya terminó (se marca y va al final del ranking; no se excluye)
     { "cultivo": "sorgo", "score_final": 90.5, "riesgo": "bajo", "fuera_de_ventana_siembra": false, "score_hidroclimatico_p10": 71.5, "anios_desfavorables": 1, "anios_evaluados": 19 },
     { "cultivo": "maiz_tardio", "score_final": 82.5, "riesgo": "medio", "score_hidroclimatico_p10": 58.0, "anios_desfavorables": 2, "anios_evaluados": 19 },
     { "cultivo": "girasol", "score_final": 72.0, "riesgo": "bajo", "score_hidroclimatico_p10": 66.0, "anios_desfavorables": 1, "anios_evaluados": 19 },
@@ -312,6 +365,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
 
 > **Notas de implementación (BACK-7):**
 > - `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` muestran el **dato satelital real**, sin los topes del modelo ni el What-If. El What-If solo cambia los scores, el ranking, las anomalías y la explicación.
+> - **ML-10:** el contrato no cambia. `sub_scores.hidroclimatico`, la distribución y el ranking ya incluyen el descuento por demanda hídrica; cuando aplica, `explicacion` termina con una oración que lo dice.
 > - **Errores:** `422` para un request inválido (campaña u objetivo desconocidos, `cultivo_anterior` fuera de los 11 cultivos o de `ninguno`/`barbecho`/`sin_cultivo`/`null`, rangos del What-If, campos extra, o **campaña que no corresponde a la fecha** según la regla de §4.1: el backend también la rechaza, además del bloqueo del frontend). `503` si un provider no tiene datos.
 
 ---

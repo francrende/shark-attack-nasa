@@ -363,6 +363,50 @@ SPECIFIC_TRANSITION_SCORES: dict[tuple[str, str], float] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# ML-10: demanda hídrica del cultivo vs. agua disponible en el perfil
+# ---------------------------------------------------------------------------
+# Consumo de agua del ciclo (mm), valores orientativos dentro de los rangos de requerimiento
+# de FAO (FAO-56 / FAO Irrigation Water Management) ajustados al largo de ciclo pampeano. Las
+# coberturas se cortan antes de completar el ciclo y consumen menos. Requieren validación local.
+CONSUMO_AGUA_CICLO_MM: dict[str, float] = {
+    "trigo": 430.0,
+    "cebada": 380.0,
+    "camelina": 300.0,
+    "avena_cobertura": 250.0,
+    "vicia_cobertura": 220.0,
+    "maiz_temprano": 550.0,
+    "maiz_tardio": 500.0,
+    "soja_primera": 500.0,
+    "soja_segunda": 400.0,
+    "girasol": 480.0,
+    "sorgo": 450.0,
+}
+CONSUMO_AGUA_MIN_MM = 200.0
+CONSUMO_AGUA_MAX_MM = 550.0
+# Con el agua en las raíces por debajo de este % el perfil no cubre un cultivo demandante; la
+# penalización crece linealmente hasta el máximo cuando baja RANGO puntos más.
+HUMEDAD_PERFIL_SECO_PCT = 45.0
+HUMEDAD_PERFIL_SECO_RANGO_PCT = 20.0
+PENALIZACION_DEMANDA_MAX = 10.0
+
+
+def penalizacion_demanda_hidrica(cultivo: str, humedad_radicular_pct: float) -> float:
+    """Puntos que se restan a S_hidroclimatico por sembrar un cultivo demandante con perfil seco.
+
+    El modelo aprende cuánto se desvía cada cultivo de su propio rinde normal; no sabe cuánta
+    agua consume ni cuánta le deja al cultivo siguiente. Esta regla agrega esa característica:
+    ``max × severidad × demanda_relativa``, con severidad 0 si el perfil tiene 45% o más y 1 si
+    tiene 25% o menos, y demanda relativa 0 (200 mm) a 1 (550 mm).
+    """
+    consumo = CONSUMO_AGUA_CICLO_MM[get_crop_profile(cultivo).id]
+    severidad = (HUMEDAD_PERFIL_SECO_PCT - float(humedad_radicular_pct)) / HUMEDAD_PERFIL_SECO_RANGO_PCT
+    severidad = max(0.0, min(1.0, severidad))
+    demanda = (consumo - CONSUMO_AGUA_MIN_MM) / (CONSUMO_AGUA_MAX_MM - CONSUMO_AGUA_MIN_MM)
+    demanda = max(0.0, min(1.0, demanda))
+    return round(PENALIZACION_DEMANDA_MAX * severidad * demanda, 1)
+
+
 def _clamp_score(value: float) -> float:
     return round(max(0.0, min(100.0, value)), 2)
 

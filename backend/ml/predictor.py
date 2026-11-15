@@ -8,7 +8,7 @@ Implementa ``AgroPredictor`` (interfaz ``RecommendationEngine`` de CONTEXT.md):
 4. Fusiona ``S_hidroclimatico`` con ``S_suelo`` (Pilar 2, de ``rotation_matrix.py``)
    usando pesos dinámicos según ``objetivo_productor`` y penalización no lineal por
    factor limitante crítico (< 35 pts, Ley del Mínimo de Liebig).
-5. Clasifica el ``riesgo`` bidimensional (``bajo`` | ``medio`` | ``alto`` | ``critico``).
+5. Clasifica el ``riesgo`` (``bajo`` | ``medio`` | ``alto`` | ``critico``) con los umbrales de ML-8.
 6. Detecta hasta 6 anomalías físicas en curso basadas en evidencia satelital.
 7. Genera los Top 3 ``factores_clave_ml`` (usando ``feature_baselines`` por campaña +
    ``permutation_importance`` por cultivo + factores topográficos/edáficos) y la
@@ -17,6 +17,10 @@ Implementa ``AgroPredictor`` (interfaz ``RecommendationEngine`` de CONTEXT.md):
    ``[corte+1, corte+90]``, corre el modelo con los escenarios históricos reales de cada año
    (``BACK-6``) y devuelve la distribución del puntaje (promedio, P10, P90, años
    desfavorables y peor escenario).
+9. (ML-10) Los cultivos sin rinde MAGyP (coberturas y camelina) no pasan por el modelo: su
+   puntaje es el de los cultivos con rinde real de la misma campaña, con el desvío respecto de
+   un año normal escalado por el factor de respuesta del rinde ``Ky`` de FAO-56. Además, a todos
+   los cultivos se les resta ``penalizacion_demanda_hidrica`` cuando el perfil está seco.
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ try:
         evaluate_campaign_soil,
         get_crop_profile,
         get_crops_for_campaign,
+        penalizacion_demanda_hidrica,
     )
 except ImportError:
     from services.rotation_matrix import (  # type: ignore[no-redef]
@@ -49,12 +54,15 @@ except ImportError:
         evaluate_campaign_soil,
         get_crop_profile,
         get_crops_for_campaign,
+        penalizacion_demanda_hidrica,
     )
 
 try:
     from backend.ml import calendario_siembra as cal
+    from backend.ml.fao_labels import CROP_CATALOG as FAO_CROP_CATALOG
 except ImportError:
     from ml import calendario_siembra as cal  # type: ignore[no-redef]
+    from ml.fao_labels import CROP_CATALOG as FAO_CROP_CATALOG  # type: ignore[no-redef]
 
 Campaign = Literal["invierno", "verano"]
 ProducerObjective = Literal[
@@ -112,12 +120,25 @@ FUTURE_FEATURES: tuple[str, ...] = (
 REQUIRED_FUTURE_FEATURES: tuple[str, ...] = FUTURE_FEATURES[:3]
 DEFAULT_LLUVIA_CRITICA_MM = 250.0
 ONI_NEUTRO = 0.0
+# Puntaje de un año normal en la escala MAGyP (rinde igual a la tendencia).
+PUNTAJE_ANIO_NORMAL = 50.0
+# La oración de la explicación sobre demanda hídrica aparece desde esta penalización.
+PENALIZACION_DEMANDA_VISIBLE = 2.0
 
-# Umbral por defecto de "año desfavorable" (coincide con el corte 'critico' de S_hidro).
-# Se recalibra al reentrenar con rindes MAGyP (50 = año normal) sin cambiar el contrato.
-DEFAULT_UMBRAL_DESFAVORABLE = 50.0
-# Si el P10 del ensemble cae por debajo de este valor, el riesgo sube un nivel.
-CRITICAL_HYDRO_THRESHOLD = 50.0
+# ML-8: umbrales en la escala MAGyP (50 = año normal), calibrados con el ensemble de producción
+# en val + test 2019–2024. En promedio, 1 de cada 4 años es malo (rinde real 15% o más bajo la
+# tendencia). Por tramo del promedio esperado:
+#   < 40 → crítico (1 de cada 2 años malos) | 40–45 → alto (1 de 3)
+#   45–50 → medio (1 de 4, la media)        | ≥ 50 → bajo (1 de 7)
+HYDRO_RISK_THRESHOLDS: tuple[float, float, float] = (40.0, 45.0, 50.0)  # crítico / alto / medio
+# Con el pilar suelo por debajo de este valor, el riesgo es al menos "alto".
+SOIL_RISK_THRESHOLD = 35.0
+# Un año análogo cuenta como desfavorable debajo de 40: el modelo achata hacia la media, y bajo
+# 40 la mitad de los casos son años malos reales.
+DEFAULT_UMBRAL_DESFAVORABLE = 40.0
+# Si el P10 del ensemble cae debajo de 30, el riesgo sube un nivel (18% de los casos; en ellos
+# 4 de cada 10 años son malos).
+CRITICAL_HYDRO_THRESHOLD = 30.0
 RISK_LEVELS: tuple[CropRiskLevel, ...] = ("bajo", "medio", "alto", "critico")
 
 # Pesos de la fórmula dinámica (CONTEXT.md Sección 4.5)
@@ -296,26 +317,28 @@ def compute_hybrid_final_score(
     return round(_clamp(linear_score - penalty, 0.0, 100.0), 1)
 
 
-def classify_crop_risk(
-    s_hidroclimatico: float,
-    s_suelo: float,
-    score_final: float,
-) -> CropRiskLevel:
-    """Regla bidimensional de riesgo agronómico (S_hidro, S_suelo y vulnerabilidad fisiológica).
+def classify_crop_risk(s_hidroclimatico: float, s_suelo: float) -> CropRiskLevel:
+    """Riesgo del cultivo (ML-8, escala MAGyP: 50 = año normal).
 
-    Reproduce exactamente el comportamiento del contrato de CONTEXT.md:
-    - 'critico': Colapso hidroclimático/térmico en ventana crítica (S_hidro < 50) o score_final < 22.
-    - 'alto': Degradación severa por monocultivo/erosión (S_suelo < 35) o S_hidro inestable (< 62) o score_final < 55.
-    - 'medio': Exposición hidroclimática moderada (62 <= S_hidro < 84) o score_final < 75.
-    - 'bajo': Alta resiliencia hidroclimática (S_hidro >= 84) y base edáfica sana (S_suelo >= 55).
+    - Por clima y agua, según el puntaje hidroclimático esperado: ``critico`` < 40,
+      ``alto`` < 45, ``medio`` < 50, ``bajo`` desde 50 (``HYDRO_RISK_THRESHOLDS``).
+    - Por suelo: con ``s_suelo`` < 35 (por ejemplo, repetir soja en pendiente) es al menos ``alto``.
+
+    El escalón por P10 del ensemble se aplica aparte (``escalate_risk_level``).
     """
-    if s_hidroclimatico < 50.0 or score_final < 22.0:
-        return "critico"
-    if s_suelo < 35.0 or s_hidroclimatico < 62.0 or score_final < 55.0:
-        return "alto"
-    if s_hidroclimatico < 83.0 or s_suelo < 55.0:
-        return "medio"
-    return "bajo"
+    critico, alto, medio = HYDRO_RISK_THRESHOLDS
+    hidro = float(s_hidroclimatico)
+    if hidro < critico:
+        nivel: CropRiskLevel = "critico"
+    elif hidro < alto:
+        nivel = "alto"
+    elif hidro < medio:
+        nivel = "medio"
+    else:
+        nivel = "bajo"
+    if float(s_suelo) < SOIL_RISK_THRESHOLD and RISK_LEVELS.index(nivel) < RISK_LEVELS.index("alto"):
+        nivel = "alto"
+    return nivel
 
 
 # ---------------------------------------------------------------------------
@@ -631,6 +654,10 @@ class AgroPredictor:
         self.feature_baselines: dict[str, Any] = bundle["feature_baselines"]
         self.training_metrics: dict[str, Any] = bundle.get("metrics", {})
         self.model_version: str = bundle.get("model_version", "ml2-fao")
+        # ML-10: cultivos con rinde real que el modelo sabe puntuar (todos, en bundles previos).
+        self.cultivos_entrenados: frozenset[str] = frozenset(
+            bundle.get("cultivos_entrenados") or self.crops_catalog["by_name"]
+        )
         # Columnas numéricas en el orden del bundle (la última es el cultivo codificado).
         self._numeric_cols: list[str] = self.feature_columns[:-1]
 
@@ -683,15 +710,42 @@ class AgroPredictor:
         """
         fecha = fecha_corte or datetime.now(timezone.utc).date()
         crops = get_crops_for_campaign(campana)
+        ml_crops, relativos = self._separar_cultivos(crops)
         base = dict(features)
         if oni_actual is not None:
             base["oni_actual"] = oni_actual
         X_batch = np.asarray(
-            [self._fila({**base, **self._contexto_cultivo(c, campana, fecha)}, c, campana) for c in crops],
+            [self._fila({**base, **self._contexto_cultivo(c, campana, fecha)}, c, campana) for c in ml_crops],
             dtype=float,
         )
-        clipped_preds = self._predict_clipped(X_batch)
-        return {crop_id: round(float(score), 1) for crop_id, score in zip(crops, clipped_preds)}
+        scores = dict(zip(ml_crops, self._predict_clipped(X_batch)))
+        referencia = np.asarray([np.mean([scores[c] for c in ml_crops])])
+        for crop in relativos:
+            scores[crop] = self._score_relativo(crop, referencia, ml_crops)[0]
+        gwetroot = float(base["gwetroot_saturacion_pct"])
+        return {
+            crop: round(_clamp(float(scores[crop]) - penalizacion_demanda_hidrica(crop, gwetroot)), 1)
+            for crop in crops
+        }
+
+    def _separar_cultivos(self, crops: Sequence[str]) -> tuple[list[str], list[str]]:
+        """(cultivos que puntúa el modelo, cultivos sin rinde MAGyP que se puntúan relativos)."""
+        ml_crops = [c for c in crops if c in self.cultivos_entrenados]
+        if not ml_crops:
+            raise ValueError("La campaña no tiene cultivos entrenados con rinde real")
+        return ml_crops, [c for c in crops if c not in self.cultivos_entrenados]
+
+    @staticmethod
+    def _score_relativo(crop: str, referencia: np.ndarray, ref_crops: Sequence[str]) -> np.ndarray:
+        """Puntaje de un cultivo sin rinde MAGyP a partir de los cultivos con rinde real.
+
+        FAO-56: la pérdida relativa de rinde es ``Ky`` × el déficit relativo de agua. Con el mismo
+        déficit, el desvío respecto de un año normal escala con ``Ky_cultivo / Ky_referencia``
+        (las coberturas, con Ky menor, se alejan menos de 50 que el trigo o la cebada).
+        """
+        ky_ref = float(np.mean([FAO_CROP_CATALOG[c]["ky_drought"] for c in ref_crops]))
+        factor = float(FAO_CROP_CATALOG[crop]["ky_drought"]) / ky_ref
+        return np.clip(PUNTAJE_ANIO_NORMAL + factor * (referencia - PUNTAJE_ANIO_NORMAL), 0.0, 100.0)
 
     def _predict_clipped(self, X: np.ndarray) -> np.ndarray:
         """Inferencia cruda del modelo acotada a [0, 100] (compartida por batch y ensemble)."""
@@ -731,15 +785,16 @@ class AgroPredictor:
         """
         fecha = fecha_corte or datetime.now(timezone.utc).date()
         crops = get_crops_for_campaign(campana)
+        ml_crops, relativos = self._separar_cultivos(crops)
         por_cultivo: dict[str, tuple[list[Mapping[str, Any]], np.ndarray | None]] = {}
         if isinstance(escenarios_historicos, Mapping):
-            for crop in crops:
+            for crop in ml_crops:
                 lista = list(escenarios_historicos.get(crop, []))
                 w = [float(e.get("peso", 1.0)) for e in lista] if lista else None
                 por_cultivo[crop] = _validate_ensemble_inputs(features_actuales, lista, w)
         else:
             validados = _validate_ensemble_inputs(features_actuales, escenarios_historicos, pesos)
-            por_cultivo = {crop: validados for crop in crops}
+            por_cultivo = {crop: validados for crop in ml_crops}
 
         override_humedad = None
         variacion_lluvia = None
@@ -756,7 +811,8 @@ class AgroPredictor:
 
         rows: list[list[float]] = []
         cortes: list[tuple[str, int, int]] = []
-        for crop in crops:
+        gwetroot = current["gwetroot_saturacion_pct"]
+        for crop in ml_crops:
             escenarios, _ = por_cultivo[crop]
             contexto = self._contexto_cultivo(crop, campana, fecha)
             desde = len(rows)
@@ -770,15 +826,28 @@ class AgroPredictor:
                         override_humedad_radicular_pct=override_humedad,
                         variacion_lluvia_esperada_pct=variacion_lluvia,
                     )
+                    gwetroot = vec["gwetroot_saturacion_pct"]
                 rows.append(self._fila(vec, crop, campana))
             cortes.append((crop, desde, len(rows)))
 
         preds = self._predict_clipped(np.asarray(rows, dtype=float))
+        crudos = {crop: preds[desde:hasta] for crop, desde, hasta in cortes}
+
+        # ML-10: cultivos sin rinde MAGyP = referencia de los cultivos reales escalada por Ky.
+        # Año a año si los cultivos de referencia tienen la misma cantidad de años análogos; si
+        # no, se usan solo los que coinciden con el que más años tiene.
+        if relativos:
+            base_ref = max(ml_crops, key=lambda c: len(crudos[c]))
+            mismos = [c for c in ml_crops if len(crudos[c]) == len(crudos[base_ref])]
+            referencia = np.mean([crudos[c] for c in mismos], axis=0)
+            for crop in relativos:
+                crudos[crop] = self._score_relativo(crop, referencia, mismos)
+                por_cultivo[crop] = por_cultivo[base_ref]
 
         result: dict[str, dict[str, Any]] = {}
-        for crop, desde, hasta in cortes:
+        for crop in crops:
             escenarios, weights = por_cultivo[crop]
-            scores = preds[desde:hasta]
+            scores = np.clip(crudos[crop] - penalizacion_demanda_hidrica(crop, gwetroot), 0.0, 100.0)
             promedio = float(np.average(scores, weights=weights))
             worst_idx = int(np.argmin(scores))
             worst = escenarios[worst_idx]
@@ -955,8 +1024,13 @@ class AgroPredictor:
         sub_scores_by_crop: dict[str, dict[str, float]],
         features: dict[str, float],
         cultivo_anterior: str | None,
+        riesgo_por_cultivo: Mapping[str, str] | None = None,
     ) -> str:
-        """Redacta la explicación agronómica transparente siguiendo el formato de CONTEXT.md."""
+        """Redacta la explicación agronómica transparente siguiendo el formato de CONTEXT.md.
+
+        ``riesgo_por_cultivo`` (opcional): el contraste "riesgo crítico en floración" del Maíz
+        Temprano solo se menciona si su riesgo es ``alto`` o ``critico``.
+        """
         winner_subs = sub_scores_by_crop[winner_crop]
 
         alt_phrase = ""
@@ -988,7 +1062,13 @@ class AgroPredictor:
         lowest_crop = ranking[-1]["cultivo"]
         contrast_parts: list[str] = []
 
-        if "maiz_temprano" in sub_scores_by_crop and winner_crop != "maiz_temprano" and gwetroot <= 42.0:
+        riesgo_maiz = (riesgo_por_cultivo or {}).get("maiz_temprano", "critico")
+        if (
+            "maiz_temprano" in sub_scores_by_crop
+            and winner_crop != "maiz_temprano"
+            and gwetroot <= 42.0
+            and riesgo_maiz in ("alto", "critico")
+        ):
             contrast_parts.append(f"{crop_with_article('maiz_temprano')} (riesgo crítico en floración)")
 
         prev_norm = (cultivo_anterior or "").strip().lower()
@@ -1125,11 +1205,7 @@ class AgroPredictor:
                 s_suelo=s_suelo,
                 objetivo_productor=objetivo_productor,
             )
-            riesgo = classify_crop_risk(
-                s_hidroclimatico=s_hidro,
-                s_suelo=s_suelo,
-                score_final=score_final,
-            )
+            riesgo = classify_crop_risk(s_hidroclimatico=s_hidro, s_suelo=s_suelo)
             if ensemble is not None:
                 riesgo = escalate_risk_level(riesgo, ensemble[crop_id]["p10"])
             sub_scores_by_crop[crop_id] = {
@@ -1143,11 +1219,15 @@ class AgroPredictor:
                     "riesgo": riesgo,
                     "sub_scores": sub_scores_by_crop[crop_id],
                     "meses_suelo_desnudo": soil_evals[crop_id].meses_suelo_desnudo,
+                    "fuera_de_ventana_siembra": self.fuera_de_ventana_siembra(crop_id, campana, fecha),
                 }
             )
 
+        # Los cultivos cuya siembra ya terminó siguen en el ranking, pero detrás de los sembrables:
+        # nunca se recomienda sembrar algo fuera de su ventana.
         ranking.sort(
             key=lambda item: (
+                item["fuera_de_ventana_siembra"],
                 -item["score_final"],
                 -item["sub_scores"]["hidroclimatico"],
                 -item["sub_scores"]["suelo"],
@@ -1156,7 +1236,11 @@ class AgroPredictor:
 
         winner_item = ranking[0]
         winner_crop = winner_item["cultivo"]
-        runner_up_crop = ranking[1]["cultivo"] if len(ranking) > 1 else None
+        # La alternativa también tiene que poder sembrarse (si hay otra sembrable).
+        alternativas = [i["cultivo"] for i in ranking[1:] if not i["fuera_de_ventana_siembra"]]
+        if not alternativas:
+            alternativas = [i["cultivo"] for i in ranking[1:]]
+        runner_up_crop = alternativas[0] if alternativas else None
         winner_soil = soil_evals[winner_crop]
 
         # 5. Explicabilidad (Top 3 factores_clave_ml + texto explicativo)
@@ -1173,9 +1257,19 @@ class AgroPredictor:
             sub_scores_by_crop=sub_scores_by_crop,
             features=effective_features,
             cultivo_anterior=cultivo_anterior,
+            riesgo_por_cultivo={item["cultivo"]: item["riesgo"] for item in ranking},
         )
         if ensemble is not None:
             explicacion = f"{explicacion} {build_ensemble_risk_sentence(ensemble[winner_crop])}"
+        gwetroot_efectivo = float(effective_features["gwetroot_saturacion_pct"])
+        penalizaciones = {c: penalizacion_demanda_hidrica(c, gwetroot_efectivo) for c in hydro_scores}
+        mas_penalizado = max(penalizaciones, key=penalizaciones.__getitem__)
+        if penalizaciones[mas_penalizado] >= PENALIZACION_DEMANDA_VISIBLE:
+            explicacion = (
+                f"{explicacion} Con {gwetroot_efectivo:.0f}% de agua en las raíces se descontaron puntos a "
+                f"los cultivos que más agua consumen (hasta {penalizaciones[mas_penalizado]:.0f} a "
+                f"{crop_prose_name(mas_penalizado)})."
+            )
 
         # 6. Detección de anomalías físicas en curso
         anomalias = detect_physical_anomalies(
@@ -1224,7 +1318,7 @@ class AgroPredictor:
                 "cultivo": item["cultivo"],
                 "score_final": item["score_final"],
                 "riesgo": item["riesgo"],
-                "fuera_de_ventana_siembra": self.fuera_de_ventana_siembra(item["cultivo"], campana, fecha),
+                "fuera_de_ventana_siembra": item["fuera_de_ventana_siembra"],
             }
             if ensemble is not None:
                 dist = ensemble[item["cultivo"]]

@@ -1,7 +1,7 @@
 {
   "bundle_version": "2.0.0",
-  "model_version": "ml7-magyp",
-  "trained_at": "2026-11-15T04:57:13.279205+00:00",
+  "model_version": "ml10-magyp",
+  "trained_at": "2026-11-15T05:32:10.089147+00:00",
   "sklearn_version": "1.9.1",
   "model_name": "hist_gradient_boosting_monotonic",
   "model_params": {
@@ -9,7 +9,7 @@
     "max_leaf_nodes": 7,
     "min_samples_leaf": 1500,
     "l2_regularization": 20.0,
-    "max_iter": 827,
+    "max_iter": 708,
     "monotonic_cst": [
       0,
       0,
@@ -113,170 +113,180 @@
       "10": "sorgo"
     }
   },
+  "cultivos_entrenados": [
+    "cebada",
+    "girasol",
+    "maiz_tardio",
+    "maiz_temprano",
+    "soja_primera",
+    "soja_segunda",
+    "sorgo",
+    "trigo"
+  ],
   "feature_importances": {
     "method": "permutation_importance (neg MAE ponderado, n_repeats=5, test real, clima observado)",
     "global": {
-      "gwetroot_saturacion_pct": 0.05563,
+      "gwetroot_saturacion_pct": 0.05775,
       "gwettop_saturacion_pct": 0.0,
       "tendencia_humedad_15d_pct": 0.0,
-      "anomalia_lluvia_90d_pct": 0.04093,
-      "indice_aridez_evaporativa": 0.007,
+      "anomalia_lluvia_90d_pct": 0.02814,
+      "indice_aridez_evaporativa": 0.00334,
       "pendiente_terreno_pct": 0.0,
-      "elevacion_m": 0.00235,
-      "textura_arcilla_pct": 0.00444,
+      "elevacion_m": 0.00251,
+      "textura_arcilla_pct": 0.00929,
       "frecuencia_tormentas_extremas": 0.0,
-      "frecuencia_estres_termico": 0.22596,
-      "frecuencia_riesgo_helada": 0.01685,
-      "lluvia_periodo_critico_mm": 0.33142,
+      "frecuencia_estres_termico": 0.22598,
+      "frecuencia_riesgo_helada": 0.01312,
+      "lluvia_periodo_critico_mm": 0.34531,
       "dias_hasta_siembra": 0.0,
-      "oni_actual": 0.1916,
-      "cultivo_candidato": 0.12383
+      "oni_actual": 0.19132,
+      "cultivo_candidato": 0.12324
     },
     "global_raw_mae_increase": {
-      "gwetroot_saturacion_pct": 0.4085,
-      "gwettop_saturacion_pct": -0.0857,
-      "tendencia_humedad_15d_pct": -0.0048,
-      "anomalia_lluvia_90d_pct": 0.3005,
-      "indice_aridez_evaporativa": 0.0514,
-      "pendiente_terreno_pct": -0.0349,
-      "elevacion_m": 0.0173,
-      "textura_arcilla_pct": 0.0326,
-      "frecuencia_tormentas_extremas": -0.0092,
-      "frecuencia_estres_termico": 1.6592,
-      "frecuencia_riesgo_helada": 0.1237,
-      "lluvia_periodo_critico_mm": 2.4336,
-      "dias_hasta_siembra": -0.0083,
-      "oni_actual": 1.4069,
-      "cultivo_candidato": 0.9093
+      "gwetroot_saturacion_pct": 0.4056,
+      "gwettop_saturacion_pct": -0.1219,
+      "tendencia_humedad_15d_pct": -0.0045,
+      "anomalia_lluvia_90d_pct": 0.1976,
+      "indice_aridez_evaporativa": 0.0235,
+      "pendiente_terreno_pct": -0.0248,
+      "elevacion_m": 0.0176,
+      "textura_arcilla_pct": 0.0652,
+      "frecuencia_tormentas_extremas": -0.0134,
+      "frecuencia_estres_termico": 1.5871,
+      "frecuencia_riesgo_helada": 0.0921,
+      "lluvia_periodo_critico_mm": 2.4252,
+      "dias_hasta_siembra": -0.0065,
+      "oni_actual": 1.3437,
+      "cultivo_candidato": 0.8655
     },
     "per_crop": {
       "cebada": {
-        "gwetroot_saturacion_pct": 0.15139,
+        "gwetroot_saturacion_pct": 0.14265,
         "gwettop_saturacion_pct": 0.0,
         "tendencia_humedad_15d_pct": 0.0,
-        "anomalia_lluvia_90d_pct": 0.08521,
-        "indice_aridez_evaporativa": 0.00907,
+        "anomalia_lluvia_90d_pct": 0.02563,
+        "indice_aridez_evaporativa": 0.00541,
         "pendiente_terreno_pct": 0.0,
-        "elevacion_m": 0.03235,
+        "elevacion_m": 0.01145,
         "textura_arcilla_pct": 0.0,
-        "frecuencia_tormentas_extremas": 0.04077,
-        "frecuencia_estres_termico": 0.21154,
+        "frecuencia_tormentas_extremas": 0.05031,
+        "frecuencia_estres_termico": 0.23093,
         "frecuencia_riesgo_helada": 0.0,
-        "lluvia_periodo_critico_mm": 0.4552,
-        "dias_hasta_siembra": 0.01003,
-        "oni_actual": 0.00443
+        "lluvia_periodo_critico_mm": 0.50284,
+        "dias_hasta_siembra": 0.0,
+        "oni_actual": 0.03078
       },
       "girasol": {
-        "gwetroot_saturacion_pct": 0.21485,
-        "gwettop_saturacion_pct": 0.04225,
+        "gwetroot_saturacion_pct": 0.18491,
+        "gwettop_saturacion_pct": 0.0239,
         "tendencia_humedad_15d_pct": 0.0,
-        "anomalia_lluvia_90d_pct": 0.02126,
-        "indice_aridez_evaporativa": 0.02674,
-        "pendiente_terreno_pct": 0.00049,
-        "elevacion_m": 0.07299,
-        "textura_arcilla_pct": 0.13247,
-        "frecuencia_tormentas_extremas": 0.01386,
-        "frecuencia_estres_termico": 0.15734,
+        "anomalia_lluvia_90d_pct": 0.03595,
+        "indice_aridez_evaporativa": 0.02756,
+        "pendiente_terreno_pct": 0.00556,
+        "elevacion_m": 0.08669,
+        "textura_arcilla_pct": 0.12732,
+        "frecuencia_tormentas_extremas": 0.02228,
+        "frecuencia_estres_termico": 0.13362,
         "frecuencia_riesgo_helada": 0.0,
-        "lluvia_periodo_critico_mm": 0.23368,
-        "dias_hasta_siembra": 0.00082,
-        "oni_actual": 0.08324
+        "lluvia_periodo_critico_mm": 0.22432,
+        "dias_hasta_siembra": 0.00063,
+        "oni_actual": 0.12725
       },
       "maiz_tardio": {
-        "gwetroot_saturacion_pct": 0.06855,
-        "gwettop_saturacion_pct": 6e-05,
+        "gwetroot_saturacion_pct": 0.06676,
+        "gwettop_saturacion_pct": 0.0,
         "tendencia_humedad_15d_pct": 0.0,
-        "anomalia_lluvia_90d_pct": 0.07542,
-        "indice_aridez_evaporativa": 0.00898,
-        "pendiente_terreno_pct": 0.00394,
-        "elevacion_m": 0.01884,
-        "textura_arcilla_pct": 0.03402,
-        "frecuencia_tormentas_extremas": 0.00534,
-        "frecuencia_estres_termico": 0.17504,
-        "frecuencia_riesgo_helada": 0.00448,
-        "lluvia_periodo_critico_mm": 0.23862,
-        "dias_hasta_siembra": 0.0,
-        "oni_actual": 0.36671
+        "anomalia_lluvia_90d_pct": 0.05049,
+        "indice_aridez_evaporativa": 0.00291,
+        "pendiente_terreno_pct": 0.0084,
+        "elevacion_m": 0.00742,
+        "textura_arcilla_pct": 0.0293,
+        "frecuencia_tormentas_extremas": 0.00344,
+        "frecuencia_estres_termico": 0.17052,
+        "frecuencia_riesgo_helada": 0.00097,
+        "lluvia_periodo_critico_mm": 0.27848,
+        "dias_hasta_siembra": 0.00356,
+        "oni_actual": 0.37775
       },
       "maiz_temprano": {
-        "gwetroot_saturacion_pct": 0.01053,
+        "gwetroot_saturacion_pct": 0.01678,
         "gwettop_saturacion_pct": 0.0,
         "tendencia_humedad_15d_pct": 0.0,
-        "anomalia_lluvia_90d_pct": 0.00535,
-        "indice_aridez_evaporativa": 0.02361,
-        "pendiente_terreno_pct": 0.0,
-        "elevacion_m": 0.02512,
-        "textura_arcilla_pct": 0.02392,
-        "frecuencia_tormentas_extremas": 0.00908,
-        "frecuencia_estres_termico": 0.2842,
+        "anomalia_lluvia_90d_pct": 0.0,
+        "indice_aridez_evaporativa": 0.02686,
+        "pendiente_terreno_pct": 0.00653,
+        "elevacion_m": 0.01314,
+        "textura_arcilla_pct": 0.03531,
+        "frecuencia_tormentas_extremas": 0.00503,
+        "frecuencia_estres_termico": 0.29837,
         "frecuencia_riesgo_helada": 0.0,
-        "lluvia_periodo_critico_mm": 0.3712,
-        "dias_hasta_siembra": 0.00049,
-        "oni_actual": 0.24651
+        "lluvia_periodo_critico_mm": 0.36079,
+        "dias_hasta_siembra": 0.00059,
+        "oni_actual": 0.2366
       },
       "soja_primera": {
-        "gwetroot_saturacion_pct": 0.07161,
+        "gwetroot_saturacion_pct": 0.06954,
         "gwettop_saturacion_pct": 0.0,
-        "tendencia_humedad_15d_pct": 0.00022,
-        "anomalia_lluvia_90d_pct": 0.04491,
-        "indice_aridez_evaporativa": 0.00531,
-        "pendiente_terreno_pct": 0.0,
-        "elevacion_m": 0.0,
-        "textura_arcilla_pct": 0.0,
-        "frecuencia_tormentas_extremas": 0.0,
-        "frecuencia_estres_termico": 0.14735,
-        "frecuencia_riesgo_helada": 0.0,
-        "lluvia_periodo_critico_mm": 0.57393,
-        "dias_hasta_siembra": 0.0,
-        "oni_actual": 0.15667
-      },
-      "soja_segunda": {
-        "gwetroot_saturacion_pct": 0.0657,
-        "gwettop_saturacion_pct": 0.00276,
         "tendencia_humedad_15d_pct": 0.0,
-        "anomalia_lluvia_90d_pct": 0.06713,
-        "indice_aridez_evaporativa": 0.00156,
-        "pendiente_terreno_pct": 0.0,
-        "elevacion_m": 0.0,
-        "textura_arcilla_pct": 0.0,
-        "frecuencia_tormentas_extremas": 0.00186,
-        "frecuencia_estres_termico": 0.20678,
-        "frecuencia_riesgo_helada": 0.00069,
-        "lluvia_periodo_critico_mm": 0.35483,
-        "dias_hasta_siembra": 0.0,
-        "oni_actual": 0.29868
-      },
-      "sorgo": {
-        "gwetroot_saturacion_pct": 0.08113,
-        "gwettop_saturacion_pct": 0.0,
-        "tendencia_humedad_15d_pct": 0.00461,
-        "anomalia_lluvia_90d_pct": 0.03353,
+        "anomalia_lluvia_90d_pct": 0.03186,
         "indice_aridez_evaporativa": 0.0,
         "pendiente_terreno_pct": 0.0,
         "elevacion_m": 0.0,
         "textura_arcilla_pct": 0.0,
         "frecuencia_tormentas_extremas": 0.0,
-        "frecuencia_estres_termico": 0.11096,
+        "frecuencia_estres_termico": 0.14955,
         "frecuencia_riesgo_helada": 0.0,
-        "lluvia_periodo_critico_mm": 0.59911,
+        "lluvia_periodo_critico_mm": 0.5951,
         "dias_hasta_siembra": 0.0,
-        "oni_actual": 0.17066
+        "oni_actual": 0.15395
       },
-      "trigo": {
-        "gwetroot_saturacion_pct": 0.09408,
-        "gwettop_saturacion_pct": 0.0,
-        "tendencia_humedad_15d_pct": 0.00047,
-        "anomalia_lluvia_90d_pct": 0.06926,
-        "indice_aridez_evaporativa": 0.0189,
+      "soja_segunda": {
+        "gwetroot_saturacion_pct": 0.07375,
+        "gwettop_saturacion_pct": 0.00236,
+        "tendencia_humedad_15d_pct": 0.00077,
+        "anomalia_lluvia_90d_pct": 0.05406,
+        "indice_aridez_evaporativa": 0.0,
         "pendiente_terreno_pct": 0.0,
         "elevacion_m": 0.0,
-        "textura_arcilla_pct": 0.03616,
+        "textura_arcilla_pct": 0.0,
         "frecuencia_tormentas_extremas": 0.0,
-        "frecuencia_estres_termico": 0.14653,
-        "frecuencia_riesgo_helada": 0.05515,
-        "lluvia_periodo_critico_mm": 0.42036,
-        "dias_hasta_siembra": 0.0095,
-        "oni_actual": 0.14958
+        "frecuencia_estres_termico": 0.19173,
+        "frecuencia_riesgo_helada": 0.00117,
+        "lluvia_periodo_critico_mm": 0.38036,
+        "dias_hasta_siembra": 0.00042,
+        "oni_actual": 0.29538
+      },
+      "sorgo": {
+        "gwetroot_saturacion_pct": 0.07855,
+        "gwettop_saturacion_pct": 0.0,
+        "tendencia_humedad_15d_pct": 0.00605,
+        "anomalia_lluvia_90d_pct": 0.02213,
+        "indice_aridez_evaporativa": 0.0,
+        "pendiente_terreno_pct": 0.0,
+        "elevacion_m": 0.0,
+        "textura_arcilla_pct": 0.0,
+        "frecuencia_tormentas_extremas": 0.0,
+        "frecuencia_estres_termico": 0.11589,
+        "frecuencia_riesgo_helada": 0.0,
+        "lluvia_periodo_critico_mm": 0.63262,
+        "dias_hasta_siembra": 0.0,
+        "oni_actual": 0.14476
+      },
+      "trigo": {
+        "gwetroot_saturacion_pct": 0.09384,
+        "gwettop_saturacion_pct": 0.0,
+        "tendencia_humedad_15d_pct": 0.00075,
+        "anomalia_lluvia_90d_pct": 0.05036,
+        "indice_aridez_evaporativa": 0.01664,
+        "pendiente_terreno_pct": 0.0,
+        "elevacion_m": 0.0,
+        "textura_arcilla_pct": 0.04428,
+        "frecuencia_tormentas_extremas": 0.0,
+        "frecuencia_estres_termico": 0.13832,
+        "frecuencia_riesgo_helada": 0.03835,
+        "lluvia_periodo_critico_mm": 0.45632,
+        "dias_hasta_siembra": 0.00479,
+        "oni_actual": 0.15635
       }
     }
   },
@@ -504,100 +514,100 @@
     "test_produccion_oni": {
       "global": {
         "n": 42034,
-        "mae": 17.742,
-        "rmse": 23.068,
-        "r2": 0.0432
+        "mae": 17.928,
+        "rmse": 23.329,
+        "r2": 0.0214
       },
       "por_cultivo": {
-        "cebada": 23.707,
-        "girasol": 10.14,
-        "maiz_tardio": 16.166,
-        "maiz_temprano": 16.256,
-        "soja_primera": 16.552,
-        "soja_segunda": 21.133,
-        "sorgo": 20.755,
-        "trigo": 18.513
+        "cebada": 23.931,
+        "girasol": 10.35,
+        "maiz_tardio": 16.444,
+        "maiz_temprano": 16.439,
+        "soja_primera": 16.892,
+        "soja_segunda": 21.136,
+        "sorgo": 21.061,
+        "trigo": 18.52
       },
       "por_anio": {
         "2022": {
           "real": 22.2,
-          "predicho": 43.1
+          "predicho": 43.9
         },
         "2023": {
           "real": 49.7,
-          "predicho": 53.2
+          "predicho": 53.4
         },
         "2024": {
           "real": 51.0,
-          "predicho": 51.9
+          "predicho": 52.2
         }
       },
-      "spearman_cultivos_medio": 0.04,
+      "spearman_cultivos_medio": 0.054,
       "anios_malos": {
         "umbral": 35.0,
         "n": 1020,
-        "auc": 0.764
+        "auc": 0.757
       }
     },
     "test_produccion_uniforme": {
       "global": {
         "n": 42034,
-        "mae": 17.801,
-        "rmse": 23.288,
-        "r2": 0.0249
+        "mae": 17.942,
+        "rmse": 23.51,
+        "r2": 0.0062
       },
       "por_cultivo": {
-        "cebada": 23.524,
-        "girasol": 10.269,
-        "maiz_tardio": 15.865,
-        "maiz_temprano": 17.006,
-        "soja_primera": 16.65,
-        "soja_segunda": 20.978,
-        "sorgo": 21.007,
-        "trigo": 18.376
+        "cebada": 23.721,
+        "girasol": 10.505,
+        "maiz_tardio": 16.13,
+        "maiz_temprano": 17.084,
+        "soja_primera": 16.918,
+        "soja_segunda": 20.992,
+        "sorgo": 21.274,
+        "trigo": 18.29
       },
       "por_anio": {
         "2022": {
           "real": 22.2,
-          "predicho": 44.2
+          "predicho": 44.9
         },
         "2023": {
           "real": 49.7,
-          "predicho": 51.0
+          "predicho": 51.1
         },
         "2024": {
           "real": 51.0,
-          "predicho": 51.7
+          "predicho": 52.0
         }
       },
-      "spearman_cultivos_medio": 0.083,
+      "spearman_cultivos_medio": 0.079,
       "anios_malos": {
         "umbral": 35.0,
         "n": 1020,
-        "auc": 0.742
+        "auc": 0.735
       }
     },
     "test_whatif_observado": {
       "global": {
         "n": 42034,
-        "mae": 14.763,
-        "rmse": 19.521,
-        "r2": 0.3148
+        "mae": 14.947,
+        "rmse": 19.668,
+        "r2": 0.3045
       },
       "por_cultivo": {
-        "cebada": 21.989,
-        "girasol": 9.755,
-        "maiz_tardio": 13.196,
-        "maiz_temprano": 14.281,
-        "soja_primera": 11.758,
-        "soja_segunda": 15.892,
-        "sorgo": 17.875,
-        "trigo": 16.093
+        "cebada": 22.017,
+        "girasol": 9.899,
+        "maiz_tardio": 13.518,
+        "maiz_temprano": 14.659,
+        "soja_primera": 12.072,
+        "soja_segunda": 15.907,
+        "sorgo": 18.181,
+        "trigo": 16.002
       },
       "por_anio": {
         "2022": {
           "real": 22.2,
-          "predicho": 29.9
+          "predicho": 31.0
         },
         "2023": {
           "real": 49.7,
@@ -605,14 +615,14 @@
         },
         "2024": {
           "real": 51.0,
-          "predicho": 51.3
+          "predicho": 51.6
         }
       },
-      "spearman_cultivos_medio": 0.095,
+      "spearman_cultivos_medio": 0.091,
       "anios_malos": {
         "umbral": 35.0,
         "n": 1020,
-        "auc": 0.801
+        "auc": 0.8
       }
     },
     "base_anio_normal_test": {
@@ -698,30 +708,30 @@
           "max_leaf_nodes": 7,
           "min_samples_leaf": 1500,
           "l2_regularization": 20.0,
-          "mejor_iteracion": 827,
-          "cv_mae": 17.755,
-          "cv_mae_ultima_iteracion": 17.789,
-          "segundos": 145.5
+          "mejor_iteracion": 708,
+          "cv_mae": 17.794,
+          "cv_mae_ultima_iteracion": 17.85,
+          "segundos": 97.4
         },
         "hgb_v2": {
           "learning_rate": 0.03,
           "max_leaf_nodes": 15,
           "min_samples_leaf": 800,
           "l2_regularization": 10.0,
-          "mejor_iteracion": 491,
-          "cv_mae": 17.774,
-          "cv_mae_ultima_iteracion": 17.931,
-          "segundos": 166.0
+          "mejor_iteracion": 200,
+          "cv_mae": 17.871,
+          "cv_mae_ultima_iteracion": 18.07,
+          "segundos": 115.5
         },
         "hgb_v3": {
           "learning_rate": 0.03,
           "max_leaf_nodes": 7,
           "min_samples_leaf": 3000,
           "l2_regularization": 30.0,
-          "mejor_iteracion": 1184,
-          "cv_mae": 17.822,
-          "cv_mae_ultima_iteracion": 17.843,
-          "segundos": 146.4
+          "mejor_iteracion": 596,
+          "cv_mae": 17.831,
+          "cv_mae_ultima_iteracion": 17.871,
+          "segundos": 94.4
         },
         "hgb_v4": {
           "learning_rate": 0.05,
@@ -729,9 +739,9 @@
           "min_samples_leaf": 1500,
           "l2_regularization": 20.0,
           "mejor_iteracion": 203,
-          "cv_mae": 17.771,
-          "cv_mae_ultima_iteracion": 18.111,
-          "segundos": 159.9
+          "cv_mae": 17.885,
+          "cv_mae_ultima_iteracion": 18.28,
+          "segundos": 109.0
         }
       },
       "base_anio_normal": 18.918
@@ -743,30 +753,30 @@
       "max_leaf_nodes": 7,
       "min_samples_leaf": 1500,
       "l2_regularization": 20.0,
-      "mejor_iteracion": 827,
-      "cv_mae": 17.755,
-      "cv_mae_ultima_iteracion": 17.789,
-      "segundos": 145.5
+      "mejor_iteracion": 708,
+      "cv_mae": 17.794,
+      "cv_mae_ultima_iteracion": 17.85,
+      "segundos": 97.4
     },
     "hgb_v2": {
       "learning_rate": 0.03,
       "max_leaf_nodes": 15,
       "min_samples_leaf": 800,
       "l2_regularization": 10.0,
-      "mejor_iteracion": 491,
-      "cv_mae": 17.774,
-      "cv_mae_ultima_iteracion": 17.931,
-      "segundos": 166.0
+      "mejor_iteracion": 200,
+      "cv_mae": 17.871,
+      "cv_mae_ultima_iteracion": 18.07,
+      "segundos": 115.5
     },
     "hgb_v3": {
       "learning_rate": 0.03,
       "max_leaf_nodes": 7,
       "min_samples_leaf": 3000,
       "l2_regularization": 30.0,
-      "mejor_iteracion": 1184,
-      "cv_mae": 17.822,
-      "cv_mae_ultima_iteracion": 17.843,
-      "segundos": 146.4
+      "mejor_iteracion": 596,
+      "cv_mae": 17.831,
+      "cv_mae_ultima_iteracion": 17.871,
+      "segundos": 94.4
     },
     "hgb_v4": {
       "learning_rate": 0.05,
@@ -774,9 +784,9 @@
       "min_samples_leaf": 1500,
       "l2_regularization": 20.0,
       "mejor_iteracion": 203,
-      "cv_mae": 17.771,
-      "cv_mae_ultima_iteracion": 18.111,
-      "segundos": 159.9
+      "cv_mae": 17.885,
+      "cv_mae_ultima_iteracion": 18.28,
+      "segundos": 109.0
     }
   },
   "sanity_checks": {
@@ -789,36 +799,36 @@
       "passed": true
     },
     "latencia_ms_ensemble_6x20": {
-      "p95": 5.228,
+      "p95": 4.285,
       "umbral": 15.0,
       "passed": true
     },
     "benchmark_sequia_informativo": {
       "scores": {
-        "girasol": 52.55,
-        "sorgo": 44.53,
-        "maiz_temprano": 41.38,
-        "soja_primera": 37.1,
-        "maiz_tardio": 34.83,
-        "soja_segunda": 33.27
+        "girasol": 50.78,
+        "sorgo": 44.0,
+        "maiz_temprano": 37.57,
+        "soja_primera": 36.47,
+        "maiz_tardio": 36.19,
+        "soja_segunda": 34.44
       },
-      "margen": 3.15,
+      "margen": 6.43,
       "regla": "min(['sorgo', 'girasol']) - max(['maiz_temprano', 'soja_primera']) >= 10.0",
       "cumple": false
     },
     "aceptacion": {
       "produccion_vs_anio_normal": {
-        "mejora": 0.0333,
+        "mejora": 0.0232,
         "minimo": 0.05,
         "passed": false
       },
       "produccion_vs_fao": {
-        "mejora": 0.2441,
+        "mejora": 0.2361,
         "minimo": 0.1,
         "passed": true
       },
       "whatif_vs_anio_normal": {
-        "mejora": 0.1957,
+        "mejora": 0.1856,
         "minimo": 0.15,
         "passed": true
       },
@@ -826,5 +836,5 @@
     },
     "all_passed": false
   },
-  "model_file_size_kb": 250.3
+  "model_file_size_kb": 211.1
 }

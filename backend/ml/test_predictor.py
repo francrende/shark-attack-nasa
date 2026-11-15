@@ -10,6 +10,7 @@ import numpy as np
 
 from backend.ml.predictor import (
     CURRENT_FEATURES,
+    DEFAULT_UMBRAL_DESFAVORABLE,
     FUTURE_FEATURES,
     NUMERIC_FEATURES,
     REQUIRED_FUTURE_FEATURES,
@@ -30,7 +31,7 @@ from backend.ml.predictor import (
     weighted_percentile,
 )
 from backend.providers.features import FEATURES_ACTUALES, FEATURES_PERIODO_CRITICO
-from backend.services.rotation_matrix import evaluate_campaign_soil
+from backend.services.rotation_matrix import evaluate_campaign_soil, penalizacion_demanda_hidrica
 
 
 # Fecha de evaluación fija (= default de run_recommendation): define dias_hasta_siembra.
@@ -62,7 +63,7 @@ class TestAgroPredictorML4(unittest.TestCase):
         self.assertIs(self.predictor, p2)
         self.assertIsInstance(self.predictor, AgroPredictor)
         self.assertEqual(len(self.predictor.feature_columns), 15)  # ML-7
-        self.assertEqual(self.predictor.model_version, "ml7-magyp")
+        self.assertEqual(self.predictor.model_version, "ml10-magyp")
         self.assertEqual(len(self.predictor.crops_catalog["by_name"]), 11)
 
     def test_02_context_md_benchmark_contract_and_ranking(self) -> None:
@@ -99,8 +100,10 @@ class TestAgroPredictorML4(unittest.TestCase):
         self.assertEqual(len(rec["factores_clave_ml"]), 3)
         self.assertIn(f"Recomendación: Sembrar {crop_prose_name(rec['cultivo'])}", rec["explicacion"])
         self.assertEqual(len(ranking), 6)
-        scores = [item["score_final"] for item in ranking]
-        self.assertEqual(scores, sorted(scores, reverse=True))
+        # Primero los sembrables (por puntaje), después los que ya pasaron su ventana de siembra.
+        claves = [(item["fuera_de_ventana_siembra"], -item["score_final"]) for item in ranking]
+        self.assertEqual(claves, sorted(claves))
+        self.assertFalse(ranking[0]["fuera_de_ventana_siembra"])
         for item in ranking:
             self.assertTrue(0.0 <= item["score_final"] <= 100.0)
             self.assertIn(item["riesgo"], ("bajo", "medio", "alto", "critico"))
@@ -108,8 +111,9 @@ class TestAgroPredictorML4(unittest.TestCase):
         # El suelo no depende del modelo: el sorgo tras soja sigue en 95 (matriz ML-3)
         soil = evaluate_campaign_soil("verano", "soja_primera", 18.4, 1.8, 24.5, None)
         self.assertEqual(round(float(soil["sorgo"].s_suelo), 1), 95.0)
-        # Repetir soja (monocultivo) queda último por el pilar suelo
-        self.assertEqual(ranking[-1]["cultivo"], "soja_primera")
+        # Repetir soja (monocultivo) queda último entre los sembrables por el pilar suelo
+        sembrables = [item["cultivo"] for item in ranking if not item["fuera_de_ventana_siembra"]]
+        self.assertEqual(sembrables[-1], "soja_primera")
 
     def test_03_what_if_internal_coupling_and_independent_controls(self) -> None:
         """Verifica que los sliders What-If sean independientes pero mantengan consistencia física."""
@@ -295,8 +299,10 @@ class TestEnsembleML5(unittest.TestCase):
             X = np.asarray(
                 [p._fila({**vec, **p._contexto_cultivo(c, campana, FECHA)}, c, campana) for c in crops]
             )
+            gwetroot = self.current["gwetroot_saturacion_pct"]
             for c, s in zip(crops, self.predictor._predict_clipped(X)):
-                out[c].append(float(s))
+                # ML-10: el puntaje público descuenta la demanda hídrica con perfil seco.
+                out[c].append(float(np.clip(s - penalizacion_demanda_hidrica(c, gwetroot), 0.0, 100.0)))
         return out
 
     def test_01_feature_names_match_backend(self) -> None:
@@ -333,9 +339,9 @@ class TestEnsembleML5(unittest.TestCase):
             self.assertAlmostEqual(dist["promedio"], round(float(arr.mean()), 1), places=6)
             self.assertAlmostEqual(dist["p10"], round(float(np.percentile(arr, 10)), 1), places=6)
             self.assertAlmostEqual(dist["p90"], round(float(np.percentile(arr, 90)), 1), places=6)
-            self.assertEqual(dist["anios_desfavorables"], int(np.sum(arr < 50.0)))
+            self.assertEqual(dist["anios_desfavorables"], int(np.sum(arr < DEFAULT_UMBRAL_DESFAVORABLE)))
             self.assertEqual(dist["anios_evaluados"], len(ENSEMBLE_SCENARIOS))
-            self.assertEqual(dist["umbral_desfavorable"], 50.0)
+            self.assertEqual(dist["umbral_desfavorable"], DEFAULT_UMBRAL_DESFAVORABLE)
             worst = ENSEMBLE_SCENARIOS[int(np.argmin(arr))]
             self.assertEqual(dist["peor_escenario"]["anio"], worst["anio"])
             self.assertAlmostEqual(dist["peor_escenario"]["score"], round(float(arr.min()), 1))
@@ -404,9 +410,9 @@ class TestEnsembleML5(unittest.TestCase):
                 self._ens(self.current, ENSEMBLE_SCENARIOS, "verano", pesos=pesos)
 
     def test_07_risk_escalation_by_p10(self) -> None:
-        """El riesgo sube un nivel solo si el P10 cae por debajo de 50."""
-        self.assertEqual(escalate_risk_level("bajo", 50.0), "bajo")
-        self.assertEqual(escalate_risk_level("bajo", 49.9), "medio")
+        """El riesgo sube un nivel solo si el P10 cae por debajo de 30 (ML-8)."""
+        self.assertEqual(escalate_risk_level("bajo", 30.0), "bajo")
+        self.assertEqual(escalate_risk_level("bajo", 29.9), "medio")
         self.assertEqual(escalate_risk_level("medio", 10.0), "alto")
         self.assertEqual(escalate_risk_level("alto", 10.0), "critico")
         self.assertEqual(escalate_risk_level("critico", 10.0), "critico")
@@ -426,9 +432,7 @@ class TestEnsembleML5(unittest.TestCase):
         escalated = 0
         for item in resp["ranking_cultivos"]:
             crop = item["cultivo"]
-            base_risk = classify_crop_risk(
-                ens[crop]["promedio"], round(float(soil[crop].s_suelo), 1), item["score_final"]
-            )
+            base_risk = classify_crop_risk(ens[crop]["promedio"], round(float(soil[crop].s_suelo), 1))
             self.assertEqual(item["riesgo"], escalate_risk_level(base_risk, ens[crop]["p10"]))
             escalated += item["riesgo"] != base_risk
         self.assertGreaterEqual(escalated, 0)
@@ -584,6 +588,103 @@ class TestConsistenciaTextos(unittest.TestCase):
         self.assertEqual(crop_with_article("soja_primera"), "la Soja de Primera")
         self.assertEqual(crop_with_article("trigo"), "el Trigo")
         self.assertEqual(crop_with_article("maiz_tardio"), "el Maíz Tardío")
+
+
+class TestCoberturasYDemandaHidricaML10(unittest.TestCase):
+    """ML-10: coberturas fuera del modelo (Ky relativo) y penalización por demanda hídrica."""
+
+    SIN_RINDE = ("vicia_cobertura", "avena_cobertura", "camelina")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.predictor = get_predictor()
+
+    def _features(self, gwetroot: float, anomalia: float) -> dict[str, float]:
+        return {
+            "gwetroot_saturacion_pct": gwetroot, "gwettop_saturacion_pct": gwetroot,
+            "tendencia_humedad_15d_pct": 0.0, "anomalia_lluvia_90d_pct": anomalia,
+            "frecuencia_tormentas_extremas": 0.0, "frecuencia_estres_termico": 3.0,
+            "frecuencia_riesgo_helada": 3.0, "indice_aridez_evaporativa": 0.35 if anomalia < 0 else 1.2,
+            "lluvia_periodo_critico_mm": 250.0, "pendiente_terreno_pct": 0.5,
+            "elevacion_m": 80.0, "textura_arcilla_pct": 25.0,
+        }
+
+    def _batch(self, features: dict[str, float]) -> dict[str, float]:
+        return self.predictor.predict_hydroclimatic_batch(
+            features, campana="invierno", fecha_corte=date(2026, 5, 1), oni_actual=-1.0 if features["anomalia_lluvia_90d_pct"] < 0 else 0.0
+        )
+
+    def test_modelo_solo_entrena_cultivos_con_rinde(self) -> None:
+        self.assertEqual(
+            self.predictor.cultivos_entrenados,
+            {"trigo", "cebada", "maiz_temprano", "maiz_tardio", "soja_primera", "soja_segunda", "girasol", "sorgo"},
+        )
+
+    def test_coberturas_no_se_hunden_en_sequia(self) -> None:
+        """Con perfil seco las coberturas quedan arriba de trigo y cebada, no en 6-8 puntos."""
+        scores = self._batch(self._features(30.0, -50.0))
+        self.assertLess(scores["trigo"], 45.0)  # la sequía sí castiga al trigo
+        for cultivo in self.SIN_RINDE:
+            self.assertGreater(scores[cultivo], scores["trigo"])
+            self.assertGreater(scores[cultivo], scores["cebada"])
+            self.assertGreater(scores[cultivo], 20.0)
+
+    def test_coberturas_cerca_de_la_referencia_en_anio_normal(self) -> None:
+        scores = self._batch(self._features(60.0, 0.0))
+        referencia = (scores["trigo"] + scores["cebada"]) / 2
+        for cultivo in self.SIN_RINDE:
+            self.assertAlmostEqual(scores[cultivo], referencia, delta=5.0)
+            self.assertLessEqual(abs(scores[cultivo] - 50.0), abs(referencia - 50.0) + 0.1)
+
+    def test_ensemble_consistente_con_batch_en_coberturas(self) -> None:
+        features = self._features(30.0, -50.0)
+        actuales = {f: features[f] for f in CURRENT_FEATURES}
+        esc = {f: features[f] for f in FUTURE_FEATURES}
+        ens = self.predictor.predict_ensemble(actuales, [esc], "invierno", fecha_corte=date(2026, 5, 1), oni_actual=-1.0)
+        batch = self._batch(features)
+        self.assertEqual(set(ens), set(batch))
+        for cultivo, score in batch.items():
+            self.assertAlmostEqual(ens[cultivo]["promedio"], score, delta=0.11)
+
+    def test_explicacion_menciona_demanda_hidrica_solo_con_perfil_seco(self) -> None:
+        seco = run_recommendation(self._features(30.0, -50.0), campana="invierno", cultivo_anterior="soja_primera", fecha_ultimo_dato_valido="2026-04-15")
+        normal = run_recommendation(self._features(60.0, 0.0), campana="invierno", cultivo_anterior="soja_primera", fecha_ultimo_dato_valido="2026-04-15")
+        self.assertIn("los cultivos que más agua consumen", seco["recomendacion_principal"]["explicacion"])
+        self.assertNotIn("los cultivos que más agua consumen", normal["recomendacion_principal"]["explicacion"])
+        # 15/4: todas las coberturas todavía se pueden sembrar; con perfil seco no gana el trigo.
+        self.assertNotEqual(seco["recomendacion_principal"]["cultivo"], "trigo")
+
+    def test_nunca_recomienda_un_cultivo_fuera_de_ventana(self) -> None:
+        """1/5: vicia y avena ya no se siembran; quedan al final y no son ni ganador ni alternativa."""
+        resp = run_recommendation(self._features(30.0, -50.0), campana="invierno", cultivo_anterior="soja_primera", fecha_ultimo_dato_valido="2026-05-01")
+        ranking = resp["ranking_cultivos"]
+        fuera = [i["cultivo"] for i in ranking if i["fuera_de_ventana_siembra"]]
+        self.assertEqual(set(fuera), {"vicia_cobertura", "avena_cobertura"})
+        self.assertEqual([i["cultivo"] for i in ranking[-2:]], [c for c in [i["cultivo"] for i in ranking] if c in fuera])
+        self.assertNotIn(resp["recomendacion_principal"]["cultivo"], fuera)
+        explicacion = resp["recomendacion_principal"]["explicacion"]
+        self.assertNotIn("Vicia", explicacion.split(".")[0])
+        self.assertNotIn("Avena", explicacion.split(".")[0])
+
+
+class TestUmbralesRiesgoML8(unittest.TestCase):
+    """ML-8: cortes de riesgo en la escala MAGyP (50 = año normal)."""
+
+    def test_cortes_por_puntaje_hidroclimatico(self) -> None:
+        esperado = {0.0: "critico", 39.9: "critico", 40.0: "alto", 44.9: "alto", 45.0: "medio",
+                    49.9: "medio", 50.0: "bajo", 90.0: "bajo"}
+        for hidro, nivel in esperado.items():
+            self.assertEqual(classify_crop_risk(hidro, 80.0), nivel, hidro)
+
+    def test_suelo_degradado_sube_a_alto_sin_bajar_critico(self) -> None:
+        self.assertEqual(classify_crop_risk(60.0, 34.9), "alto")
+        self.assertEqual(classify_crop_risk(47.0, 34.9), "alto")
+        self.assertEqual(classify_crop_risk(30.0, 10.0), "critico")
+        self.assertEqual(classify_crop_risk(60.0, 35.0), "bajo")
+
+    def test_anio_normal_no_es_riesgo_alto(self) -> None:
+        """Un cultivo en año normal, con suelo sano y P10 aceptable, no queda alto ni crítico."""
+        self.assertEqual(escalate_risk_level(classify_crop_risk(52.0, 70.0), 35.0), "bajo")
 
 
 if __name__ == "__main__":

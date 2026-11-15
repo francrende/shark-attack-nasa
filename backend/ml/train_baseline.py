@@ -5,7 +5,8 @@ Uso (desde ``backend/``)::
     python -m ml.train_baseline
 
 1. Dataset de ML-6 (15 features: estado actual, período crítico del cultivo, días hasta la
-   siembra y ONI; label = rinde vs. tendencia de largo plazo; ``sample_weight``).
+   siembra y ONI; label = rinde vs. tendencia de largo plazo; ``sample_weight``). Desde ML-10
+   solo entran los 8 cultivos con rinde MAGyP (más sus filas What-If); las coberturas no.
 2. HistGradientBoosting con **monotonía** (el puntaje no sube con más calor ni con más heladas
    en el período crítico). Hiperparámetros e iteraciones por **validación cruzada dejando una
    campaña afuera** sobre las 16 campañas de train + val (con tan pocas campañas, un val fijo
@@ -42,6 +43,7 @@ from ml.generate_dataset import (
     METADATA_JSON,
     ML_DIR,
     NUMERIC_FEATURES_V2,
+    ORIGEN_COBERTURA,
     ORIGEN_MAGYP,
     SALIDA_ESCENARIOS,
     SALIDA_SPLIT,
@@ -53,7 +55,7 @@ from providers.features import FEATURES_PERIODO_CRITICO
 SEED = 42
 MODEL_PATH = ML_DIR / "modelo_agro.joblib"
 METRICS_PATH = DATA_DIR / "training_metrics.json"
-MODEL_VERSION = "ml7-magyp"
+MODEL_VERSION = "ml10-magyp"
 
 FEATURE_COLUMNS = FEATURE_COLUMNS_V2
 NUMERIC_FEATURES = NUMERIC_FEATURES_V2
@@ -384,6 +386,9 @@ def main() -> int:
     escenarios = pd.read_csv(SALIDA_ESCENARIOS, dtype={"departamento_id": str})
     train, val, test = (load_split(s) for s in ("train", "val", "test"))
     tv = pd.concat([train, val], ignore_index=True)
+    # ML-10: las coberturas (label de fórmula FAO, sin rinde MAGyP) no entran al modelo. El
+    # predictor las puntúa relativo a los cultivos con rinde real (FAO-56 Ky).
+    tv = tv[tv["origen_muestra"] != ORIGEN_COBERTURA].reset_index(drop=True)
     test = test[test["origen_muestra"] == ORIGEN_MAGYP].reset_index(drop=True)
     tv_real = tv[tv["origen_muestra"] == ORIGEN_MAGYP]
     print(f"train+val={len(tv)} ({len(tv_real)} reales, {tv['anio_campana'].nunique()} campañas) | test={len(test)}")
@@ -458,6 +463,7 @@ def main() -> int:
         "target_semantics": "50 = año normal según la tendencia de largo plazo del departamento (MAGyP); 30 = 20% bajo la tendencia",
         "output_range": [0.0, 100.0],
         "crops_catalog": catalog,
+        "cultivos_entrenados": sorted(tv_real["cultivo_candidato"].unique()),
         "feature_importances": importances,
         "feature_baselines": compute_feature_baselines(tv_real),
         "metrics": {**metrics, "cv_loso": {"modelo": comparacion, "base_anio_normal": cv_base}},

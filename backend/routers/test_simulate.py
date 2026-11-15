@@ -138,7 +138,7 @@ def test_simulate_contrato_completo_con_ensemble(cliente):
 
     dist = data["recomendacion_principal"]["distribucion_hidroclimatica"]
     assert dist["anios_evaluados"] == len(ESCENARIOS)
-    assert dist["umbral_desfavorable"] == 50.0
+    assert dist["umbral_desfavorable"] == 40.0  # ML-8
     assert dist["p10"] <= dist["promedio"] <= dist["p90"]
     for item in data["ranking_cultivos"]:
         assert item["anios_evaluados"] == len(ESCENARIOS)
