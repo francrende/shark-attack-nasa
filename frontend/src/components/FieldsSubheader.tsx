@@ -21,6 +21,7 @@ interface FieldsSubheaderProps {
   isSaving: boolean
   errorMsg: string | null
   isDrawing: boolean
+  editingField?: UserField | null
   customPolygon: [number, number][]
   isDemo: boolean
   isUserSettingsOpen?: boolean
@@ -40,6 +41,7 @@ export function FieldsSubheader({
   isSaving,
   errorMsg,
   isDrawing,
+  editingField = null,
   customPolygon,
   isDemo,
   isUserSettingsOpen = false,
@@ -57,6 +59,16 @@ export function FieldsSubheader({
   const measureRowRef = useRef<HTMLDivElement | null>(null)
   const [startIndex, setStartIndex] = useState(0)
   const [visibleCount, setVisibleCount] = useState<number>(fields.length)
+
+  useEffect(() => {
+    if (!isDrawing) return
+    setLocalError(null)
+    if (editingField) {
+      setFieldName(editingField.nombre)
+    } else {
+      setFieldName('')
+    }
+  }, [isDrawing, editingField])
 
   const recomputeVisiblePills = useCallback(() => {
     const track = pillsTrackRef.current
@@ -149,11 +161,12 @@ export function FieldsSubheader({
   }
 
   if (isDrawing) {
+    const isEditingExisting = editingField !== null
     return (
       <div
         className="fields-subheader"
         role="region"
-        aria-label="Delimitar nuevo campo"
+        aria-label={isEditingExisting ? 'Editar polígono del campo' : 'Delimitar nuevo campo'}
       >
         <form className="fields-drawing-bar" onSubmit={handleSubmit}>
           <div className="fields-drawing-inputs">
@@ -165,19 +178,25 @@ export function FieldsSubheader({
             <input
               type="text"
               className="fields-name-input"
-              placeholder="Nombre del nuevo campo (ej. Lote Norte)"
+              placeholder={
+                isEditingExisting
+                  ? 'Nombre del campo'
+                  : 'Nombre del nuevo campo (ej. Lote Norte)'
+              }
               value={fieldName}
               onChange={(e) => {
                 setFieldName(e.target.value)
                 if (localError) setLocalError(null)
               }}
               disabled={isSaving}
-              aria-label="Nombre del nuevo campo"
+              aria-label={
+                isEditingExisting ? 'Nombre del campo' : 'Nombre del nuevo campo'
+              }
             />
             <span className="fields-drawing-metrics">
               {customPolygon.length < 3
                 ? `${customPolygon.length} / 3 vértices mínimos (clic en el mapa)`
-                : `${customPolygon.length} vértices · ${drawnAreaHa} ha`}
+                : `${customPolygon.length} vértices · ${drawnAreaHa} ha · arrastrar esquinas`}
             </span>
           </div>
 
@@ -210,14 +229,22 @@ export function FieldsSubheader({
               }
             >
               <CheckCircle2 size={14} aria-hidden="true" />
-              <span>{isSaving ? 'Guardando...' : 'Guardar campo'}</span>
+              <span>
+                {isSaving
+                  ? 'Guardando...'
+                  : isEditingExisting
+                    ? 'Guardar cambios'
+                    : 'Guardar campo'}
+              </span>
             </button>
             <button
               type="button"
               className="poly-action-btn"
               onClick={handleCancel}
               disabled={isSaving}
-              title="Cancelar delimitación"
+              title={
+                isEditingExisting ? 'Cancelar edición' : 'Cancelar delimitación'
+              }
             >
               <X size={14} aria-hidden="true" />
               <span>Cancelar</span>

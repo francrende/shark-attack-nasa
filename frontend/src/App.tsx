@@ -33,9 +33,12 @@ import {
 } from './services/authClient'
 import {
   createUserField,
+  deleteUserField,
   listUserFields,
   loginDemoAccount,
+  removeCachedFieldPolygon,
   saveFieldPolygon,
+  updateUserField,
 } from './services/fieldsClient'
 import type {
   Campana,
@@ -98,6 +101,8 @@ export function App() {
   const [isSavingField, setIsSavingField] = useState<boolean>(false)
   const [fieldsError, setFieldsError] = useState<string | null>(null)
   const [isDrawingNewField, setIsDrawingNewField] = useState<boolean>(false)
+  const [editingPolygonField, setEditingPolygonField] =
+    useState<UserField | null>(null)
   const [selectedCoords, setSelectedCoords] = useState<Coordenadas>(
     defaultField.centroide
   )
@@ -314,13 +319,30 @@ export function App() {
   }
 
   const handleStartDrawing = () => {
+    setEditingPolygonField(null)
     setIsDrawingNewField(true)
     setCustomPolygon([])
     setFieldsError(null)
   }
 
+  const handleStartEditingPolygon = (field: UserField) => {
+    setIsSettingsOpen(false)
+    setIsDrawingNewField(false)
+    setEditingPolygonField(field)
+    setSelectedFieldId(field.id)
+    setFieldsError(null)
+    if (Array.isArray(field.polygon) && field.polygon.length >= 3) {
+      setCustomPolygon(field.polygon)
+      setSelectedCoords(calculateCentroid(field.polygon))
+    } else {
+      setCustomPolygon([])
+      setSelectedCoords({ lat: field.lat, lon: field.lon })
+    }
+  }
+
   const handleCancelDrawing = () => {
     setIsDrawingNewField(false)
+    setEditingPolygonField(null)
     setCustomPolygon([])
     setFieldsError(null)
     if (selectedUserField) {
@@ -368,6 +390,37 @@ export function App() {
     try {
       const centroid = calculateCentroid(customPolygon)
       const areaHa = Math.round(calculatePolygonAreaHa(customPolygon) * 10) / 10
+
+      if (editingPolygonField) {
+        const targetId = editingPolygonField.id
+        const updated = await updateUserField(activeToken, targetId, {
+          nombre,
+          lat: centroid.lat,
+          lon: centroid.lon,
+          hectareas: areaHa,
+          polygon: customPolygon,
+        })
+        saveFieldPolygon(targetId, customPolygon)
+        const updatedWithPolygon: UserField = {
+          ...editingPolygonField,
+          ...updated,
+          polygon:
+            Array.isArray(updated.polygon) && updated.polygon.length >= 3
+              ? updated.polygon
+              : customPolygon,
+        }
+        setUserFields((prev) =>
+          prev.map((field) =>
+            field.id === targetId ? updatedWithPolygon : field
+          )
+        )
+        setSelectedFieldId(targetId)
+        setSelectedCoords(centroid)
+        setEditingPolygonField(null)
+        setCustomPolygon([])
+        return
+      }
+
       const created = await createUserField(activeToken, {
         nombre,
         lat: centroid.lat,
@@ -392,10 +445,55 @@ export function App() {
       setFieldsError(
         err instanceof Error
           ? err.message
-          : 'No fue posible guardar el nuevo campo.'
+          : 'No fue posible guardar el campo.'
       )
     } finally {
       setIsSavingField(false)
+    }
+  }
+
+  const handleRenameField = async (fieldId: string, nombre: string) => {
+    if (!activeToken) {
+      throw new Error(
+        'La sesión no se encuentra activa. Inicie sesión nuevamente.'
+      )
+    }
+    const updated = await updateUserField(activeToken, fieldId, { nombre })
+    setUserFields((prev) =>
+      prev.map((field) => {
+        if (field.id !== fieldId) return field
+        return {
+          ...field,
+          ...updated,
+          polygon:
+            Array.isArray(updated.polygon) && updated.polygon.length >= 3
+              ? updated.polygon
+              : field.polygon,
+        }
+      })
+    )
+  }
+
+  const handleDeleteField = async (fieldId: string) => {
+    if (!activeToken) {
+      throw new Error(
+        'La sesión no se encuentra activa. Inicie sesión nuevamente.'
+      )
+    }
+    await deleteUserField(activeToken, fieldId)
+    removeCachedFieldPolygon(fieldId)
+
+    const remaining = userFields.filter((field) => field.id !== fieldId)
+    setUserFields(remaining)
+
+    if (selectedFieldId === fieldId) {
+      const nextField = remaining[0] ?? null
+      setSelectedFieldId(nextField ? nextField.id : null)
+      setSelectedCoords(
+        nextField
+          ? { lat: nextField.lat, lon: nextField.lon }
+          : defaultField.centroide
+      )
     }
   }
 
@@ -475,7 +573,8 @@ export function App() {
             isLoading={isFieldsLoading}
             isSaving={isSavingField}
             errorMsg={fieldsError}
-            isDrawing={isDrawingNewField}
+            isDrawing={isDrawingNewField || editingPolygonField !== null}
+            editingField={editingPolygonField}
             customPolygon={customPolygon}
             isDemo={authStatus === 'demo'}
             isUserSettingsOpen={isSettingsOpen}
@@ -497,7 +596,8 @@ export function App() {
             selectedCoords={selectedCoords}
             userFields={userFields}
             selectedFieldId={selectedFieldId}
-            isDrawingNewField={isDrawingNewField}
+            editingFieldId={editingPolygonField?.id ?? null}
+            isDrawingNewField={isDrawingNewField || editingPolygonField !== null}
             customPolygon={customPolygon}
             historicalMode={{
               active: activeTab === 'historico',
@@ -634,7 +734,14 @@ export function App() {
       <UserSettingsModal
         isOpen={isSettingsOpen && authStatus === 'authenticated'}
         user={currentUser}
+        accessToken={activeToken}
+        fields={userFields}
         onClose={() => setIsSettingsOpen(false)}
+        onUserUpdated={(updatedUser) => setCurrentUser(updatedUser)}
+        onRenameField={handleRenameField}
+        onEditFieldPolygon={handleStartEditingPolygon}
+        onDeleteField={handleDeleteField}
+        onLogout={handleLogout}
       />
     </div>
   )
