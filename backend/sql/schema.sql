@@ -51,8 +51,11 @@ create table if not exists public.fields (
   lat double precision not null,
   lon double precision not null,
   hectareas double precision check (hectareas is null or hectareas > 0),
+  polygon jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.fields add column if not exists polygon jsonb;
 
 create index if not exists idx_fields_user_id on public.fields (user_id);
 

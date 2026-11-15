@@ -41,6 +41,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-3` | Endpoints de Auth y dependencia JWT (Supabase Auth) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/main.py` | `BACK-1`, `BACK-2` | `[x]` |
 | `BACK-4` | CRUD de Campos y Campañas/Resultados por Campo | `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py` | `BACK-2`, `BACK-3` | `[x]` |
 | `BACK-5` | Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email | `backend/TASKS_BACKEND.md` | `BACK-3` | `[x]` |
+| `BACK-6` | Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`) | `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md` | `BACK-4` | `[x]` |
 
 ---
 
@@ -121,6 +122,20 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   2. Probar `POST /api/v1/auth/register` y `POST /api/v1/auth/login` con `demoereia@gmail.com` obteniendo `200 OK` y `access_token` JWT válido.
 - **Definition of Done (Comando de Verificación):**
   - `GET http://127.0.0.1:8000/health` devuelve `{"status":"ok","supabase_configured":true}` y `POST /api/v1/auth/login` con `demoereia@gmail.com` devuelve `200 OK` con `access_token`.
+
+### `[x]` BACK-6: Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`)
+- **Objetivo:** Asegurar que el backend (`/api/v1/fields`) y la tabla `public.fields` en Supabase permitan guardar y recuperar el polígono dibujado en el mapa (`polygon: [[lat, lon], ...]`), manteniendo compatibilidad con clientes que envíen solo centroide y hectáreas.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - Los endpoints CRUD `/api/v1/fields` (`GET`, `POST`, `GET /{field_id}`, `PATCH /{field_id}`, `DELETE /{field_id}`) ya existen desde `BACK-4`; se amplían para aceptar y devolver `polygon` opcional (`list[list[float]] | None`).
+  - En `create_field`, se usa `exclude_none=True` para mantener compatibilidad si la columna `polygon` aún no se migró en Supabase.
+  - No se modifica ningún archivo del frontend (`frontend/*`).
+- **Especificación Técnica:**
+  1. Agregar columna `polygon jsonb` en `public.fields` y sentencia idempotente `alter table public.fields add column if not exists polygon jsonb;` en `backend/sql/schema.sql`.
+  2. Agregar `polygon: list[list[float]] | None = None` en `FieldCreate`, `FieldUpdate` y `FieldResponse` dentro de `backend/schemas.py` (validando al menos 3 vértices `[lat, lon]` cuando se envía).
+  3. Actualizar `create_field` en `backend/routers/fields.py` para usar `payload.model_dump(mode="json", exclude_none=True)`.
+- **Definition of Done (Comando de Verificación):**
+  - `backend\.venv\Scripts\python.exe -c "from backend.main import app; from backend.schemas import FieldCreate, FieldResponse; f = FieldCreate(nombre='Lote Sur', lat=-33.1, lon=-64.3, hectareas=120.5, polygon=[[-33.1,-64.3],[-33.11,-64.3],[-33.11,-64.29]]); print(app.title, len(f.polygon))"`
 
 ---
 

@@ -38,7 +38,7 @@ def create_field(
     client = get_authenticated_supabase_client(current_user.access_token)
     data = {
         "user_id": current_user.id,
-        **payload.model_dump(mode="json"),
+        **payload.model_dump(mode="json", exclude_none=True),
     }
     result = client.table("fields").insert(data).execute()
     if not result.data:

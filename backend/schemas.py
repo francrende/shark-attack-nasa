@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -41,11 +41,35 @@ class AuthResponse(BaseModel):
 # Campos / Lotes
 # ---------------------------------------------------------------------------
 
+def _validate_polygon_coords(
+    value: list[list[float]] | None,
+) -> list[list[float]] | None:
+    if value is None:
+        return None
+    if len(value) < 3:
+        raise ValueError("El polígono debe tener al menos 3 vértices.")
+    for point in value:
+        if len(point) != 2:
+            raise ValueError("Cada vértice del polígono debe ser [lat, lon].")
+        lat, lon = point
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+            raise ValueError("Coordenadas de vértice fuera de rango válido.")
+    return value
+
+
 class FieldCreate(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     lat: float = Field(ge=-90.0, le=90.0)
     lon: float = Field(ge=-180.0, le=180.0)
     hectareas: float | None = Field(default=None, gt=0)
+    polygon: list[list[float]] | None = None
+
+    @field_validator("polygon")
+    @classmethod
+    def check_polygon(
+        cls, value: list[list[float]] | None
+    ) -> list[list[float]] | None:
+        return _validate_polygon_coords(value)
 
 
 class FieldUpdate(BaseModel):
@@ -53,6 +77,14 @@ class FieldUpdate(BaseModel):
     lat: float | None = Field(default=None, ge=-90.0, le=90.0)
     lon: float | None = Field(default=None, ge=-180.0, le=180.0)
     hectareas: float | None = Field(default=None, gt=0)
+    polygon: list[list[float]] | None = None
+
+    @field_validator("polygon")
+    @classmethod
+    def check_polygon(
+        cls, value: list[list[float]] | None
+    ) -> list[list[float]] | None:
+        return _validate_polygon_coords(value)
 
 
 class FieldResponse(BaseModel):
@@ -62,6 +94,7 @@ class FieldResponse(BaseModel):
     lat: float
     lon: float
     hectareas: float | None = None
+    polygon: list[list[float]] | None = None
     created_at: datetime
 
 
