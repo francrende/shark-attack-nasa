@@ -57,7 +57,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-24** | Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL` | `frontend/.env.example`, `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx` | `FRONT-18`, `FRONT-23` | `[x]` |
 | **FRONT-25** | Actualización de Credenciales Demo (`demoereia@gmail.com`) para Autenticación Real en Supabase | `frontend/.env.example`, `frontend/src/services/fieldsClient.ts` | `FRONT-24` | `[x]` |
 | **FRONT-26** | Envío y Persistencia de Polígono Dibujado en `/api/v1/fields` (`BACK-6`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `FRONT-24` | `[x]` |
-| **FRONT-27** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
+| **FRONT-27** | Header Limpio, Pestañas de Archivero Alineadas a la Izquierda y Barra de Campos en Una Fila con Pill Terracota de Ajustes | `frontend/src/components/BrandBlock.tsx`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-20`, `FRONT-26` | `[x]` |
+| **FRONT-28** | Card Flotante Glass con Diseño de Fichero para Ajustes de Usuario (`Usuario`, `Campos`, `Expandir mapa`, `Idioma`) | `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-27` | `[x]` |
+| **FRONT-29** | Sincronización de Colores Vivos (sin Verde) entre Pills de Campos y Polígonos del Mapa con Mayor Opacidad | `frontend/src/theme/mapColors.ts`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/App.css` | `FRONT-27` | `[x]` |
+| **FRONT-30** | Formulario de Edición de Perfil (`Nombre`, `Correo`, `Contraseña`) y Botón `Cerrar sesión` en Pestaña `Usuario` | `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-28` | `[x]` |
+| **FRONT-31** | Listado de Campos del Usuario con Menú Desplegable (`⋮`) para Renombrar y Borrar en Pestaña `Campos` | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-28`, `FRONT-29` | `[x]` |
+| **FRONT-32** | Edición Interactiva de Polígono de un Campo Existente (`Editar superficie`) desde el Menú Desplegable | `frontend/src/components/MapView.tsx`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-31` | `[x]` |
+| **FRONT-33** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
 
 ---
 
@@ -635,7 +641,101 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
-### `[x]` FRONT-27: Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento
+### `[x]` FRONT-27: Header Limpio, Pestañas de Archivero Alineadas a la Izquierda y Barra de Campos en Una Fila con Pill Terracota de Ajustes
+- **Objetivo:** Limpiar el header eliminando el texto `"Soporte para el cultivo"`, el nombre de usuario y el botón de cerrar sesión; alinear las 3 pestañas del panel derecho al margen izquierdo (estilo archivero real) y ubicar la pill de configuración (ícono de engranaje sin texto) en terracota (`--color-terracotta`) manteniendo el alto de las pills de campos en una sola fila sin cortes ni recorte parcial, con flechas para desplazarlos.
+- **Archivos Permitidos:**
+  - `frontend/src/components/BrandBlock.tsx`
+  - `frontend/src/components/FieldsSubheader.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Header limpio:** Se elimina `<p className="brand-subtitle">Soporte para el cultivo</p>` en `BrandBlock.tsx` y `.header-session-bar` del header en `App.tsx`.
+  - **Pestañas tipo archivero:** `.top-nav-tabs` usa `display: flex` sin `padding` lateral, alineando las 3 pestañas principales al margen izquierdo del panel derecho.
+  - **Pill terracota de ajustes y carrusel sin cortes:** Ubicada a la izquierda en `FieldsSubheader.tsx` con ícono `Settings` sin texto (`36×36px`, `border-radius: var(--radius-md)`), usando `--color-terracotta` según `SKILLS_FRONTEND.md §2.1` (reservando `--color-heat-soil` solo para calor y suelo). Las pills de campos se muestran en una sola fila calculando exactamente cuáles entran completas (ocultando las que quedarían cortadas) con flechas izquierda/derecha. Si la sesión es `demo`, al tocarla lleva a iniciar sesión (`AuthScreen`); si es usuario autenticado, abre la card flotante de ajustes (`FRONT-28`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-28: Card Flotante Glass con Diseño de Fichero para Ajustes de Usuario (`Usuario`, `Campos`, `Expandir mapa`, `Idioma`)
+- **Objetivo:** Implementar una card modal flotante con fondo *glassmorphism* sobre la vista principal siguiendo el diseño de fichero con 4 pestañas (`Usuario`, `Campos`, `Expandir mapa`, `Idioma`), dejando el contenido funcional de cada pestaña para una etapa posterior.
+- **Archivos Permitidos:**
+  - `frontend/src/components/UserSettingsModal.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Estética Glass + Fichero:** Overlay semitransparente con `backdrop-filter: blur(...)` y card con pestañas tipo archivero en la parte superior.
+  - **4 pestañas iniciales:** `Usuario`, `Campos`, `Expandir mapa` e `Idioma`, con estado placeholder limpio listo para completar su contenido en la siguiente etapa.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-29: Sincronización de Colores Vivos (sin Verde) entre Pills de Campos y Polígonos del Mapa con Mayor Opacidad
+- **Objetivo:** Eliminar los tonos verdes de las pills de campos y sincronizar cada campo en el mapa (`Polygon` / `CircleMarker`) con el color de su pill usando variantes más claras/vivas de la paleta (`--color-heat-soil-light`, `--color-water-rain-light`, `--color-gold-yellow`, `--color-terracotta`) y mayor opacidad al estar seleccionado.
+- **Archivos Permitidos:**
+  - `frontend/src/theme/mapColors.ts`
+  - `frontend/src/components/FieldsSubheader.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Sin verde:** Se reemplaza `variant-olive` y el relleno verde en el mapa (que se confundía con la imagen satelital) por 4 tonos claros/vivos de la paleta definidos de forma centralizada en `FIELD_PALETTE`.
+  - **Pills seleccionadas sin borde en tono oscuro:** Cada pill seleccionada pasa a su variante oscura (`--color-heat-soil-dark`, `--color-water-rain-dark`, `--color-gold-yellow-dark`, `--color-terracotta-dark`) con texto claro `--color-bg-card` (evitando texto negro en el amarillo) y sin borde resaltado.
+  - **Relleno en el mapa del mismo color que el borde:** Cada campo mantiene su `fieldColor` como borde y relleno, subiendo `fillOpacity` a `0.65` al seleccionarse (`0.24` en no seleccionados).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-30: Formulario de Edición de Perfil (`Nombre`, `Correo`, `Contraseña`) y Botón `Cerrar sesión` en Pestaña `Usuario`
+- **Objetivo:** Completar el contenido de la pestaña `"Usuario"` dentro de la card flotante `UserSettingsModal` siguiendo `SKILLS_FRONTEND.md`, permitiendo editar nombre completo, correo electrónico y nueva contraseña (vía `PATCH /api/v1/auth/me`) y cerrar sesión.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/components/UserSettingsModal.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Contrato API:** Se agrega `UserUpdateRequest` y `updateCurrentUser` apuntando a `PATCH /api/v1/auth/me` con el Bearer token activo.
+  - **UX según `SKILLS_FRONTEND.md`:** Uso exclusivo de tokens de `index.css`, lenguaje formal español sin voseo, validación clara de campos (contraseña opcional ≥ 6 caracteres) y botones diferenciados (`Guardar cambios` en `--color-terracotta` y `Cerrar sesión` con `--color-risk-critical`).
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-31: Listado de Campos del Usuario con Menú Desplegable (`⋮`) para Renombrar y Borrar en Pestaña `Campos`
+- **Objetivo:** Completar el contenido de la pestaña `"Campos"` en `UserSettingsModal` listando los lotes del usuario con su color asignado en el mapa, superficie y un menú desplegable de tres puntos (`MoreVertical`) sin íconos internos para `Editar nombre` (hover azul) y `Borrar` con confirmación inline (hover rojo), conectados a `PATCH /api/v1/fields/{id}` y `DELETE /api/v1/fields/{id}`.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/fieldsClient.ts`
+  - `frontend/src/components/UserSettingsModal.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Conexión con backend:** `updateUserField` (`PATCH /api/v1/fields/{id}`) y `deleteUserField` (`DELETE /api/v1/fields/{id}`), limpiando además `localStorage` (`removeCachedFieldPolygon`) y reasignando el campo activo al siguiente disponible cuando se borra el seleccionado.
+  - **UI según `SKILLS_FRONTEND.md`:** Título formal `"Campos registrados"`, menú desplegable de tres puntos (`⋮`) sin íconos internos, edición inline del nombre (`Escape` cancela la edición) y confirmación inline previa al borrado con tokens de `--color-risk-critical`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-32: Edición Interactiva de Polígono de un Campo Existente (`Editar superficie`) desde el Menú Desplegable
+- **Objetivo:** Permitir editar el contorno poligonal de un campo guardado desde la opción `"Editar superficie"` (hover naranja) del menú desplegable en `"Campos"`, reutilizando la barra superior de delimitación y habilitando arrastre de vértices, inserción de esquinas desde puntos medios, eliminación con clic derecho y persistencia en `PATCH /api/v1/fields/{id}`.
+- **Archivos Permitidos:**
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/components/FieldsSubheader.tsx`
+  - `frontend/src/components/UserSettingsModal.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Acceso desde `"Campos"`:** Opción `"Editar superficie"` dentro del menú `⋮` (hover naranja con `--color-heat-soil-soft` / `--color-heat-soil-dark`); al seleccionarla cierra el modal, centra el mapa en el campo seleccionado y precarga su polígono actual en `customPolygon`.
+  - **Edición en Leaflet:** Marcadores `draggable` en cada vértice (`.poly-vertex-handle`), marcadores `+` en puntos medios (`.poly-midpoint-handle`) y clic derecho para quitar esquinas (mínimo 3). Al guardar recalcula centroide y superficie (`hectareas`) llamando a `updateUserField`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-33: Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento
 - **Objetivo:** Incorporar una pantalla previa de selección de provincias argentinas (Región Pampeana habilitada: Buenos Aires, Córdoba, Entre Ríos, La Pampa y Santa Fe) con mapa SVG 3D interactivo, persistencia en `profiles.provincias` para cuentas registradas (solo en memoria en modo demo), filtrado de lotes y validación de vértices en `MapView`, y optimizaciones de rendimiento sin alterar la estética.
 - **Archivos Permitidos:**
   - `frontend/src/data/argentinaProvinces.json`

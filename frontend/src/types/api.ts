@@ -167,6 +167,12 @@ export interface UserProfile {
   created_at?: string | null
 }
 
+export interface UserUpdateRequest {
+  nombre?: string
+  email?: string
+  password?: string
+}
+
 export interface AuthResponse {
   access_token: string | null
   refresh_token?: string | null
@@ -195,6 +201,14 @@ export interface FieldCreateRequest {
   nombre: string
   lat: number
   lon: number
+  hectareas?: number | null
+  polygon?: [number, number][] | null
+}
+
+export interface FieldUpdateRequest {
+  nombre?: string
+  lat?: number
+  lon?: number
   hectareas?: number | null
   polygon?: [number, number][] | null
 }

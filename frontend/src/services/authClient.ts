@@ -3,6 +3,7 @@ import type {
   AuthRegisterRequest,
   AuthResponse,
   UserProfile,
+  UserUpdateRequest,
 } from '../types/api'
 
 const RAW_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -174,5 +175,22 @@ export async function updateUserProvinces(
       body: JSON.stringify({ provincias }),
     },
     'No fue posible guardar las provincias seleccionadas.'
+  )
+}
+
+export async function updateCurrentUser(
+  token: string,
+  payload: UserUpdateRequest
+): Promise<UserProfile> {
+  return requestBackendJson<UserProfile>(
+    '/api/v1/auth/me',
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+    'No fue posible actualizar los datos de la cuenta.'
   )
 }

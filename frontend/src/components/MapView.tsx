@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import L from 'leaflet'
 import {
   CircleMarker,
   MapContainer,
+  Marker,
   Polygon,
   Polyline,
   TileLayer,
@@ -14,7 +16,7 @@ import {
   getLotHistoricalVisualForYear,
   type HistoricalMetricId,
 } from '../data/historicalData'
-import { THEME_COLORS } from '../theme/mapColors'
+import { getFieldColorByIndex, THEME_COLORS } from '../theme/mapColors'
 import type {
   Coordenadas,
   UserField,
@@ -38,10 +40,24 @@ export interface HistoricalMapConfig {
   gibsDateIso: string
 }
 
+const VERTEX_HANDLE_ICON = L.divIcon({
+  className: 'poly-vertex-handle',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+})
+
+const MIDPOINT_HANDLE_ICON = L.divIcon({
+  className: 'poly-midpoint-handle',
+  html: '+',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+})
+
 interface MapViewProps {
   selectedCoords: Coordenadas
   userFields: UserField[]
   selectedFieldId: string | null
+  editingFieldId?: string | null
   isDrawingNewField: boolean
   customPolygon: [number, number][]
   historicalMode?: HistoricalMapConfig
@@ -111,6 +127,7 @@ export function MapView({
   selectedCoords,
   userFields,
   selectedFieldId,
+  editingFieldId = null,
   isDrawingNewField,
   customPolygon,
   historicalMode,
@@ -142,6 +159,13 @@ export function MapView({
     }
   }, [selectedFieldId, selectedCoords.lat, selectedCoords.lon, isDrawingNewField])
 
+  useEffect(() => {
+    if (editingFieldId) {
+      setCameraTarget({ coords: selectedCoords, zoom: 14 })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingFieldId])
+
   const isHistoricalActive = Boolean(historicalMode?.active)
 
   const selectedCoordHistoricalVisual =
@@ -153,6 +177,12 @@ export function MapView({
         )
       : null
 
+  const commitPolygonPoints = (nextPoints: [number, number][]) => {
+    const centroid =
+      nextPoints.length > 0 ? calculateCentroid(nextPoints) : undefined
+    onUpdateCustomPolygon(nextPoints, centroid)
+  }
+
   const handleInteractiveMapClick = (lat: number, lon: number) => {
     if (!isDrawingNewField) return
     if (!isPointInProvinces(lat, lon, selectedProvinces)) {
@@ -161,12 +191,47 @@ export function MapView({
     }
     const roundedLat = Math.round(lat * 10000) / 10000
     const roundedLon = Math.round(lon * 10000) / 10000
-    const nextPoints: [number, number][] = [
-      ...customPolygon,
-      [roundedLat, roundedLon],
-    ]
-    const centroid = calculateCentroid(nextPoints)
-    onUpdateCustomPolygon(nextPoints, centroid)
+    commitPolygonPoints([...customPolygon, [roundedLat, roundedLon]])
+  }
+
+  const handleMoveVertex = (
+    idx: number,
+    lat: number,
+    lon: number,
+    notifyOutside = false
+  ): boolean => {
+    if (!isPointInProvinces(lat, lon, selectedProvinces)) {
+      if (notifyOutside) {
+        onOutsideProvinceClick?.(OUTSIDE_PROVINCE_MESSAGE)
+      }
+      return false
+    }
+    const roundedLat = Math.round(lat * 10000) / 10000
+    const roundedLon = Math.round(lon * 10000) / 10000
+    const nextPoints = customPolygon.map((pt, pointIdx): [number, number] =>
+      pointIdx === idx ? [roundedLat, roundedLon] : pt
+    )
+    commitPolygonPoints(nextPoints)
+    return true
+  }
+
+  const handleRemoveVertex = (idx: number) => {
+    if (customPolygon.length <= 3) return
+    commitPolygonPoints(customPolygon.filter((_, pointIdx) => pointIdx !== idx))
+  }
+
+  const handleInsertMidpoint = (
+    afterIdx: number,
+    lat: number,
+    lon: number
+  ) => {
+    if (!isPointInProvinces(lat, lon, selectedProvinces)) {
+      onOutsideProvinceClick?.(OUTSIDE_PROVINCE_MESSAGE)
+      return
+    }
+    const nextPoints = [...customPolygon]
+    nextPoints.splice(afterIdx + 1, 0, [lat, lon])
+    commitPolygonPoints(nextPoints)
   }
 
   return (
@@ -217,9 +282,11 @@ export function MapView({
         )}
 
         {/* 4. Campos del Usuario desde la Base de Datos */}
-        {userFields.map((field) => {
+        {userFields.map((field, idx) => {
+          if (field.id === editingFieldId) return null
           const isSelected = !isDrawingNewField && field.id === selectedFieldId
           const fieldCoords = { lat: field.lat, lon: field.lon }
+          const { hex: fieldColor } = getFieldColorByIndex(idx)
 
           const histVisual =
             isHistoricalActive && historicalMode
@@ -234,23 +301,17 @@ export function MapView({
             ? isSelected
               ? THEME_COLORS.bg
               : histVisual.strokeColor
-            : isSelected
-              ? THEME_COLORS.primary
-              : THEME_COLORS.earthBrown
+            : fieldColor
 
-          const fillColor = histVisual
-            ? histVisual.fillColor
-            : isSelected
-              ? THEME_COLORS.primary
-              : THEME_COLORS.goldYellow
+          const fillColor = histVisual ? histVisual.fillColor : fieldColor
 
           const fillOpacity = histVisual
             ? isSelected
-              ? 0.52
-              : 0.32
+              ? 0.58
+              : 0.36
             : isSelected
-              ? 0.35
-              : 0.16
+              ? 0.65
+              : 0.24
 
           const tooltipContent = (
             <Tooltip sticky direction="top">
@@ -272,7 +333,7 @@ export function MapView({
                 positions={field.polygon}
                 pathOptions={{
                   color: strokeColor,
-                  weight: isSelected ? 3 : 2,
+                  weight: isSelected ? 3.5 : 2,
                   fillColor,
                   fillOpacity,
                 }}
@@ -331,20 +392,62 @@ export function MapView({
             )}
 
             {customPolygon.map(([lat, lon], idx) => (
-              <CircleMarker
-                key={`${lat}-${lon}-${idx}`}
-                center={[lat, lon]}
-                radius={5}
-                pathOptions={{
-                  color: THEME_COLORS.bg,
-                  weight: 2,
-                  fillColor: THEME_COLORS.heatSoil,
-                  fillOpacity: 1,
+              <Marker
+                key={`poly-vertex-${idx}`}
+                position={[lat, lon]}
+                icon={VERTEX_HANDLE_ICON}
+                draggable
+                eventHandlers={{
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e)
+                  },
+                  drag: (e) => {
+                    const pos = e.target.getLatLng()
+                    handleMoveVertex(idx, pos.lat, pos.lng)
+                  },
+                  dragend: (e) => {
+                    const pos = e.target.getLatLng()
+                    const moved = handleMoveVertex(idx, pos.lat, pos.lng, true)
+                    if (!moved && customPolygon[idx]) {
+                      e.target.setLatLng(customPolygon[idx])
+                    }
+                  },
+                  contextmenu: (e) => {
+                    L.DomEvent.stopPropagation(e)
+                    handleRemoveVertex(idx)
+                  },
                 }}
               >
-                <Tooltip direction="top">Esquina #{idx + 1}</Tooltip>
-              </CircleMarker>
+                <Tooltip direction="top">
+                  {customPolygon.length > 3
+                    ? `Esquina #${idx + 1} · Arrastrar o clic derecho para quitar`
+                    : `Esquina #${idx + 1} · Arrastrar para ajustar`}
+                </Tooltip>
+              </Marker>
             ))}
+
+            {customPolygon.length >= 3 &&
+              customPolygon.map(([lat, lon], idx) => {
+                const [nextLat, nextLon] =
+                  customPolygon[(idx + 1) % customPolygon.length]
+                const midLat = Math.round(((lat + nextLat) / 2) * 10000) / 10000
+                const midLon = Math.round(((lon + nextLon) / 2) * 10000) / 10000
+                return (
+                  <Marker
+                    key={`poly-mid-${idx}`}
+                    position={[midLat, midLon]}
+                    icon={MIDPOINT_HANDLE_ICON}
+                    eventHandlers={{
+                      click: (e) => {
+                        L.DomEvent.stopPropagation(e)
+                        handleInsertMidpoint(idx, midLat, midLon)
+                      },
+                    }}
+                  >
+                    <Tooltip direction="top">Agregar esquina</Tooltip>
+                  </Marker>
+                )
+              })}
           </>
         )}
 
