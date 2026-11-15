@@ -17,9 +17,10 @@ from providers.nasa_power import NasaPowerUnavailable
 from providers.soilgrids import PerfilSueloSatelital, SoilGridsUnavailable
 from providers.srtm import SrtmUnavailable, TopografiaSrtm
 from providers.test_features import HOY, _estado_limpio, _handler  # noqa: F401 (fixture autouse)
-from routers.simulate import get_constructor_insumos
+from routers.simulate import get_constructor_insumos, get_hoy
 from schemas import CULTIVO_ANTERIOR_NEUTRO, CULTIVOS_VALIDOS, SimulateResponse, TelemetriaNasa
-from services.rotation_matrix import ALL_CROPS, NEUTRAL_PREVIOUS_VALUES
+from services.rotation_matrix import ALL_CROPS, NEUTRAL_PREVIOUS_VALUES, compare_rotation_strategies
+from services.simulation_service import campana_vigente, proxima_habilitacion
 
 CALOR = [1, 3, 5, 6, 8, 10, 12, 14, 16, 18, 21, 23, 25, 28, 31, 34, 38, 41, 45]
 ESCENARIOS = [
@@ -103,7 +104,9 @@ def cliente():
             raise estado["error"]
         return estado["insumos"]
 
+    estado["hoy"] = HOY  # noviembre -> verano habilitado
     app.dependency_overrides[get_constructor_insumos] = lambda: falso
+    app.dependency_overrides[get_hoy] = lambda: estado["hoy"]
     with TestClient(app) as c:
         c.llamadas = llamadas
         c.estado = estado
@@ -171,10 +174,48 @@ def test_what_if_cambia_scores_pero_no_la_telemetria(cliente):
 
 
 def test_campana_invierno(cliente):
+    cliente.estado["hoy"] = date(2026, 5, 1)
     data = cliente.post("/api/v1/simulate", json={**BODY, "campana": "invierno", "cultivo_anterior": "maiz_tardio"}).json()
     assert {i["cultivo"] for i in data["ranking_cultivos"]} == {
         "trigo", "cebada", "vicia_cobertura", "avena_cobertura", "camelina"
     }
+    testigo = data["comparacion_estrategias"][0]
+    assert testigo["secuencia_anual"] == "maiz_tardio (verano) -> trigo (invierno)"
+    assert "Convencional" in testigo["titulo"]
+
+
+@pytest.mark.parametrize(
+    "hoy, pedida, habilita",
+    [(HOY, "invierno", date(2027, 2, 15)), (date(2026, 5, 1), "verano", date(2026, 8, 17))],
+)
+def test_campana_no_vigente_422_sin_consultar_providers(cliente, hoy, pedida, habilita):
+    cliente.estado["hoy"] = hoy
+    r = cliente.post("/api/v1/simulate", json={**BODY, "campana": pedida})
+    assert r.status_code == 422
+    detalle = r.json()["detail"]
+    assert f"La de {pedida} se habilita el {habilita:%d/%m/%Y}" in detalle
+    assert cliente.llamadas == []
+
+
+def test_regla_campana_vigente_bordes():
+    # mes de (hoy + 45 días) en abril..septiembre -> invierno
+    assert campana_vigente(date(2026, 2, 13)) == "verano"  # +45 = 30/03
+    assert campana_vigente(date(2026, 2, 15)) == "invierno"  # +45 = 01/04
+    assert campana_vigente(date(2026, 8, 16)) == "invierno"  # +45 = 30/09
+    assert campana_vigente(date(2026, 8, 17)) == "verano"  # +45 = 01/10
+    assert proxima_habilitacion("verano", date(2026, 11, 14)) == date(2026, 11, 14)
+
+
+def test_testigo_segun_cultivo_anterior():
+    misma, = [s for s in compare_rotation_strategies("verano", "soja_primera")[:1]]
+    assert misma.secuencia_anual == "barbecho_desnudo (invierno) -> soja_primera (repetido)"
+    inv = compare_rotation_strategies("invierno", "trigo")[0]
+    assert inv.secuencia_anual == "trigo (invierno, repetido) -> barbecho_desnudo (verano)"
+    cruzado = compare_rotation_strategies("verano", "trigo")[0]
+    assert cruzado.cultivo_evaluado == "soja_primera"
+    assert cruzado.secuencia_anual == "trigo (invierno) -> soja_primera (verano)"
+    sin = compare_rotation_strategies("invierno", None)[0]
+    assert sin.cultivo_evaluado == "trigo" and "repetido" in sin.secuencia_anual
 
 
 @pytest.mark.parametrize("valor", [None, "barbecho", "  Soja_Primera "])
@@ -241,6 +282,7 @@ def test_punta_a_punta_con_providers_mockeados():
             return await construir_insumos_ml(lat, lon, client=client, today=HOY)
 
     app.dependency_overrides[get_constructor_insumos] = lambda: construir
+    app.dependency_overrides[get_hoy] = lambda: HOY
     try:
         with TestClient(app) as c:
             r = c.post("/api/v1/simulate", json=BODY)

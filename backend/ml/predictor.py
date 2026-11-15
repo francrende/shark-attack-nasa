@@ -393,6 +393,27 @@ def representative_scenario(escenarios_historicos: Sequence[Mapping[str, Any]]) 
     }
 
 
+# Redacción en prosa: nombre sin paréntesis y artículo con el género correcto.
+_NOMBRE_PROSA: dict[str, str] = {
+    "vicia_cobertura": "Vicia de cobertura",
+    "avena_cobertura": "Avena de cobertura",
+}
+_CULTIVOS_FEMENINOS: frozenset[str] = frozenset(
+    {"cebada", "vicia_cobertura", "avena_cobertura", "camelina", "soja_primera", "soja_segunda"}
+)
+
+
+def crop_prose_name(crop_id: str) -> str:
+    """Nombre del cultivo para usar dentro de una oración (sin paréntesis)."""
+    return _NOMBRE_PROSA.get(crop_id, get_crop_profile(crop_id).nombre_legible)
+
+
+def crop_with_article(crop_id: str) -> str:
+    """'el Trigo', 'la Vicia de cobertura'."""
+    articulo = "la" if crop_id in _CULTIVOS_FEMENINOS else "el"
+    return f"{articulo} {crop_prose_name(crop_id)}"
+
+
 def build_ensemble_risk_sentence(dist: Mapping[str, Any]) -> str:
     """Oración de riesgo del ganador para ``explicacion`` a partir de su distribución."""
     n = int(dist["anios_evaluados"])
@@ -855,16 +876,14 @@ class AgroPredictor:
         cultivo_anterior: str | None,
     ) -> str:
         """Redacta la explicación agronómica transparente siguiendo el formato de CONTEXT.md."""
-        winner_prof = get_crop_profile(winner_crop)
         winner_subs = sub_scores_by_crop[winner_crop]
 
         alt_phrase = ""
         if runner_up_crop is not None:
-            runner_prof = get_crop_profile(runner_up_crop)
             if winner_crop == "sorgo" and runner_up_crop == "maiz_tardio":
                 alt_phrase = " (o Maíz Tardío precedido por Vicia)"
             else:
-                alt_phrase = f" (o {runner_prof.nombre_legible} como alternativa)"
+                alt_phrase = f" (o {crop_prose_name(runner_up_crop)} como alternativa)"
 
         gwetroot = float(features["gwetroot_saturacion_pct"])
         anomalia = float(features["anomalia_lluvia_90d_pct"])
@@ -886,25 +905,25 @@ class AgroPredictor:
 
         # Identificar cultivos de peor desempeño para contrastar el porqué
         lowest_crop = ranking[-1]["cultivo"]
-        lowest_prof = get_crop_profile(lowest_crop)
         contrast_parts: list[str] = []
 
         if "maiz_temprano" in sub_scores_by_crop and winner_crop != "maiz_temprano" and gwetroot <= 42.0:
-            contrast_parts.append("el Maíz Temprano (riesgo crítico en floración)")
+            contrast_parts.append(f"{crop_with_article('maiz_temprano')} (riesgo crítico en floración)")
 
         prev_norm = (cultivo_anterior or "").strip().lower()
-        if prev_norm in CROP_PROFILES and prev_norm != winner_crop:
+        # "Repetir" solo tiene sentido si el cultivo anterior es de la misma campaña.
+        if prev_norm in sub_scores_by_crop and prev_norm != winner_crop:
             prev_prof = CROP_PROFILES[prev_norm]
             if prev_prof.aporte_rastrojo == "bajo":
                 contrast_parts.append(
-                    f"repetir {prev_prof.nombre_legible} (degradación de carbono y riesgo de erosión por suelo desnudo)"
+                    f"repetir {crop_prose_name(prev_norm)} (degradación de carbono y riesgo de erosión por suelo desnudo)"
                 )
             else:
                 contrast_parts.append(
-                    f"repetir {prev_prof.nombre_legible} (penalización por monocultivo)"
+                    f"repetir {crop_prose_name(prev_norm)} (penalización por monocultivo)"
                 )
         elif lowest_crop != winner_crop:
-            contrast_parts.append(f"{lowest_prof.nombre_legible} (menor adaptación al escenario actual)")
+            contrast_parts.append(f"{crop_with_article(lowest_crop)} (menor adaptación al escenario actual)")
 
         contrast_clause = ""
         if contrast_parts:
@@ -912,12 +931,15 @@ class AgroPredictor:
             # Contracción obligatoria: "de el" -> "del"
             prep = "del " + contrastes[3:] if contrastes.startswith("el ") else "de " + contrastes
             contrast_clause = f"A diferencia {prep}, "
+        sujeto = crop_with_article(winner_crop)
+        if not contrast_clause:
+            sujeto = sujeto[0].upper() + sujeto[1:]
 
         return (
-            f"Recomendación: Sembrar {winner_prof.nombre_legible}{alt_phrase}. "
+            f"Recomendación: Sembrar {crop_prose_name(winner_crop)}{alt_phrase}. "
             f"Detectamos vía satélite {moisture_desc}, {rain_desc} y una pendiente del "
             f"{pendiente:.1f}% (SRTM). {contrast_clause}"
-            f"el {winner_prof.nombre_legible} ofrece un {winner_subs['hidroclimatico']:.0f}% "
+            f"{sujeto} ofrece un {winner_subs['hidroclimatico']:.0f}% "
             f"de aptitud hidroclimática y un {winner_subs['suelo']:.0f}% de beneficio edáfico "
             f"para proteger y recomponer la estructura del lote."
         )

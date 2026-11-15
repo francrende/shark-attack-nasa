@@ -8,19 +8,51 @@ reemplaza los bloques descriptivos de la respuesta por el dato real de los provi
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from ml.predictor import run_recommendation
 from providers.features import InsumosML, construir_insumos_ml
 from providers.nasa_power import NasaPowerUnavailable
-from schemas import SimulateRequest
+from schemas import Campana, SimulateRequest
 
 ConstructorInsumos = Callable[..., Awaitable[InsumosML]]
 
 MSG_SIN_ESCENARIOS = (
     "No hay años históricos completos de NASA POWER para la ventana futura de esta coordenada."
 )
+
+
+ANTICIPACION_CAMPANA_DIAS = 45
+MESES_INVIERNO = range(4, 10)  # abril..septiembre
+
+
+class CampanaNoVigente(ValueError):
+    """La campaña pedida no es la habilitada para la fecha (CONTEXT §4.1)."""
+
+
+def campana_vigente(hoy: date) -> Campana:
+    """Regla de CONTEXT §4.1 (igual que el entrenamiento): mes de hoy + 45 días en abr–sep → invierno."""
+    centro = hoy + timedelta(days=ANTICIPACION_CAMPANA_DIAS)
+    return "invierno" if centro.month in MESES_INVIERNO else "verano"
+
+
+def proxima_habilitacion(campana: Campana, hoy: date) -> date:
+    """Primer día desde ``hoy`` en que ``campana`` queda habilitada."""
+    dia = hoy
+    while campana_vigente(dia) != campana:
+        dia += timedelta(days=1)
+    return dia
+
+
+def validar_campana(campana: Campana, hoy: date) -> None:
+    vigente = campana_vigente(hoy)
+    if campana != vigente:
+        desde = proxima_habilitacion(campana, hoy)
+        raise CampanaNoVigente(
+            f"Hoy ({hoy:%d/%m/%Y}) corresponde la campaña de {vigente}. La de {campana} se "
+            f"habilita el {desde:%d/%m/%Y}: el estado del suelo de hoy no sirve para evaluarla."
+        )
 
 
 def _sin_duplicados(items: tuple[str, ...]) -> list[str]:
@@ -74,7 +106,10 @@ async def simular(
     """Pipeline online completo: providers en paralelo → features → ensemble ML → respuesta §5.
 
     Raises:
+        CampanaNoVigente: la campaña pedida no corresponde a la fecha (se valida antes de consultar).
         NasaPowerUnavailable / SoilGridsUnavailable / SrtmUnavailable: provider sin datos.
     """
+    today = today or datetime.now(timezone.utc).date()
+    validar_campana(request.campana, today)
     insumos = await construir(request.coordenadas.lat, request.coordenadas.lon, today=today)
     return armar_respuesta(insumos, request)

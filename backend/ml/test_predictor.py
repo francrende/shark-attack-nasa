@@ -17,6 +17,8 @@ from backend.ml.predictor import (
     build_ensemble_risk_sentence,
     classify_crop_risk,
     classify_summer_thermal_risk,
+    crop_prose_name,
+    crop_with_article,
     compute_hybrid_final_score,
     detect_physical_anomalies,
     escalate_risk_level,
@@ -544,6 +546,28 @@ class TestConsistenciaTextos(unittest.TestCase):
         explicacion = resp["recomendacion_principal"]["explicacion"]
         self.assertNotIn(" de el ", explicacion)
         self.assertIn("A diferencia del Maíz Temprano", explicacion)
+
+    def test_explicacion_invierno_genero_y_sin_parentesis_anidados(self) -> None:
+        features = {
+            "gwetroot_saturacion_pct": 46.0, "gwettop_saturacion_pct": 35.0,
+            "tendencia_humedad_15d_pct": -4.4, "anomalia_lluvia_90d_pct": -37.4,
+            "frecuencia_tormentas_extremas": 0.0, "frecuencia_estres_termico": 0.0,
+            "frecuencia_riesgo_helada": 10.0, "indice_aridez_evaporativa": 0.75,
+            "pendiente_terreno_pct": 0.8, "elevacion_m": 69.0, "textura_arcilla_pct": 23.4,
+        }
+        resp = run_recommendation(features, campana="invierno", cultivo_anterior="maiz_tardio")
+        explicacion = resp["recomendacion_principal"]["explicacion"]
+        ganador = resp["recomendacion_principal"]["cultivo"]
+        self.assertNotIn("(Cultivo de Cobertura)", explicacion)
+        self.assertNotIn("repetir Maíz Tardío", explicacion)  # anterior de otra campaña
+        self.assertIn(f"{crop_with_article(ganador)} ofrece", explicacion.replace("La ", "la "))
+        self.assertIn(f"Sembrar {crop_prose_name(ganador)}", explicacion)
+
+    def test_articulos_por_cultivo(self) -> None:
+        self.assertEqual(crop_with_article("vicia_cobertura"), "la Vicia de cobertura")
+        self.assertEqual(crop_with_article("soja_primera"), "la Soja de Primera")
+        self.assertEqual(crop_with_article("trigo"), "el Trigo")
+        self.assertEqual(crop_with_article("maiz_tardio"), "el Maíz Tardío")
 
 
 if __name__ == "__main__":

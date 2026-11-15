@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,15 +22,21 @@ def get_constructor_insumos() -> ConstructorInsumos:
     return construir_insumos_ml
 
 
+def get_hoy() -> date:
+    """Fecha de evaluación (t = hoy, UTC). Sobreescribible en tests."""
+    return datetime.now(timezone.utc).date()
+
+
 @router.post("/simulate", response_model=SimulateResponse)
 async def simulate(
     request: SimulateRequest,
     construir: ConstructorInsumos = Depends(get_constructor_insumos),
+    hoy: date = Depends(get_hoy),
 ) -> dict[str, Any]:
     try:
-        return await simular(request, construir=construir)
+        return await simular(request, construir=construir, today=hoy)
     except (NasaPowerUnavailable, SoilGridsUnavailable, SrtmUnavailable) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except ValueError as exc:
-        # Coordenadas fuera de rango detectadas por los providers.
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        # Campaña no vigente (CampanaNoVigente) o coordenadas fuera de rango de los providers.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
