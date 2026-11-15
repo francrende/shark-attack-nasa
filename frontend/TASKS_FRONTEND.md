@@ -54,6 +54,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-21** | Segundo Header Colapsable de Gestión de Lotes del Usuario y Delimitación de Nuevos Campos (`BACK-4`) | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-20` | `[x]` |
 | **FRONT-22** | Refinamiento UX/UI de Campañas, Objetivo Animado y Listado Interactivo de Estrategia de Rotación | `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/App.css` | `FRONT-21` | `[x]` |
 | **FRONT-23** | Estrategia de Rotación Unificada en Listado Expandible, Campaña Actual (`Invierno` Desactivado) y Mapa Limpio sin Capas GIBS | `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/SimulationControls.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-22` | `[x]` |
+| **FRONT-24** | Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL` | `frontend/.env.example`, `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/AuthScreen.tsx` | `FRONT-18`, `FRONT-23` | `[x]` |
 
 ---
 
@@ -583,5 +584,21 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Listado único expandible:** Se elimina la tarjeta fija superior y el bloque `"Rotación sugerida para el año"`; al tocar cualquier cultivo del listado se expande su tarjeta completa con anillo de puntaje, barras de pilares y enlace `+ Mas...`.
   - **Campaña actual (`verano`):** `Invierno` queda desactivado (`disabled`) con ícono de información y tooltip `"A futuro"`, alineado con `CONTEXT.md`.
   - **Mapa limpio:** Se elimina el panel flotante inferior de capas temáticas NASA GIBS sobre el mapa, conservando el visor satelital base y etiquetas.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-24: Alineación de Contrato Auth Frontend–Backend (`BACK-3` / Supabase) y Configuración `VITE_API_URL`
+- **Objetivo:** Dejar configurado el entorno del frontend para conectarse al backend FastAPI + Supabase Auth (`BACK-3`) y alinear los tipos y el flujo de login/registro con el contrato real de `backend/schemas.py`.
+- **Archivos Permitidos:**
+  - `frontend/.env.example`
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/components/AuthScreen.tsx`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Configuración de API:** Se agrega `frontend/.env.example` (y `frontend/.env.local` para desarrollo local) con `VITE_API_URL=http://localhost:8000`.
+  - **Contrato Auth (`BACK-3`):** `AuthResponse` acepta `access_token: string | null` y `requiere_confirmacion_email?: boolean` para manejar cuentas recién registradas que requieren confirmación por email en Supabase.
+  - **Persistencia de sesión:** `authClient.ts` almacena y limpia `access_token` y `refresh_token` de forma consistente al iniciar y cerrar sesión.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`

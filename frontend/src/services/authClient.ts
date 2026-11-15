@@ -11,6 +11,7 @@ const API_BASE_URL = RAW_API_URL
   .replace(/\/+$/, '')
 
 const TOKEN_STORAGE_KEY = 'shark_attack_access_token'
+const REFRESH_TOKEN_STORAGE_KEY = 'shark_attack_refresh_token'
 
 export function getStoredAuthToken(): string | null {
   try {
@@ -28,9 +29,18 @@ export function setStoredAuthToken(token: string): void {
   }
 }
 
+export function setStoredRefreshToken(token: string): void {
+  try {
+    window.localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, token)
+  } catch {
+    // Ignorar si el navegador bloquea almacenamiento local
+  }
+}
+
 export function clearStoredAuthToken(): void {
   try {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
   } catch {
     // Ignorar si el navegador bloquea almacenamiento local
   }

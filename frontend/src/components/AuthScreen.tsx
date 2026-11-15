@@ -15,6 +15,7 @@ import {
   loginUser,
   registerUser,
   setStoredAuthToken,
+  setStoredRefreshToken,
 } from '../services/authClient'
 import type { UserProfile } from '../types/api'
 
@@ -73,7 +74,7 @@ export function AuthScreen({ onAuthenticated, onEnterDemo }: AuthScreenProps) {
             nombre: cleanName,
           })
 
-      if (!response.access_token) {
+      if (response.requiere_confirmacion_email || !response.access_token) {
         setInfoMsg(
           'Cuenta creada correctamente. Verifique su correo electrónico e inicie sesión.'
         )
@@ -83,6 +84,9 @@ export function AuthScreen({ onAuthenticated, onEnterDemo }: AuthScreenProps) {
       }
 
       setStoredAuthToken(response.access_token)
+      if (response.refresh_token) {
+        setStoredRefreshToken(response.refresh_token)
+      }
       let user = extractUserFromAuthResponse(response, cleanEmail, cleanName)
       try {
         user = await fetchCurrentUser(response.access_token)

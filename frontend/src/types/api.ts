@@ -162,14 +162,16 @@ export interface UserProfile {
   id: string
   email: string
   nombre: string
+  created_at?: string | null
 }
 
 export interface AuthResponse {
-  access_token: string
-  refresh_token?: string
+  access_token: string | null
+  refresh_token?: string | null
   token_type?: string
   user?: UserProfile
   profile?: UserProfile
+  requiere_confirmacion_email?: boolean
 }
 
 // ============================================================================
