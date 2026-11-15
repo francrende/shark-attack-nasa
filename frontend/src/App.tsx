@@ -289,8 +289,6 @@ export function App() {
   const [telemetryError, setTelemetryError] = useState<string | null>(null)
   const [telemetryRetryCount, setTelemetryRetryCount] = useState<number>(0)
   const [fieldDataNotice, setFieldDataNotice] = useState<string | null>(null)
-  const [latestFieldCampaign, setLatestFieldCampaign] =
-    useState<FieldCampaign | null>(null)
   // Campañas guardadas del lote, de la más reciente a la más vieja (FRONT-34 / FRONT-37)
   const [fieldCampaigns, setFieldCampaigns] = useState<FieldCampaign[]>([])
   // FRONT-37: seguimiento de la campaña sembrada del lote
@@ -391,17 +389,15 @@ export function App() {
           {
             ...(activeSavedField ? { field_id: activeSavedField.id } : {}),
             coordenadas: requestCoords,
-            coordenadas: selectedCoords,
             campana,
             cultivo_anterior: cultivoAnterior,
             objetivo_productor: objetivoProductor,
             simulacion_what_if: whatIf,
           },
-          activeToken,
-          controller.signal
-            field_id: authStatus === 'authenticated' ? selectedFieldId : null,
-          },
-          { token: authStatus === 'authenticated' ? activeToken : null, signal: controller.signal }
+          {
+            token: activeToken,
+            signal: controller.signal,
+          }
         )
         if (!cancelled) {
           setSimulationError(null)
@@ -421,10 +417,12 @@ export function App() {
           }
           if (err.status === 404 || err.status === 422) {
             setSimulationResult(null)
+            setAvisoDatos(null)
             setSimulationError('Ocurrió un error inesperado')
             return
           }
-        if (cancelled) return
+        }
+
         if (err instanceof SimulacionError && err.tipo === 'servicio_externo') {
           setSimulationResult(null)
           setAvisoDatos({ tipo: 'servicio_externo', fuente: err.fuente })
@@ -433,18 +431,11 @@ export function App() {
           setAvisoDatos({ tipo: 'invalido', mensaje: err.message })
         } else {
           setSimulationResult(guardado?.respuesta ?? null)
-          setAvisoDatos({ tipo: 'sin_conexion', consultadoEn: guardado?.consultadoEn ?? null })
-        }
-
-        setSimulationResult(
-          generateSimulatedResponse({
-            coordenadas: requestCoords,
-            campana,
-            cultivo_anterior: cultivoAnterior,
-            objetivo_productor: objetivoProductor,
-            simulacion_what_if: whatIf,
+          setAvisoDatos({
+            tipo: 'sin_conexion',
+            consultadoEn: guardado?.consultadoEn ?? null,
           })
-        )
+        }
       } finally {
         window.clearTimeout(avisoDespertar)
         if (!cancelled) {
@@ -473,9 +464,6 @@ export function App() {
     objetivoProductor,
     whatIf,
     simulationRetryCount,
-    selectedFieldId,
-    authStatus,
-    activeToken,
     reintentoSimulacion,
   ])
 

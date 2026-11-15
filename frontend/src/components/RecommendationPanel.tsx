@@ -190,10 +190,6 @@ export function RecommendationPanel({
     )
   }
 
-  // Parámetros del anillo SVG del Puntaje general
-  const radius = 34
-  const circumference = 2 * Math.PI * radius
-
   // Solo se rankean los cultivos que hoy se pueden sembrar; el resto se agrupa por motivo debajo.
   const sembrables = ranking.filter((item) => !item.motivo_no_sembrable)
   const noSembrablesPorMotivo = ranking.reduce<Map<string, string[]>>((grupos, item) => {

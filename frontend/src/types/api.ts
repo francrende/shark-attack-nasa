@@ -52,7 +52,6 @@ export interface SimulacionWhatIf {
 }
 
 export interface SimulateRequest {
-  field_id?: string | null
   coordenadas: Coordenadas
   campana: Campana
   cultivo_anterior: CultivoAnterior

@@ -570,14 +570,6 @@ export class SimulateApiError extends Error {
   }
 }
 
-/**
- * Cliente principal de simulación (`POST /api/v1/simulate`), con envío opcional
- * de `field_id` en el body y header `Authorization: Bearer <token>`.
- */
-export async function simulateCropRotation(
-  request: SimulateRequest,
-  token?: string | null,
-  signal?: AbortSignal
 /** Cuánto se espera a `/simulate` antes de cortar: Render Free tarda 30–60 s en despertar. */
 export const TIMEOUT_SIMULACION_MS = 75_000
 
@@ -615,8 +607,8 @@ function mensajeDetalle(detail: unknown): string | null {
 }
 
 /**
- * Cliente de `POST /api/v1/simulate`. El modo de ejemplo solo se usa si `USE_SIMULATED_MODE`
- * está activado a propósito (presentación sin backend), nunca como respuesta a un error.
+ * Cliente principal de `POST /api/v1/simulate`: envía opcionalmente `field_id`
+ * junto con `Authorization: Bearer <token>`, y maneja errores tipados (`401`, `404`, `422`, `503`).
  */
 export async function simulateCropRotation(
   request: SimulateRequest,
@@ -626,38 +618,11 @@ export async function simulateCropRotation(
     return generateSimulatedResponse(request)
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-
-  const { field_id, ...rest } = request
-  const bodyPayload: SimulateRequest = field_id
-    ? { field_id, ...rest }
-    : rest
-
-  const response = await fetch(BACKEND_API_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(bodyPayload),
-    signal,
-  })
-
-  if (!response.ok) {
-    let detail = `Error HTTP ${response.status} al consultar /api/v1/simulate`
-    try {
-      const payload = (await response.json()) as { detail?: string }
-      if (typeof payload?.detail === 'string' && payload.detail.trim()) {
-        detail = payload.detail
-      }
-    } catch {
-      // Conservar mensaje HTTP por defecto
-    }
-    throw new SimulateApiError(response.status, detail)
   const controller = new AbortController()
-  const timer = window.setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_SIMULACION_MS)
+  const timer = window.setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? TIMEOUT_SIMULACION_MS
+  )
   const cancelarDesdeAfuera = () => controller.abort()
   options.signal?.addEventListener('abort', cancelarDesdeAfuera)
 
@@ -666,12 +631,17 @@ export async function simulateCropRotation(
     headers.Authorization = `Bearer ${options.token}`
   }
 
+  const { field_id, ...rest } = request
+  const bodyPayload: SimulateRequest = field_id
+    ? { field_id, ...rest }
+    : rest
+
   let response: Response
   try {
     response = await fetch(BACKEND_API_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify(request),
+      body: JSON.stringify(bodyPayload),
       signal: controller.signal,
     })
   } catch (err) {
@@ -690,15 +660,20 @@ export async function simulateCropRotation(
       // Cuerpo vacío o no JSON
     }
     const detalle = mensajeDetalle(cuerpo.detail)
+    if (response.status === 401 || response.status === 404 || response.status === 422) {
+      throw new SimulateApiError(response.status, detalle ?? undefined)
+    }
     if (response.status === 503 && typeof cuerpo.fuente === 'string') {
-      throw new SimulacionError('servicio_externo', detalle ?? 'Servicio externo no disponible.', cuerpo.fuente)
+      throw new SimulacionError(
+        'servicio_externo',
+        detalle ?? 'Servicio externo no disponible.',
+        cuerpo.fuente
+      )
     }
-    // 422 (pedido inválido) y, con field_id (BACK-24), 401 sin sesión y 404 campo inexistente o ajeno:
-    // son problemas del pedido, no de conexión. Se muestra el mensaje del backend.
-    if (response.status === 422 || response.status === 401 || response.status === 404) {
-      throw new SimulacionError('invalido', detalle ?? 'El pedido no es válido.')
-    }
-    throw new SimulacionError('sin_conexion', detalle ?? `Error HTTP ${response.status} del servidor.`)
+    throw new SimulacionError(
+      'sin_conexion',
+      detalle ?? `Error HTTP ${response.status} del servidor.`
+    )
   }
 
   return (await response.json()) as SimulateResponse
