@@ -128,3 +128,18 @@ create policy "campaigns_update_own"
 create policy "campaigns_delete_own"
   on public.campaigns for delete
   using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------------------
+-- BACK-18: caché persistente de providers (ISRIC, SRTM, NASA POWER histórico) y grilla de
+-- suelo de BACK-19. La escribe y lee solo el backend con la secret key (sb_secret_...),
+-- que saltea RLS. Sin políticas a propósito: anon/authenticated no pueden leer ni escribir.
+-- ---------------------------------------------------------------------------------------
+create table if not exists public.provider_cache (
+  espacio        text        not null,   -- 'suelo' | 'topografia' | 'nasa_elevacion' | 'nasa_hist' | 'suelo_grilla'
+  clave          text        not null,   -- clave_coordenada / clave_celda_power (providers/cache.py)
+  valor          jsonb       not null,
+  actualizado_en timestamptz not null default now(),
+  primary key (espacio, clave)
+);
+
+alter table public.provider_cache enable row level security;

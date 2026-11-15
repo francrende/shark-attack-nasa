@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     supabase_url: str = ""
     supabase_key: str = ""
+    # BACK-18: secret key (sb_secret_...) para la caché persistente. Solo backend, nunca frontend.
+    supabase_secret_key: str = ""
+    # BACK-18: false desactiva la capa de Supabase (tests, o para aislar un problema).
+    cache_persistente: bool = True
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     model_config = SettingsConfigDict(

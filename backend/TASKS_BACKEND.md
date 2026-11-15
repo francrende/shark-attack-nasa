@@ -51,8 +51,10 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-13` | Endpoint `POST /api/v1/simulate`: `BACK-12` → ensemble `ML-5` → contrato §5, app FastAPI con CORS y carga del modelo al arrancar *(antes BACK-7)* | `backend/main.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/schemas.py`, `backend/routers/test_simulate.py` | `BACK-12`, `ML-5` | `[x]` |
 | `BACK-14` | Persistencia y endpoint `PATCH /api/v1/auth/me/provinces` para filtro inicial de provincias pampeanas (`FRONT-33`) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/sql/schema.sql` | `BACK-2`, `BACK-3` | `[x]` |
 | `BACK-15` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado (`FRONT-30`) *(antes BACK-8)* | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
-| `BACK-16` | Deploy en Render (creación): Web Service Free desde `main`, versiones fijas, `/health` con `HEAD` | `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md` | `BACK-13` | `[~]` |
+| `BACK-16` | Deploy en Render (creación): Web Service Free desde `main`, versiones fijas, `/health` con `HEAD` | `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md` | `BACK-13` | `[x]` |
 | `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[~]` |
+| `BACK-18` | Capa de caché persistente en Supabase (`provider_cache`): precarga al arrancar, escritura en segundo plano | `backend/sql/schema.sql`, `backend/providers/cache_supabase.py`, `backend/providers/test_cache_supabase.py`, `backend/config.py`, `backend/.env.example`, `backend/main.py`, `backend/conftest.py` | `BACK-10`, tabla `provider_cache` (la crea la desarrolladora) | `[~]` |
+| `BACK-19` | Grilla de suelo ISRIC cada 100 km en Supabase como respaldo antes de GeoINTA | `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/test_soilgrids.py`, `backend/main.py` | `BACK-18` | `[~]` |
 
 ---
 
@@ -553,7 +555,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Objetivo:** Dejar levantado el esqueleto modular de FastAPI con lectura de variables de entorno (`pydantic-settings`), CORS habilitado para el frontend y el cliente oficial `supabase-py` listo para usar, más un endpoint `/health` que verifique la app y la configuración de Supabase.
 - **Archivos Permitidos:** `backend/main.py`, `backend/config.py`, `backend/providers/supabase_client.py`, `backend/requirements.txt`, `backend/.env.example`
 - **Decisiones Acordadas con el Desarrollador:**
-  - Conexión a Supabase mediante el SDK oficial `supabase-py` usando `SUPABASE_URL` y `SUPABASE_KEY` (y opcionalmente `SUPABASE_SERVICE_ROLE_KEY` si se requiere en backend).
+  - Conexión a Supabase mediante el SDK oficial `supabase-py` usando `SUPABASE_URL` y `SUPABASE_KEY` (y opcionalmente `SUPABASE_SECRET_KEY` si se requiere en backend).
 - **Especificación Técnica:**
   1. Agregar `supabase` a `backend/requirements.txt` e instalarlo en `.venv`.
   2. Crear `backend/.env.example` con `SUPABASE_URL`, `SUPABASE_KEY` (anon/publishable) y `CORS_ORIGINS`.
@@ -674,13 +676,30 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ### 4.3. Deploy en Render (`BACK-16` y `BACK-17`)
 
-### `[~]` BACK-16: Deploy en Render — creación del servicio
+### `[x]` BACK-16: Deploy en Render — creación del servicio
 > **Avance (15/11/2026) — paso 1 (repo) hecho:**
 > - **Dependencias:** se instaló `requirements.txt` en el `.venv`. Faltaba `supabase` 2.34.1; scikit-learn siguió en 1.9.1.
 > - **Versiones fijas:** `requirements.txt` quedó con `==`. El bundle del modelo confirma `sklearn_version: 1.9.1`.
 > - **Health:** `/health` acepta `GET` y `HEAD`, y los dos dan 200 con `TestClient`.
 > - **Tests:** `python -m pytest -q` da 252 en verde.
 > - **Falta:** el merge a `main` y los pasos 2 a 4 en el dashboard de Render.
+>
+> **Verificación en Render (15/11/2026), `https://shark-attack-nasa.onrender.com`:**
+> - **Health y docs:** `GET /health` da 200 con `supabase_configured: true` en 0,35 s. `HEAD /health` da 200. `/docs` y `/openapi.json` dan 200.
+> - **`/simulate` en verano, antecesor `soja_primera`:** los 3 dieron 200, con 12 años análogos. Tiempos: primera pasada en frío / segunda.
+>
+> | Lote | Tiempos | Recomendado | Suelo |
+> | :--- | :--- | :--- | :--- |
+> | Pergamino | 2,25 s / 0,67 s | `maiz_tardio` 72,1 | SoilGrids real |
+> | Marcos Juárez | 8,81 s / 0,54 s | `maiz_tardio` 71,0 | fallback regional |
+> | Balcarce | 1,55 s / 0,61 s | `maiz_tardio` 73,5 | fallback regional |
+>
+> - **Fallback de SoilGrids:** en Marcos Juárez, ISRIC no respondió en 8 s y se abrió el corte automático de 5 minutos, así que Balcarce también cayó al fallback regional. La resiliencia funcionó como estaba diseñada. Repetir más tarde para ver dato real de ISRIC desde Render.
+> - **Memoria, medida en local:** el plan Free de Render no muestra Metrics. Se midió en Windows, con el mismo comando de arranque (`uvicorn`, 1 worker) y 6 `/simulate` en verano.
+>   - Al arrancar: 218 MB.
+>   - Después de las simulaciones: unos 250 MB, con un pico de 258 MB.
+>   - Queda margen contra los 512 MB del plan Free. Un reinicio por falta de memoria aparecería en **Events** y en los **Logs** de Render.
+> - **Riesgo detectado (fuera de alcance, va como tarea aparte):** un punto a más de 100 km de toda localidad GeoINTA da `503`. Con ISRIC caído (o con el corte activo), a ese 503 se llega sin consultar a ISRIC. Le pasó a (−29,0, −60,0), en el norte de Santa Fe, que está dentro de la región precalculada. Con jurados que prueban puntos al azar, conviene sumar localidades de respaldo en el norte de la región o ampliar el radio.
 - **Objetivo:** Dejar el backend corriendo en Render con una URL pública (`https://<servicio>.onrender.com`) que responda `/health`, `/docs` y `POST /api/v1/simulate` con los mismos resultados que en local. La conexión con el frontend queda para BACK-17.
 - **Archivos Permitidos:** `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md`. El resto de la configuración vive en el dashboard de Render, no en el repo.
 - **Decisiones Acordadas con el Desarrollador (15/11/2026):**
@@ -749,6 +768,144 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - Desde `https://<app>.vercel.app`, con la consola del navegador abierta: login con el usuario demo, crear un campo y correr una simulación, sin errores de CORS.
   - `curl -H "Origin: https://<app>.vercel.app" -I https://<servicio>.onrender.com/health` incluye `access-control-allow-origin: https://<app>.vercel.app`.
   - Con el ping corriendo más de 1 hora, el historial de cron-job.org muestra todas las respuestas en 200 y ninguna tarda más de 30 s (arranque en frío).
+
+### 4.4. Caché persistente y grilla de suelo (`BACK-18` y `BACK-19`)
+
+> **Origen (15/11/2026):** en Render, ISRIC respondió en 5–19 s, contra el timeout de 8 s. En Marcos Juárez el timeout abrió el corte automático, y durante ese corte (−29,0, −60,0), en el norte de Santa Fe, dio `503`: no hay ninguna localidad GeoINTA a menos de 100 km. Además, la caché en memoria se pierde en cada deploy o reinicio de Render.
+
+### `[~]` BACK-18: Capa de caché persistente en Supabase
+> **Implementación y verificación local (15/11/2026):**
+> - **Tabla y claves:** la desarrolladora creó `provider_cache` y cargó `SUPABASE_SECRET_KEY` en Render y en `.env`.
+>   - Con la secret key nueva (`sb_secret_`), supabase-py 2.34.1 escribe y lee.
+>   - Con la publishable key la lectura vuelve vacía y la escritura da `42501 violates row-level security`, que es lo esperado.
+> - **Código:**
+>   - `providers/cache_supabase.py` y `providers/test_cache_supabase.py`, con 15 tests.
+>   - `config.py` gana `supabase_secret_key` y `cache_persistente`.
+>   - `main.py`: el `lifespan` hace la precarga y el cierre, y `/health` suma `cache_persistente`.
+>   - `sql/schema.sql`: la tabla.
+>   - La suite completa da **267 en verde**.
+> - **Agregados respecto de la especificación:**
+>   - **`backend/conftest.py`** pone `CACHE_PERSISTENTE=false` en los tests. Sin eso, `routers/test_simulate.py` (que corre el `lifespan`) escribiría en la tabla real si el `.env` tiene la secret key.
+>   - **Filtro de escritura en `main.py`:** no sube a Supabase el `nasa_hist` de las celdas que ya están en `climatologia_pampa.json`. `obtener_referencia_historica` las cachea igual, y si no, se subirían unos 25 KB por celda pampeana consultada, que ya están en el repo.
+> - **En vivo, local con Supabase real** (−34,60, −61,95):
+>   1. El primer `/simulate` guardó la topografía SRTM real en `provider_cache`.
+>   2. Al reiniciar, el log mostró `cache_supabase: 1 filas precargadas`.
+>   3. El suelo no se guardó porque ISRIC volvió a pasarse de 8 s: el fallback transitorio no se persiste, por diseño.
+>   4. El `nasa_hist` de la celda no se subió (filtro).
+> - **Nota:** `actualizado_en` registra la primera inserción; un upsert posterior no lo actualiza.
+> - **Falta:** merge a `main`, deploy en Render y el DoD en Render (`/health` con `cache_persistente: true`, y un restart que conserve las filas).
+- **Objetivo:** Que las respuestas reales de los providers (suelo, topografía e histórico de NASA) sobrevivan a los reinicios de Render, usando la capa secundaria que dejó prevista BACK-10. Ninguna consulta de `/simulate` debe esperar a Supabase.
+- **Archivos Permitidos:**
+  - `backend/providers/cache_supabase.py` y `backend/providers/test_cache_supabase.py` (nuevos).
+  - `backend/config.py` y `backend/.env.example`: la variable de la secret key (`sb_secret_...`, reemplaza a la service role key).
+  - `backend/main.py`: se enchufa la capa en el `lifespan`.
+  - `backend/sql/schema.sql`: la tabla `provider_cache`.
+- **Tabla:** `public.provider_cache` se agrega a `backend/sql/schema.sql` (idempotente) y la ejecuta la desarrolladora en el SQL Editor de Supabase con el contrato de abajo.
+- **Contrato de la tabla:**
+  ```sql
+  create table if not exists public.provider_cache (
+    espacio        text        not null,   -- 'suelo' | 'topografia' | 'nasa_elevacion' | 'nasa_hist' | 'suelo_grilla'
+    clave          text        not null,   -- clave_coordenada / clave_celda_power de providers/cache.py
+    valor          jsonb       not null,   -- el mismo dict que guarda CacheMemoria
+    actualizado_en timestamptz not null default now(),
+    primary key (espacio, clave)
+  );
+  alter table public.provider_cache enable row level security;
+  -- Sin políticas: anon y authenticated no pueden leer ni escribir. Solo la secret key del backend, que saltea RLS.
+  ```
+- **Decisiones Acordadas con el Desarrollador (15/11/2026):**
+  - **Lectura con precarga al arrancar:** en el `lifespan` se bajan a memoria todas las filas de los espacios persistidos. Durante el uso, `get` nunca consulta a Supabase.
+  - **Escritura en segundo plano:** `set` actualiza la copia en memoria y encola un `upsert`. Un hilo aparte lo envía, así que `/simulate` no espera a Supabase.
+  - **Espacios persistidos:** `suelo`, `topografia`, `nasa_elevacion`, `nasa_hist` y `suelo_grilla` (BACK-19). `nasa_reciente` (TTL de 6 h) queda solo en memoria.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Credencial:** `SUPABASE_SECRET_KEY`, solo en las variables de Render y en el `.env` local, nunca en el frontend.
+    - No se usa la publishable key, porque es pública: con ella cualquiera podría escribir datos falsos en la caché.
+    - Sin esta variable, la capa queda **desactivada**: solo memoria, como hoy, con un aviso en el log.
+  - **Nunca rompe `/simulate`:** cualquier falla de Supabase solo se registra en el log y el servidor sigue con la memoria. Las fallas cubiertas son tabla inexistente, timeout y credencial inválida, tanto al precargar como al escribir.
+  - **Timeout de la precarga:** 10 s en total, con lectura paginada de a 1000 filas (límite de PostgREST). Si se pasa, arranca con lo que llegó a bajar.
+  - **Qué se escribe:** solo las entradas con `ttl_s=None` de los espacios persistidos. Los fallbacks transitorios (`reintentar_* = True`) ya hoy no se escriben en ninguna capa (BACK-10), y eso se mantiene.
+  - **Al apagar:** el `lifespan` intenta vaciar la cola de escritura, con 5 s como máximo.
+  - **Versionado:** `nasa_hist` ya trae `version_calculo`, y una versión vieja se recalcula y se pisa sola, sin migraciones.
+- **Especificación Técnica:**
+  1. `config.py`: `supabase_secret_key: str = ""`. `.env.example`: `SUPABASE_SECRET_KEY=`.
+  2. `cache_supabase.py`:
+     - `ESPACIOS_PERSISTIDOS` y `TABLA = "provider_cache"`.
+     - `class CacheSupabase` (cumple el `Protocol` `Cache`):
+       - `get` lee de una copia en memoria (`dict`).
+       - `set` actualiza la copia y encola el upsert si corresponde.
+       - `hidratar(timeout_s=10)` baja las filas.
+       - `entradas(espacio) -> dict[clave, valor]` lo usa BACK-19.
+       - `cerrar(timeout_s=5)` vacía la cola.
+     - El cliente de Supabase se inyecta, para usar uno falso en los tests.
+     - `crear_cache_supabase(settings) -> CacheSupabase | None`: devuelve `None` si falta la key.
+  3. `main.py`, en el `lifespan`:
+     - Si `crear_cache_supabase` devuelve una instancia, `hidratar()` en un thread y `configurar_cache(CacheEnCapas(CacheMemoria(), secundaria=..., ttl_por_espacio=TTL_POR_ESPACIO_DEFAULT))`.
+     - `/health` suma `cache_persistente: bool`.
+     - Al salir, `cerrar()`.
+  4. Tests con un cliente falso, sin red:
+     - La precarga es paginada y carga solo los espacios persistidos.
+     - `get` no llama al cliente.
+     - `set` encola solo los espacios persistidos sin TTL.
+     - El upsert lleva `espacio`, `clave` y `valor`.
+     - Tabla inexistente o error de red al precargar: arranca vacía, sin excepción.
+     - Error al escribir: no se propaga.
+     - Sin key: `crear_cache_supabase` devuelve `None`.
+     - `CacheEnCapas` con esta secundaria completa la memoria primaria.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q`: todos en verde.
+  - Con la tabla creada y la key en Render:
+    1. `/simulate` en un punto nuevo.
+    2. La fila aparece en `provider_cache` (espacios `suelo` y `topografia`).
+    3. **Manual Deploy → Restart** en Render.
+    4. El mismo punto responde sin consultar a ISRIC (el log no muestra la llamada) y `/health` da `cache_persistente: true`.
+
+### `[~]` BACK-19: Grilla de suelo ISRIC cada 100 km (respaldo en Supabase)
+- **Objetivo:** Que ningún punto de las provincias habilitadas termine en `503` cuando ISRIC no responde. Para eso se usa el perfil real de ISRIC del punto de una grilla precargada más cercano, que trae textura y carbono, no solo arcilla.
+- **Archivos Permitidos:**
+  - `backend/providers/soilgrids.py`: la cascada.
+  - `backend/providers/generar_precache.py`: el subcomando `grilla`.
+  - `backend/providers/test_soilgrids.py`.
+  - `backend/main.py`: registrar la grilla después de la precarga.
+- **Decisiones Acordadas con el Desarrollador (15/11/2026):**
+  - **Grilla de 100 km** sobre las **5 provincias** habilitadas en `main`: Buenos Aires, Córdoba, Santa Fe, Entre Ríos y La Pampa. Son unos 83 puntos, y cualquier punto queda a unos 71 km o menos del más cercano.
+  - **Vive solo en Supabase** (espacio `suelo_grilla` de `provider_cache`), sin JSON en el repo. Hasta que la tabla exista, el comportamiento es el de hoy: GeoINTA a 100 km o `503`.
+  - **No se consulta a ISRIC durante `/simulate`:** la grilla se genera una vez, offline, y el backend la lee de memoria tras la precarga de BACK-18.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Cascada nueva:**
+    1. Punto pedido.
+    2. Si responde `null`, los 4 vecinos.
+    3. Si hay timeout, 429, 5xx, error de red o corte activo: el **punto de grilla más cercano a 100 km o menos**.
+    4. Si no hay ninguno, la localidad GeoINTA a 100 km o menos.
+    5. Si tampoco hay, `503`.
+  - **El resultado de grilla:**
+    - `fuente = "grilla_isric"`, `distancia_fuente_km` = distancia al punto de grilla, y `reintentar_soilgrids = True`, porque la falla de ISRIC es transitoria. Como cualquier fallback transitorio, no se escribe en la caché.
+    - Advertencia: *"Perfil de suelo de ISRIC tomado de un punto de referencia a {X} km (ISRIC no respondió a tiempo). Textura y carbono son aproximados."*
+  - **Generación (`python -m providers.generar_precache grilla`):**
+    - **Puntos:** salen de los polígonos de `frontend/src/data/argentinaProvinces.json`, que se lee sin modificarlo. Es la misma fuente que usa el selector del frontend.
+    - **Consultas a ISRIC:** una a la vez, respetando 5 por minuto, con timeout de 60 s (es offline). Si un punto da `null`, se prueban los vecinos a 500 m; si siguen en `null`, se saltea.
+    - **Guardado:** cada punto se sube a `provider_cache` apenas se obtiene.
+    - **Reanudable:** primero lee qué claves ya existen y saltea esas.
+    - Necesita `SUPABASE_SECRET_KEY` en el `.env` local y tarda unos 20 minutos.
+  - **Búsqueda del más cercano:** haversine sobre los unos 83 puntos en memoria (menos de 1 ms). `soilgrids.registrar_grilla(entradas)` se llama desde el `lifespan` con `CacheSupabase.entradas("suelo_grilla")`.
+- **Especificación Técnica:**
+  1. `soilgrids.py`:
+     - `registrar_grilla(entradas)`.
+     - `_punto_grilla_mas_cercano(lat, lon, radio_km=100)`.
+     - La `Fuente` gana `"grilla_isric"`.
+     - La cascada busca en la grilla antes que en GeoINTA en todos los caminos de falla transitoria, incluido el corte automático y el límite de cupo.
+  2. `generar_precache.py`: subcomando `grilla`. Arma los puntos, consulta ISRIC, sube a Supabase, es reanudable e imprime el avance.
+  3. `main.py`: después de `hidratar()`, `registrar_grilla(cache_supabase.entradas("suelo_grilla"))`.
+  4. Tests:
+     - Con timeout y grilla cargada: `fuente="grilla_isric"`, la distancia correcta, la advertencia, sin escritura en la caché y `reintentar_soilgrids=True`.
+     - Con corte activo: va a la grilla sin request.
+     - Grilla vacía: GeoINTA como hoy.
+     - Grilla a más de 100 km y sin GeoINTA: `503`.
+     - La grilla tiene prioridad sobre GeoINTA aunque la localidad esté más cerca.
+     - La generación de puntos cae dentro de los polígonos y da unos 83.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q`: todos en verde.
+  - `cd backend && python -m providers.generar_precache grilla`: unos 83 puntos en `provider_cache` con `espacio = 'suelo_grilla'`.
+  - En Render, con ISRIC lento o en corte, `/simulate` en (−29,0, −60,0) da **200** con `fuente` de grilla y la advertencia, en lugar de `503`.
 
 ---
 
