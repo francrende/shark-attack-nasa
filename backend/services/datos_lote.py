@@ -181,6 +181,22 @@ async def _persistir(persistir_campo: PersistirCampo, cambios: dict[str, Any]) -
         logger.warning("No se pudieron persistir los datos actualizados del campo en BD.", exc_info=True)
 
 
+def _avisar_reintento(campo, lat, lon, perfil, topo) -> None:
+    """BACK-25: si el campo sigue con algún dato aproximado, que lo reintente la cola."""
+    from services.reintentos_campos import obtener_cola  # diferido: evita el ciclo de imports
+
+    cola = obtener_cola()
+    if cola is None:
+        return
+    cola.encolar(
+        campo["id"],
+        lat,
+        lon,
+        suelo=perfil is None or bool(perfil.reintentar_soilgrids),
+        topo=topo is None or bool(topo.reintentar_srtm),
+    )
+
+
 # ---------------------------------------------------------------------------
 # API pública
 # ---------------------------------------------------------------------------
@@ -248,6 +264,8 @@ async def obtener_datos_lote(
     cambios = {**cambios_suelo, **cambios_topo}
     if cambios and persistir_campo is not None:
         await _persistir(persistir_campo, cambios)
+    if campo is not None and campo.get("id") is not None:
+        _avisar_reintento(campo, lat, lon, perfil, topo)
 
     if exigir_todo:
         for clave in ("nasa", "historico", "suelo", "topo"):

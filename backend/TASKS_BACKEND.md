@@ -1058,7 +1058,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 > - **En vivo, local** (−33,40, −62,80):
 >   - `/telemetry` y `/simulate` coinciden en fecha, humedad radicular y superficial, tendencia, **anomalía (−46,41)** y tormentas.
 >   - `riesgo_termico_verano` difiere (medio contra bajo) **por diseño de ML-12**: en verano, `/simulate` usa los años análogos de la fase ENSO y `/telemetry` el promedio histórico. Ya pasaba antes de BACK-24. Si se quiere que Info general muestre lo mismo, es una decisión aparte con el track de ML.
-> - **Falta:** deploy, el DoD con `field_id` en Render (requiere que el frontend lo mande) y avisar a quien tiene BACK-20 a BACK-23.
+> - **Render (15/11/2026, `main` en `add9f18`):**
+>   - El OpenAPI publica `SimulateRequest.field_id`.
+>   - `field_id` sin token da **401**, y con token inválido también **401**.
+>   - `/simulate` sin `field_id` da 200 (1,4 s) y `/telemetry` 200 (0,37 s).
+>   - `HEAD /health` da 200 y `/health` muestra la grilla (83 puntos).
+>   - En los dos endpoints, los seis indicadores coinciden; el riesgo térmico difiere en verano por ML-12.
+> - **Falta:** el DoD con un campo real y su `field_id` (requiere que el frontend lo mande; el prompt va junto con BACK-25) y avisar a quien tiene BACK-20 a BACK-23.
 - **Objetivo:** Que `GET /api/v1/telemetry` y `POST /api/v1/simulate` obtengan los datos del lote con **un solo servicio** que aplique la política de la sección 4.5:
   - Datos fijos desde el campo, si son reales; si no, desde los providers, guardando en el campo lo que se consiga.
   - Clima histórico de la celda, con una sola búsqueda.
@@ -1115,6 +1121,18 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     - Con un campo con dato real, no se consulta a ISRIC.
 
 ### `[~]` BACK-25: Reintento en segundo plano de ISRIC/SRTM por campo
+> **Implementación (15/11/2026):**
+> - **`services/reintentos_campos.py` (nuevo):** `ColaReintentos` (encolar, `en_curso`, ciclo, worker con `asyncio.Task`), `cargar_pendientes`, `iniciar_reintentos` y `detener_reintentos`. La primera ronda llega a los 5 minutos, porque el alta ya intentó.
+> - **`routers/fields.py`:**
+>   - Encola después del `insert` y del `update` con cambio de ubicación.
+>   - Todas las respuestas llevan `reintento_en_curso`.
+>   - El módulo de la cola se importa siempre como `services.reintentos_campos`, igual que en `main.py`, para que haya una sola cola global (con `backend.services…` serían dos).
+> - **`services/datos_lote.py`:** al resolver un campo, lo encola si sigue con algún dato aproximado y lo saca si ya tiene todo real. Volver a encolarlo no reinicia el contador de 12.
+> - **`main.py`:** inicia y detiene la cola en el `lifespan`. Usa la misma bandera que la caché persistente (`CACHE_PERSISTENTE` y la secret key), así que en los tests nunca toca la base real.
+> - **Cambio respecto de la especificación:** `public.fields` no tiene `updated_at`, así que al arrancar se retoman los campos **creados** en las últimas 24 h. Un campo movido hace más de 24 h queda para el reintento de BACK-23.
+> - **Tests:** 12 nuevos (11 de la cola y del router, más 1 del servicio único). La suite completa da **328 en verde**.
+> - **En vivo, local con Supabase:** la cola arrancó y retomó **16 campos pendientes** de las últimas 24 h (6 con suelo y topografía pendientes, 10 solo con suelo), y se detuvo al apagar. No se corrió una ronda local, para no escribir en los campos reales desde la máquina de desarrollo.
+> - **Falta:** el deploy y el DoD en Render (campo nuevo con dato aproximado → `reintento_en_curso = true` → dato real dentro de la hora).
 - **Objetivo:** Que un campo creado con dato aproximado (grilla, GeoINTA o `no_disponible`) pase solo al dato real cuando ISRIC o SRTM vuelvan a responder, sin que el usuario tenga que volver a elegirlo, y que el frontend sepa que hay datos pendientes y cuándo llegaron.
 - **Archivos Permitidos:**
   - `backend/services/reintentos_campos.py` y `backend/services/test_reintentos_campos.py` (nuevos).

@@ -171,3 +171,23 @@ def test_persistir_async_y_error_al_persistir_no_rompe(providers):
 def test_coordenadas_invalidas(providers):
     with pytest.raises(ValueError):
         asyncio.run(datos_lote.obtener_datos_lote(95.0, -60.0, today=HOY))
+
+
+# ---------- BACK-25: el servicio único avisa a la cola de reintentos ----------
+
+
+def test_campo_que_queda_aproximado_se_encola(providers):
+    from services import reintentos_campos
+
+    estado, _ = providers
+    cola = reintentos_campos.ColaReintentos(lambda *_: None)
+    reintentos_campos.configurar_cola(cola)
+    try:
+        estado["suelo"] = SoilGridsUnavailable("caído")
+        _obtener(campo=_campo(PERFIL_GRILLA, TOPO_REAL))  # usa la grilla guardada: sigue pendiente
+        assert cola.en_curso("f1")
+        estado["suelo"] = PERFIL_REAL
+        _obtener(campo=_campo(PERFIL_GRILLA, TOPO_REAL))  # ISRIC respondió: ya no hay pendientes
+        assert not cola.en_curso("f1")
+    finally:
+        reintentos_campos.configurar_cola(None)

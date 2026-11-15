@@ -28,6 +28,7 @@ from providers.cache import (  # noqa: E402
 from providers.cache_supabase import CacheSupabase, crear_cache_supabase  # noqa: E402
 from providers.nasa_telemetry import ESPACIO_HIST, configurar_lector_hist  # noqa: E402
 from providers.soilgrids import ESPACIO_GRILLA, registrar_grilla  # noqa: E402
+from services.reintentos_campos import detener_reintentos, iniciar_reintentos  # noqa: E402
 from routers import auth, campaigns, fields  # noqa: E402
 from routers.simulate import router as simulate_router  # noqa: E402
 from routers.telemetry import router as telemetry_router  # noqa: E402
@@ -62,9 +63,12 @@ async def lifespan(_app: FastAPI):
     global _cache_persistente
     get_predictor()
     _cache_persistente = await _iniciar_cache_persistente()
+    # BACK-25: reintentos de ISRIC/SRTM en segundo plano (misma bandera que la caché persistente).
+    await iniciar_reintentos(settings)
     try:
         yield
     finally:
+        await detener_reintentos()
         if _cache_persistente is not None:
             configurar_lector_hist(None)
             await asyncio.to_thread(_cache_persistente.cerrar)

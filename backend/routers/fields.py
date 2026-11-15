@@ -15,7 +15,22 @@ except ImportError:
     from schemas import FieldCreate, FieldResponse, FieldUpdate
     from services.field_enrichment_service import FieldEnricher, enriquecer_datos_campo
 
+# BACK-25: siempre por el mismo nombre de módulo que main.py, para compartir la misma cola global.
+from services.reintentos_campos import en_curso, obtener_cola  # noqa: E402
+
 router = APIRouter(prefix="/api/v1/fields", tags=["Fields"])
+
+
+def _respuesta(row: dict) -> FieldResponse:
+    """``FieldResponse`` con ``reintento_en_curso`` (BACK-25)."""
+    return FieldResponse(**row, reintento_en_curso=en_curso(row.get("id")))
+
+
+def _encolar_reintento(row: dict) -> None:
+    """BACK-25: si el campo quedó con suelo o topografía aproximados, reintentar en segundo plano."""
+    cola = obtener_cola()
+    if cola is not None:
+        cola.encolar_desde_fila(row)
 
 
 def get_field_enricher() -> FieldEnricher:
@@ -33,7 +48,7 @@ def list_fields(current_user: AuthenticatedUser = Depends(get_current_user)) -> 
         .order("created_at", desc=True)
         .execute()
     )
-    return [FieldResponse(**row) for row in (result.data or [])]
+    return [_respuesta(row) for row in (result.data or [])]
 
 
 @router.post("", response_model=FieldResponse, status_code=status.HTTP_201_CREATED)
@@ -56,7 +71,8 @@ async def create_field(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="No se pudo crear el campo.",
         )
-    return FieldResponse(**result.data[0])
+    _encolar_reintento(result.data[0])
+    return _respuesta(result.data[0])
 
 
 @router.get("/{field_id}", response_model=FieldResponse)
@@ -78,7 +94,7 @@ def get_field(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Campo no encontrado.",
         )
-    return FieldResponse(**result.data)
+    return _respuesta(result.data)
 
 
 @router.patch("/{field_id}", response_model=FieldResponse)
@@ -131,7 +147,9 @@ async def update_field(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Campo no encontrado.",
         )
-    return FieldResponse(**result.data[0])
+    if any(k in updates for k in ("lat", "lon", "polygon")):
+        _encolar_reintento(result.data[0])
+    return _respuesta(result.data[0])
 
 
 @router.delete("/{field_id}", status_code=status.HTTP_204_NO_CONTENT)
