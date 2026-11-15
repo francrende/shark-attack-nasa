@@ -251,19 +251,26 @@ def test_validaciones_422(cliente, cambio):
 
 
 @pytest.mark.parametrize(
-    "error", [NasaPowerUnavailable("NASA caída"), SoilGridsUnavailable("ISRIC caído"), SrtmUnavailable("SRTM caído")]
+    ("error", "fuente"),
+    [
+        (NasaPowerUnavailable("NASA caída"), "nasa_power"),
+        (SoilGridsUnavailable("ISRIC caído"), "soilgrids"),
+        (SrtmUnavailable("SRTM caído"), "srtm"),
+    ],
 )
-def test_provider_caido_503(cliente, error):
+def test_provider_caido_503(cliente, error, fuente):
     cliente.estado["error"] = error
     r = cliente.post("/api/v1/simulate", json=BODY)
     assert r.status_code == 503
     assert str(error) in r.json()["detail"]
+    assert r.json()["fuente"] == fuente
 
 
 def test_sin_escenarios_503(cliente):
     cliente.estado["insumos"] = _insumos(escenarios=[])
     r = cliente.post("/api/v1/simulate", json=BODY)
     assert r.status_code == 503
+    assert r.json()["fuente"] == "nasa_power"
 
 
 def test_latencia_post_insumos(cliente):
