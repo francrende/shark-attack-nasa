@@ -1,4 +1,6 @@
-"""Esquemas Pydantic de request y response para Auth, Campos y Campañas."""
+"""Esquemas Pydantic de request y response para Auth, Campos, Campañas y Telemetría NASA."""
+
+from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any, Literal
@@ -137,3 +139,22 @@ class CampaignResponse(BaseModel):
     resultado_notas: str | None = None
     simulacion_json: dict[str, Any] | None = None
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Telemetría NASA (CONTEXT.md §5)
+# ---------------------------------------------------------------------------
+
+RiesgoTermico = Literal["bajo", "medio", "alto", "critico"]
+
+
+class TelemetriaNasa(BaseModel):
+    """Bloque ``telemetria_nasa`` de la respuesta de ``POST /api/v1/simulate`` (dato satelital real)."""
+
+    fecha_ultimo_dato_valido: date
+    indice_humedad_radicular_pct: float
+    indice_humedad_superficial_pct: float
+    tendencia_humedad_15d_pct: float
+    anomalia_lluvia_90d_pct: float
+    frecuencia_tormentas_extremas_90d: int
+    riesgo_termico_verano: RiesgoTermico
