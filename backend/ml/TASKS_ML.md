@@ -49,6 +49,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `ML-12` | Años análogos filtrados por fase ENSO (en lugar del peso gaussiano) y riesgo térmico de verano calculado con esos mismos años | `backend/providers/enso.py`, `backend/ml/escenarios.py`, `backend/ml/predictor.py`, `backend/services/simulation_service.py`, tests, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-11` | `[x]` |
 | `ML-13` | Años análogos desde 1981 (climatología y días de calor siguen en 2006–2025); `train_baseline --solo-evaluar` | `backend/providers/nasa_telemetry.py`, `backend/providers/generar_precache.py`, `backend/providers/data/climatologia_pampa.json`, `backend/ml/generate_dataset.py`, `backend/ml/train_baseline.py`, `backend/ml/data/*`, `backend/ml/modelo_agro.joblib`, tests, `CONTEXT.md` | `ML-12` | `[x]` |
 | `ML-14` | Secuencias de rotación que respetan el invierno que ya pasó (antecesor o barbecho) y dejan la del perfil como "próximo ciclo" | `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `CONTEXT.md` | `ML-11` | `[x]` |
+| `ML-15` | Explicación en lenguaje de productor: escala MAGyP en palabras, contraste con números, práctica habitual y cultivos no sembrables | `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `CONTEXT.md` | `ML-14` | `[x]` |
 
 ---
 
@@ -546,4 +547,17 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 - **Implementación:** `rotation_matrix.secuencia_real(campana, cultivo_anterior, candidato)`. En verano la secuencia empieza por el invierno real: el antecesor si es de invierno, o `barbecho` si no lo es o no hay antecesor. Si el perfil propone otro invierno, se agrega `; próximo ciclo: <secuencia del perfil>`. En invierno la secuencia del perfil empieza por el propio candidato y se usa tal cual. La usan `secuencia_sugerida` y las estrategias defensiva y regenerativa.
 - **Ejemplo:** tras trigo, defensiva = "trigo (invierno) -> sorgo (verano); próximo ciclo: vicia_cobertura (invierno) -> sorgo / maiz_tardio (verano)".
 - **Verificación:** test nuevo `test_secuencia_real_respeta_el_invierno_que_ya_paso`; `pytest -q` 250 en verde.
+
+---
+
+### `[x]` ML-15: Explicación en lenguaje de productor
+- **Origen:** revisión del desarrollador de la respuesta para -33.935, -60.579 (verano, antecesor trigo, `equilibrio`, 15/11/2026). La recomendación (Soja de Segunda) era correcta, pero la explicación tenía cuatro problemas y faltaba decir qué no se puede sembrar.
+- **Cambios en `build_explanation` y `build_key_ml_factors` (`ml/predictor.py`), acordados con el desarrollador:**
+  1. **Escala:** "ofrece un 53% de aptitud hidroclimática y un 88% de beneficio edáfico" se leía como mediocre y venía de la escala FAO. Ahora: "tiene un rinde esperado levemente por encima de lo normal (53, donde 50 es un año normal) y un aporte al suelo y la rotación de 88 sobre 100" (`describir_rinde_esperado`).
+  2. **Contraste con números:** "A diferencia del Sorgo (menor adaptación al escenario actual)" pasa a dar el motivo: el P10 del ensemble si es más bajo ("rindes más variables en años como este: su peor 10% de años da 45, contra 50"), si no el puntaje esperado, si no el aporte al suelo.
+  3. **Reserva hídrica:** "baja" < 40%, "ajustada" < 50%, "adecuada" < 80%, "alta" desde 80% (`describir_reserva_hidrica`), en la explicación y en `factores_clave_ml`. Antes 46% salía como "rango adecuado" al lado de un déficit de lluvia del 39%.
+  4. **Práctica habitual:** si el ganador es el cultivo de la estrategia testigo y el antecesor es de la otra campaña, se agrega "Coincide con la práctica habitual después del Trigo: los datos de este año no muestran motivos para cambiarla."
+  5. **Cultivos no sembrables (pedido del desarrollador):** "Este verano no se pueden sembrar Soja de Primera, Maíz Temprano y Girasol: el lote está ocupado por el Trigo hasta la cosecha (noviembre-diciembre) y solo admite cultivos de segunda." Los de ventana cerrada van aparte: "Ya cerró la ventana de siembra de ...".
+- **Otros:** la alternativa ya no usa el texto fijo "(o Maíz Tardío precedido por Vicia)"; el contraste del Maíz Temprano no se menciona si no es sembrable. Las estrategias se calculan antes de la explicación para saber cuál es el testigo.
+- **Verificación (2026-11-15):** `pytest -q` 252 en verde (tests nuevos en `TestExplicacionML15`). Respuesta en vivo para las mismas coordenadas con los cinco cambios.
 

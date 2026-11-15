@@ -26,6 +26,9 @@ export type CultivoVerano =
 
 export type CultivoId = CultivoInvierno | CultivoVerano
 
+/** Antecesor del lote: un cultivo o barbecho (lote sin cultivo en la campaña anterior). */
+export type CultivoAnterior = CultivoId | 'barbecho'
+
 export type ObjetivoProductor =
   | 'resiliencia_hidroclimatica'
   | 'conservacion_suelo'
@@ -45,7 +48,7 @@ export interface SimulacionWhatIf {
 export interface SimulateRequest {
   coordenadas: Coordenadas
   campana: Campana
-  cultivo_anterior: CultivoId
+  cultivo_anterior: CultivoAnterior
   objetivo_productor: ObjetivoProductor
   simulacion_what_if?: SimulacionWhatIf
 }
@@ -83,6 +86,13 @@ export interface RankingCultivoItem {
   score_final: number
   riesgo: RiesgoNivel
   sub_scores?: SubScores
+  /** La ventana de siembra de este cultivo ya terminó (ML-7). */
+  fuera_de_ventana_siembra?: boolean
+  /** Motivo por el que hoy no se puede sembrar (lote ocupado o ventana cerrada); null si se puede (ML-11). */
+  motivo_no_sembrable?: string | null
+  score_hidroclimatico_p10?: number
+  anios_desfavorables?: number
+  anios_evaluados?: number
 }
 
 export interface SimulateResponse {

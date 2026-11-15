@@ -449,7 +449,7 @@ class TestEnsembleML5(unittest.TestCase):
              "perfil_mercado", "factores_clave_ml", "explicacion"],
         )
         for item in resp["ranking_cultivos"]:
-            self.assertEqual(set(item), {"cultivo", "score_final", "riesgo", "fuera_de_ventana_siembra", "motivo_no_sembrable"})
+            self.assertEqual(set(item), {"cultivo", "score_final", "riesgo", "sub_scores", "fuera_de_ventana_siembra", "motivo_no_sembrable"})
 
     def test_09_contract_with_scenarios(self) -> None:
         """Con escenarios, S_hidro es el promedio y se agregan los campos del contrato §5."""
@@ -580,7 +580,7 @@ class TestConsistenciaTextos(unittest.TestCase):
         ganador = resp["recomendacion_principal"]["cultivo"]
         self.assertNotIn("(Cultivo de Cobertura)", explicacion)
         self.assertNotIn("repetir Maíz Tardío", explicacion)  # anterior de otra campaña
-        self.assertIn(f"{crop_with_article(ganador)} ofrece", explicacion.replace("La ", "la "))
+        self.assertIn(f"{crop_with_article(ganador)} tiene un rinde esperado", explicacion.replace("La ", "la "))
         self.assertIn(f"Sembrar {crop_prose_name(ganador)}", explicacion)
 
     def test_articulos_por_cultivo(self) -> None:
@@ -733,6 +733,47 @@ class TestLoteOcupadoML11(unittest.TestCase):
         self.assertTrue(maiz["fuera_de_ventana_siembra"])
         self.assertIn("terminó el 31/10", maiz["motivo_no_sembrable"])
         self.assertEqual(ranking[-1]["cultivo"], "maiz_temprano")
+
+
+class TestExplicacionML15(unittest.TestCase):
+    """ML-15: escala en palabras, contraste con números, práctica habitual y cultivos no sembrables."""
+
+    FEATURES = {
+        "gwetroot_saturacion_pct": 46.0, "gwettop_saturacion_pct": 35.0,
+        "tendencia_humedad_15d_pct": -4.0, "anomalia_lluvia_90d_pct": -38.6,
+        "frecuencia_tormentas_extremas": 1.0, "frecuencia_estres_termico": 10.0,
+        "frecuencia_riesgo_helada": 0.0, "indice_aridez_evaporativa": 0.8,
+        "pendiente_terreno_pct": 1.0, "elevacion_m": 70.0, "textura_arcilla_pct": 25.0,
+    }
+
+    def test_tras_trigo(self) -> None:
+        resp = run_recommendation(self.FEATURES, campana="verano", cultivo_anterior="trigo", fecha_ultimo_dato_valido="2026-11-12")
+        rec = resp["recomendacion_principal"]
+        texto = rec["explicacion"]
+        # Sin porcentajes de aptitud de la escala FAO
+        self.assertNotIn("% de aptitud", texto)
+        self.assertNotIn("beneficio edáfico", texto)
+        self.assertIn("donde 50 es un año normal", texto)
+        self.assertIn("reserva hídrica ajustada", texto)
+        # Cultivos no sembrables por el trigo, con nombre
+        self.assertIn("no se pueden sembrar", texto)
+        for nombre in ("Soja de Primera", "Girasol", "Maíz Temprano"):
+            self.assertIn(nombre, texto.split("no se pueden sembrar")[1])
+        self.assertIn("ocupado por el Trigo", texto)
+        # Si el ganador es el testigo (doble cultivo), se dice
+        if rec["cultivo"] == resp["comparacion_estrategias"][0]["cultivo_evaluado"]:
+            self.assertIn("Coincide con la práctica habitual después del Trigo", texto)
+        self.assertNotIn("menor adaptación al escenario actual", texto)
+        self.assertNotIn("después de el ", texto)
+
+    def test_helpers(self) -> None:
+        from backend.ml.predictor import describir_reserva_hidrica, describir_rinde_esperado, enumerar
+
+        self.assertEqual([describir_reserva_hidrica(g) for g in (35, 46, 60, 85)], ["baja", "ajustada", "adecuada", "alta"])
+        self.assertEqual(describir_rinde_esperado(53.0), "levemente por encima de lo normal")
+        self.assertEqual(describir_rinde_esperado(50.0), "en línea con un año normal")
+        self.assertEqual(describir_rinde_esperado(40.0), "por debajo de lo normal")
+        self.assertEqual(enumerar(["A", "B", "C"]), "A, B y C")
 
 
 if __name__ == "__main__":

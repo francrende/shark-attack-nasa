@@ -5,6 +5,7 @@ import {
 } from '../data/demoFields'
 import type {
   Campana,
+  CultivoAnterior,
   CultivoId,
   RankingCultivoItem,
   RiesgoNivel,
@@ -18,9 +19,9 @@ import type {
  * al contrato JSON de la Sección 5 de CONTEXT.md.
  * Cuando el Backend esté listo, basta cambiar `USE_SIMULATED_MODE = false`.
  */
-export const USE_SIMULATED_MODE = true
-const BACKEND_API_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1/simulate'
+export const USE_SIMULATED_MODE = false
+// VITE_API_URL es la base del backend (igual que authClient y fieldsClient).
+const BACKEND_API_URL = `${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '')}/api/v1/simulate`
 
 // ============================================================================
 // MATRIZ DE TRANSICIÓN AGRONÓMICA Y SCORING EN FRONTEND (Secciones 4.2 a 4.4)
@@ -49,11 +50,14 @@ const CANDIDATOS_POR_CAMPANA: Record<Campana, CultivoId[]> = {
  * según la transición `cultivo_anterior -> cultivo_candidato` y el carbono orgánico.
  */
 function computeSoilScore(
-  cultivoAnterior: CultivoId,
+  cultivoAnterior: CultivoAnterior,
   cultivoCandidato: CultivoId,
   socGKg: number
 ): number {
-  const famAnterior = CULTIVOS_CATALOGO[cultivoAnterior]?.familia ?? 'leguminosa'
+  const famAnterior =
+    cultivoAnterior === 'barbecho'
+      ? 'barbecho'
+      : (CULTIVOS_CATALOGO[cultivoAnterior]?.familia ?? 'leguminosa')
   const famCandidato = CULTIVOS_CATALOGO[cultivoCandidato]?.familia ?? 'graminea'
 
   // Penalización fuerte al monocultivo directo
@@ -437,7 +441,9 @@ export function generateSimulatedResponse(
   const nombreGanador =
     CULTIVOS_CATALOGO[ganador.cultivo as CultivoId]?.nombre ?? ganador.cultivo
   const nombreAnterior =
-    CULTIVOS_CATALOGO[cultivo_anterior]?.nombre ?? cultivo_anterior
+    cultivo_anterior === 'barbecho'
+      ? 'Barbecho'
+      : (CULTIVOS_CATALOGO[cultivo_anterior]?.nombre ?? cultivo_anterior)
 
   const humedadRedondeada = Math.round(gwetrootEfectivo)
   const lluviaRedondeada = Math.round(anomaliaEfectiva)

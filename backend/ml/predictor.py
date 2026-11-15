@@ -464,6 +464,43 @@ def crop_with_article(crop_id: str) -> str:
     return f"{articulo} {crop_prose_name(crop_id)}"
 
 
+def describir_reserva_hidrica(gwetroot: float) -> str:
+    """Calificativo de la reserva en zona radicular (ML-15): baja < 40, ajustada < 50, alta >= 80."""
+    if gwetroot < 40.0:
+        return "baja"
+    if gwetroot < 50.0:
+        return "ajustada"
+    if gwetroot < 80.0:
+        return "adecuada"
+    return "alta"
+
+
+def describir_rinde_esperado(s_hidro: float) -> str:
+    """Puntaje hidroclimático en palabras, en la escala MAGyP (50 = año normal)."""
+    if s_hidro >= 55.0:
+        return "por encima de lo normal"
+    if s_hidro >= 51.0:
+        return "levemente por encima de lo normal"
+    if s_hidro > 49.0:
+        return "en línea con un año normal"
+    if s_hidro > 45.0:
+        return "levemente por debajo de lo normal"
+    return "por debajo de lo normal"
+
+
+def _de(con_articulo: str) -> str:
+    """'de' + artículo con la contracción obligatoria: 'del Trigo', 'de la Cebada'."""
+    return "del " + con_articulo[3:] if con_articulo.startswith("el ") else "de " + con_articulo
+
+
+def enumerar(items: Sequence[str]) -> str:
+    """'A', 'A y B', 'A, B y C'."""
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} y {items[-1]}"
+
+
 def build_ensemble_risk_sentence(dist: Mapping[str, Any], oni_actual: float | None = None) -> str:
     """Oración de riesgo del ganador para ``explicacion`` a partir de su distribución.
 
@@ -944,6 +981,9 @@ class AgroPredictor:
                 f"Alta saturación hídrica en zona radicular detectada por NASA ({gwetroot:.0f}%)"
             )
             root_salience += 1.3
+        elif gwetroot < 50.0:
+            root_text = f"Reserva hídrica ajustada en zona radicular ({gwetroot:.0f}%, NASA SMAP/GLDAS)"
+            root_salience += 0.8
         else:
             root_text = (
                 f"Reserva hídrica en zona radicular en rango adecuado ({gwetroot:.0f}%, NASA SMAP/GLDAS)"
@@ -1055,68 +1095,82 @@ class AgroPredictor:
         features: dict[str, float],
         cultivo_anterior: str | None,
         riesgo_por_cultivo: Mapping[str, str] | None = None,
+        p10_por_cultivo: Mapping[str, float] | None = None,
+        cultivo_testigo: str | None = None,
     ) -> str:
-        """Redacta la explicación agronómica transparente siguiendo el formato de CONTEXT.md.
+        """Redacta la explicación agronómica en lenguaje de productor (ML-15).
 
-        ``riesgo_por_cultivo`` (opcional): el contraste "riesgo crítico en floración" del Maíz
-        Temprano solo se menciona si su riesgo es ``alto`` o ``critico``.
+        - Los puntajes se describen en la escala MAGyP (50 = año normal), no como porcentajes.
+        - El contraste con el peor cultivo sembrable dice el motivo con números (P10 del ensemble
+          si está disponible, si no el puntaje esperado o el aporte al suelo).
+        - Si el ganador es la estrategia testigo (lo que el productor haría igual), se dice.
+        - Se listan los cultivos que no se pueden sembrar y por qué (lote ocupado o ventana cerrada).
+        ``riesgo_por_cultivo``: el contraste "riesgo crítico en floración" del Maíz Temprano solo se
+        menciona si su riesgo es ``alto`` o ``critico``.
         """
         winner_subs = sub_scores_by_crop[winner_crop]
+        p10 = dict(p10_por_cultivo or {})
 
         alt_phrase = ""
         if runner_up_crop is not None:
-            if winner_crop == "sorgo" and runner_up_crop == "maiz_tardio":
-                alt_phrase = " (o Maíz Tardío precedido por Vicia)"
-            else:
-                alt_phrase = f" (o {crop_prose_name(runner_up_crop)} como alternativa)"
+            alt_phrase = f" (o {crop_prose_name(runner_up_crop)} como alternativa)"
 
         gwetroot = float(features["gwetroot_saturacion_pct"])
         anomalia = float(features["anomalia_lluvia_90d_pct"])
         pendiente = float(features["pendiente_terreno_pct"])
 
-        if gwetroot <= 40.0:
-            moisture_desc = f"una reserva hídrica ajustada ({gwetroot:.0f}% de saturación radicular)"
-        elif gwetroot >= 80.0:
-            moisture_desc = f"un perfil con alta saturación hídrica ({gwetroot:.0f}% radicular)"
-        else:
-            moisture_desc = f"una disponibilidad hídrica radicular del {gwetroot:.0f}%"
-
+        reserva = describir_reserva_hidrica(gwetroot)
+        moisture_desc = f"una reserva hídrica {reserva} en las raíces ({gwetroot:.0f}% de saturación)"
         if anomalia < -5.0:
-            rain_desc = f"un déficit de lluvias del {abs(anomalia):.0f}%"
+            rain_desc = f"un déficit de lluvias del {abs(anomalia):.0f}% en los últimos 90 días"
         elif anomalia > 5.0:
-            rain_desc = f"un excedente de lluvias del {anomalia:.0f}%"
+            rain_desc = f"un excedente de lluvias del {anomalia:.0f}% en los últimos 90 días"
         else:
             rain_desc = f"lluvias cercanas a la normal histórica ({anomalia:+.1f}%)"
 
-        # Identificar cultivos de peor desempeño para contrastar el porqué
-        # El peor entre los sembrables: los fuera de ventana van al final por fecha, no por aptitud.
+        prev_norm = (cultivo_anterior or "").strip().lower()
+        prev_es_cultivo = prev_norm in CROP_PROFILES
+
+        # Contraste: peor cultivo sembrable (los no sembrables van al final por fecha o lote, no por aptitud)
         sembrables = [item for item in ranking if not item.get("motivo_no_sembrable")]
         lowest_crop = (sembrables or ranking)[-1]["cultivo"]
         contrast_parts: list[str] = []
 
         riesgo_maiz = (riesgo_por_cultivo or {}).get("maiz_temprano", "critico")
+        maiz_sembrable = any(i["cultivo"] == "maiz_temprano" for i in sembrables) or not sembrables
         if (
             "maiz_temprano" in sub_scores_by_crop
             and winner_crop != "maiz_temprano"
+            and maiz_sembrable
             and gwetroot <= 42.0
             and riesgo_maiz in ("alto", "critico")
         ):
             contrast_parts.append(f"{crop_with_article('maiz_temprano')} (riesgo crítico en floración)")
 
-        prev_norm = (cultivo_anterior or "").strip().lower()
-        # "Repetir" solo tiene sentido si el cultivo anterior es de la misma campaña.
         if prev_norm in sub_scores_by_crop and prev_norm != winner_crop:
+            # "Repetir" solo tiene sentido si el cultivo anterior es de la misma campaña.
             prev_prof = CROP_PROFILES[prev_norm]
             if prev_prof.aporte_rastrojo == "bajo":
                 contrast_parts.append(
                     f"repetir {crop_prose_name(prev_norm)} (degradación de carbono y riesgo de erosión por suelo desnudo)"
                 )
             else:
-                contrast_parts.append(
-                    f"repetir {crop_prose_name(prev_norm)} (penalización por monocultivo)"
+                contrast_parts.append(f"repetir {crop_prose_name(prev_norm)} (penalización por monocultivo)")
+        elif lowest_crop != winner_crop and lowest_crop in sub_scores_by_crop:
+            low_subs = sub_scores_by_crop[lowest_crop]
+            if lowest_crop in p10 and winner_crop in p10 and p10[lowest_crop] < p10[winner_crop] - 1.0:
+                motivo = (
+                    f"rindes más variables en años como este: su peor 10% de años da "
+                    f"{p10[lowest_crop]:.0f}, contra {p10[winner_crop]:.0f}"
                 )
-        elif lowest_crop != winner_crop:
-            contrast_parts.append(f"{crop_with_article(lowest_crop)} (menor adaptación al escenario actual)")
+            elif low_subs["hidroclimatico"] < winner_subs["hidroclimatico"] - 1.0:
+                motivo = (
+                    f"menor rinde esperado: {low_subs['hidroclimatico']:.0f} contra "
+                    f"{winner_subs['hidroclimatico']:.0f}"
+                )
+            else:
+                motivo = f"menor aporte al suelo: {low_subs['suelo']:.0f} contra {winner_subs['suelo']:.0f}"
+            contrast_parts.append(f"{crop_with_article(lowest_crop)} ({motivo})")
 
         contrast_clause = ""
         if contrast_parts:
@@ -1128,14 +1182,40 @@ class AgroPredictor:
         if not contrast_clause:
             sujeto = sujeto[0].upper() + sujeto[1:]
 
-        return (
-            f"Recomendación: Sembrar {crop_prose_name(winner_crop)}{alt_phrase}. "
-            f"Detectamos vía satélite {moisture_desc}, {rain_desc} y una pendiente del "
-            f"{pendiente:.1f}% (SRTM). {contrast_clause}"
-            f"{sujeto} ofrece un {winner_subs['hidroclimatico']:.0f}% "
-            f"de aptitud hidroclimática y un {winner_subs['suelo']:.0f}% de beneficio edáfico "
-            f"para proteger y recomponer la estructura del lote."
+        oraciones = [f"Recomendación: Sembrar {crop_prose_name(winner_crop)}{alt_phrase}."]
+        if (
+            cultivo_testigo == winner_crop
+            and prev_es_cultivo
+            and CROP_PROFILES[prev_norm].campana != get_crop_profile(winner_crop).campana
+        ):
+            oraciones.append(
+                f"Coincide con la práctica habitual después {_de(crop_with_article(prev_norm))}: "
+                "los datos de este año no muestran motivos para cambiarla."
+            )
+        oraciones.append(
+            f"Detectamos vía satélite {moisture_desc}, {rain_desc} y una pendiente del {pendiente:.1f}% (SRTM)."
         )
+        oraciones.append(
+            f"{contrast_clause}{sujeto} tiene un rinde esperado {describir_rinde_esperado(winner_subs['hidroclimatico'])} "
+            f"({winner_subs['hidroclimatico']:.0f}, donde 50 es un año normal) y un aporte al suelo y la rotación "
+            f"de {winner_subs['suelo']:.0f} sobre 100."
+        )
+
+        # Cultivos que no se pueden sembrar hoy, agrupados por motivo
+        ocupados = [i["cultivo"] for i in ranking if "ocupado" in (i.get("motivo_no_sembrable") or "")]
+        cerrados = [
+            i["cultivo"] for i in ranking
+            if i.get("motivo_no_sembrable") and "ocupado" not in i["motivo_no_sembrable"]
+        ]
+        if ocupados and prev_es_cultivo:
+            oraciones.append(
+                f"Este verano no se pueden sembrar {enumerar([crop_prose_name(c) for c in ocupados])}: "
+                f"el lote está ocupado por {crop_with_article(prev_norm)} hasta la cosecha "
+                "(noviembre-diciembre) y solo admite cultivos de segunda."
+            )
+        if cerrados:
+            oraciones.append(f"Ya cerró la ventana de siembra de {enumerar([crop_prose_name(c) for c in cerrados])}.")
+        return " ".join(oraciones)
 
     def predict_and_recommend(
         self,
@@ -1276,6 +1356,16 @@ class AgroPredictor:
         runner_up_crop = alternativas[0] if alternativas else None
         winner_soil = soil_evals[winner_crop]
 
+        # Estrategias (antes de la explicación: dice si el ganador es la práctica habitual)
+        raw_strategies = compare_rotation_strategies(
+            campana=campana,
+            cultivo_anterior=cultivo_anterior,
+            carbono_organico_g_kg=carbono_organico_g_kg,
+            pendiente_terreno_pct=pendiente,
+            arcilla_pct=arcilla,
+            phh2o=phh2o,
+        )
+
         # 5. Explicabilidad (Top 3 factores_clave_ml + texto explicativo)
         factores_clave = self.build_key_ml_factors(
             winner_crop=winner_crop,
@@ -1291,6 +1381,8 @@ class AgroPredictor:
             features=effective_features,
             cultivo_anterior=cultivo_anterior,
             riesgo_por_cultivo={item["cultivo"]: item["riesgo"] for item in ranking},
+            p10_por_cultivo={c: d["p10"] for c, d in ensemble.items()} if ensemble is not None else None,
+            cultivo_testigo=raw_strategies[0].cultivo_evaluado,
         )
         if ensemble is not None:
             con_fase = oni_actual if isinstance(escenarios_historicos, Mapping) else None
@@ -1313,14 +1405,6 @@ class AgroPredictor:
         )
 
         # 7. Comparación de las 3 estrategias de rotación enriquecida con Score Final híbrido
-        raw_strategies = compare_rotation_strategies(
-            campana=campana,
-            cultivo_anterior=cultivo_anterior,
-            carbono_organico_g_kg=carbono_organico_g_kg,
-            pendiente_terreno_pct=pendiente,
-            arcilla_pct=arcilla,
-            phh2o=phh2o,
-        )
         estrategias_enriquecidas: list[dict[str, Any]] = []
         for strat in raw_strategies:
             strat_crop = strat.cultivo_evaluado
@@ -1352,6 +1436,7 @@ class AgroPredictor:
                 "cultivo": item["cultivo"],
                 "score_final": item["score_final"],
                 "riesgo": item["riesgo"],
+                "sub_scores": item["sub_scores"],  # ML-16: barras por cultivo en el front
                 "fuera_de_ventana_siembra": item["fuera_de_ventana_siembra"],
                 "motivo_no_sembrable": item["motivo_no_sembrable"],
             }

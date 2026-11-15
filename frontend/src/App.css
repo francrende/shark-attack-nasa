@@ -1649,6 +1649,54 @@ h1.brand-wordmark {
   background-color: var(--color-earth-brown-soft);
 }
 
+/* CULTIVOS NO DISPONIBLES (lote ocupado por el antecesor o ventana de siembra cerrada) */
+.unavailable-crops {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--color-border-strong);
+  background-color: var(--color-bg-elevated);
+}
+
+.unavailable-crops-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.unavailable-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.unavailable-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.unavailable-chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background-color: var(--color-earth-brown-soft);
+  color: var(--color-earth-brown-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.unavailable-reason {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
 /* ==========================================================================
    TARJETA 3 (SECUNDARIA): "¿QUÉ PASA SI...?" (WHAT-IF)
    ========================================================================== */

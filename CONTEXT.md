@@ -257,7 +257,8 @@ Esta sección registra qué hace bien el modelo, qué no, y qué se puede mejora
 4. **Más campañas con rinde (ML-9, 1990+):** con tendencia flexible en lugar de lineal (siembra directa, soja RR), asignando el rinde "maíz" anterior a 2010 solo a `maiz_temprano`, y verificando desde cuándo MAGyP separa soja de primera y de segunda.
 5. **Mejores features del período crítico:** lluvia menos demanda (ET0 por Hargreaves), `GWETROOT` y temperatura máxima media dentro del período, sub-ventanas de 30 días, umbral de calor por cultivo y calendario corrido por latitud.
 6. **Ponderar por superficie sembrada:** hoy un departamento con 1.000 ha pesa igual que uno con 200.000 ha.
-7. **Escala de lote (fase comercial):** rindes de mapas de cosecha, NDVI en la campaña (MODIS / HLS) y consumo de agua medido (ECOSTRESS) en lugar de la tabla orientativa.
+7. **Fecha de siembra de segunda según el antecesor:** hoy la soja de segunda (y el maíz tardío y el sorgo de segunda) usan el mismo calendario después de trigo, cebada o camelina, y el modelo no recibe el antecesor como feature: tras trigo y tras cebada el puntaje de agua y clima es idéntico. La cebada se cosecha 2–3 semanas antes que el trigo, lo que permite sembrar antes y suele dar más rinde. Mejora acotada, sin reentrenar: adelantar el inicio de siembra (y con él el período crítico de los años análogos) cuando el antecesor es cebada, y ajustar el texto del motivo ("noviembre" para cebada, "noviembre-diciembre" para trigo).
+8. **Escala de lote (fase comercial):** rindes de mapas de cosecha, NDVI en la campaña (MODIS / HLS) y consumo de agua medido (ECOSTRESS) en lugar de la tabla orientativa.
 
 ---
 
@@ -370,6 +371,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
 > **Notas de implementación (BACK-13):**
 > - `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` muestran el **dato satelital real**, sin los topes del modelo ni el What-If. El What-If solo cambia los scores, el ranking, las anomalías y la explicación.
 > - **ML-12:** `anios_evaluados` es la cantidad de años análogos de la misma fase ENSO (desde ML-13, entre 10 y 22 según la fase y la fecha; los años disponibles son 1981–2024). En verano, `telemetria_nasa.riesgo_termico_verano` se calcula con los días de calor de esos mismos años, no con el promedio histórico. La `explicacion` dice qué fase rige.
+> - **ML-15:** `explicacion` describe el puntaje hidroclimático en la escala MAGyP ("levemente por encima de lo normal (53, donde 50 es un año normal)"), no como porcentaje; justifica el contraste con números (P10 o puntaje); dice si coincide con la práctica habitual, y lista los cultivos que no se pueden sembrar y por qué.
 > - **ML-14:** en verano, `secuencia_sugerida` y `secuencia_anual` empiezan por el invierno que realmente hubo (el antecesor si es de invierno, o `barbecho`). Si el perfil del cultivo sugiere otro invierno, se agrega como `; próximo ciclo: ...`.
 > - **ML-10:** el contrato no cambia. `sub_scores.hidroclimatico`, la distribución y el ranking ya incluyen el descuento por demanda hídrica; cuando aplica, `explicacion` termina con una oración que lo dice.
 > - **Errores:** `422` para un request inválido (campaña u objetivo desconocidos, `cultivo_anterior` fuera de los 11 cultivos o de `ninguno`/`barbecho`/`sin_cultivo`/`null`, rangos del What-If, campos extra, o **campaña que no corresponde a la fecha** según la regla de §4.1: el backend también la rechaza, además del bloqueo del frontend). `503` si un provider no tiene datos.

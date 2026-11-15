@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Lock,
   ShieldAlert,
 } from 'lucide-react'
 import { CULTIVOS_CATALOGO } from '../data/demoFields'
@@ -58,8 +59,19 @@ export function RecommendationPanel({
   const radius = 34
   const circumference = 2 * Math.PI * radius
 
+  // Solo se rankean los cultivos que hoy se pueden sembrar; el resto se agrupa por motivo debajo.
+  const sembrables = ranking.filter((item) => !item.motivo_no_sembrable)
+  const noSembrablesPorMotivo = ranking.reduce<Map<string, string[]>>((grupos, item) => {
+    if (item.motivo_no_sembrable) {
+      const cultivos = grupos.get(item.motivo_no_sembrable) ?? []
+      cultivos.push(getCultivoDisplayName(item.cultivo))
+      grupos.set(item.motivo_no_sembrable, cultivos)
+    }
+    return grupos
+  }, new Map())
+
   // Anti-clutter: mostrar Top 3 por defecto
-  const visibleRanking = showAllCrops ? ranking : ranking.slice(0, 3)
+  const visibleRanking = showAllCrops ? sembrables : sembrables.slice(0, 3)
 
   const handleToggleCrop = (cultivoId: string) => {
     setExpandedCropId((prev) => (prev === cultivoId ? null : cultivoId))
@@ -312,7 +324,7 @@ export function RecommendationPanel({
           })}
         </div>
 
-        {ranking.length > 3 && (
+        {sembrables.length > 3 && (
           <button
             type="button"
             className="show-all-crops-btn"
@@ -321,10 +333,31 @@ export function RecommendationPanel({
             <span>
               {showAllCrops
                 ? 'Mostrar solo los 3 primeros'
-                : `Ver todos los cultivos (${ranking.length})`}
+                : `Ver todos los cultivos (${sembrables.length})`}
             </span>
             {showAllCrops ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </button>
+        )}
+
+        {noSembrablesPorMotivo.size > 0 && (
+          <div className="unavailable-crops" role="note">
+            <div className="unavailable-crops-head">
+              <Lock size={13} aria-hidden="true" />
+              <span>Cultivos no disponibles en este lote</span>
+            </div>
+            {[...noSembrablesPorMotivo.entries()].map(([motivo, cultivos]) => (
+              <div key={motivo} className="unavailable-group">
+                <div className="unavailable-chips">
+                  {cultivos.map((nombre) => (
+                    <span key={nombre} className="unavailable-chip">
+                      {nombre}
+                    </span>
+                  ))}
+                </div>
+                <p className="unavailable-reason">{motivo}</p>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </section>
