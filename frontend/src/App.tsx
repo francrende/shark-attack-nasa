@@ -374,11 +374,15 @@ export function App() {
         lat: centroid.lat,
         lon: centroid.lon,
         hectareas: areaHa,
+        polygon: customPolygon,
       })
       saveFieldPolygon(created.id, customPolygon)
       const createdWithPolygon: UserField = {
         ...created,
-        polygon: customPolygon,
+        polygon:
+          Array.isArray(created.polygon) && created.polygon.length >= 3
+            ? created.polygon
+            : customPolygon,
       }
       setUserFields((prev) => [createdWithPolygon, ...prev])
       setSelectedFieldId(created.id)

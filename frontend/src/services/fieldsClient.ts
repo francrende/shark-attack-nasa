@@ -2,8 +2,8 @@ import type { FieldCreateRequest, UserField } from '../types/api'
 import { loginUser, requestBackendJson } from './authClient'
 
 const POLYGONS_STORAGE_KEY = 'ereia_field_polygons_v1'
-const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL || 'demo@ereia.app'
-const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || 'demo1234'
+const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL || 'demoereia@gmail.com'
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || 'contraseñadedemo'
 
 function readPolygonCache(): Record<string, [number, number][]> {
   try {
@@ -33,10 +33,13 @@ export function saveFieldPolygon(
 export function attachCachedPolygons(fields: UserField[]): UserField[] {
   const cache = readPolygonCache()
   return fields.map((field) => {
+    if (Array.isArray(field.polygon) && field.polygon.length >= 3) {
+      return field
+    }
     const cached = cache[field.id]
     return Array.isArray(cached) && cached.length >= 3
       ? { ...field, polygon: cached }
-      : field
+      : { ...field, polygon: undefined }
   })
 }
 
