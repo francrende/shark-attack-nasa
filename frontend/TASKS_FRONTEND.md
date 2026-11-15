@@ -63,6 +63,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-30** | Formulario de Edición de Perfil (`Nombre`, `Correo`, `Contraseña`) y Botón `Cerrar sesión` en Pestaña `Usuario` | `frontend/src/types/api.ts`, `frontend/src/services/authClient.ts`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-28` | `[x]` |
 | **FRONT-31** | Listado de Campos del Usuario con Menú Desplegable (`⋮`) para Renombrar y Borrar en Pestaña `Campos` | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-28`, `FRONT-29` | `[x]` |
 | **FRONT-32** | Edición Interactiva de Polígono de un Campo Existente (`Editar superficie`) desde el Menú Desplegable | `frontend/src/components/MapView.tsx`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-31` | `[x]` |
+| **FRONT-33** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
 
 ---
 
@@ -731,3 +732,28 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Edición en Leaflet:** Marcadores `draggable` en cada vértice (`.poly-vertex-handle`), marcadores `+` en puntos medios (`.poly-midpoint-handle`) y clic derecho para quitar esquinas (mínimo 3). Al guardar recalcula centroide y superficie (`hectareas`) llamando a `updateUserField`.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-33: Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento
+- **Objetivo:** Incorporar una pantalla previa de selección de provincias argentinas (Región Pampeana habilitada: Buenos Aires, Córdoba, Entre Ríos, La Pampa y Santa Fe) con mapa SVG 3D interactivo, persistencia en `profiles.provincias` para cuentas registradas (solo en memoria en modo demo), filtrado de lotes y validación de vértices en `MapView`, y optimizaciones de rendimiento sin alterar la estética.
+- **Archivos Permitidos:**
+  - `frontend/src/data/argentinaProvinces.json`
+  - `frontend/src/utils/geo.ts`
+  - `frontend/src/components/ProvinceSelectorScreen.tsx`
+  - `frontend/src/components/MapView.tsx`
+  - `frontend/src/services/authClient.ts`
+  - `frontend/src/types/api.ts`
+  - `frontend/src/theme/mapColors.ts`
+  - `frontend/src/index.css`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+  - `frontend/SKILLS_FRONTEND.md`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - **Mapa 3D de Argentina (`ProvinceSelectorScreen`):** Proyección inclinada de las 24 jurisdicciones oficiales (IGN simplificado con topología compartida), con elevación coplanar en hover/selección para las 5 habilitadas, hover diferenciado en Islas Malvinas (`¡Son argentinas!`) y tooltip `"Próximamente — Región en expansión"` en jurisdicciones bloqueadas.
+  - **Sidebar alineado al tablero:** Reutiliza `.right-analysis-pane` y el ritmo/paleta cálida de tarjetas de `Planificación de campaña` (cajas crema/elevadas con borde punteado `--color-border-strong`, chips en `--color-earth-brown-dark`, contador en marrón tierra y botón terracota con texto `--color-bg-card`), además de una línea separadora `border-bottom: 1.5px solid var(--color-border-strong)` en `.top-navbar`.
+  - **Flujo Demo vs. BD y GIS:** Usuarios registrados persisten en `PATCH /api/v1/auth/me/provinces` y pueden reeditar desde `.header-province-pill`; en modo demo no se llama al endpoint. `App.tsx` filtra `visibleFields` y `MapView.tsx` ajusta `fitBounds` y valida clics de dibujo contra las provincias elegidas.
+  - **Optimización sin cambios visuales:** Tooltip posicionado vía `ref` + `translate3d` sin re-renders de React en `onMouseMove`, blur agrupado en `MapBaseRelief`, menos capas redundantes de extrusión 3D, `key={field.id}` estable en capas Leaflet y `React.lazy` para `MapView` y `HistoricalPanel`.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npm run build && npm run lint`

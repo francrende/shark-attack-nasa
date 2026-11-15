@@ -50,6 +50,9 @@ app.include_router(simulate_router)
 
 
 @app.get("/health", tags=["Health"])
-def health_check() -> dict[str, str]:
-    """Verifica el estado del servidor."""
-    return {"status": "ok"}
+def health_check() -> dict[str, str | bool]:
+    """Verifica el estado del servidor y si Supabase está configurado."""
+    return {
+        "status": "ok",
+        "supabase_configured": settings.is_supabase_configured,
+    }

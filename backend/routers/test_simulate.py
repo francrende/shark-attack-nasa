@@ -270,7 +270,7 @@ def test_latencia_post_insumos(cliente):
 
 def test_health():
     with TestClient(app) as c:
-        assert c.get("/health").json() == {"status": "ok"}
+        assert c.get("/health").json().get("status") == "ok"
 
 
 def test_punta_a_punta_con_providers_mockeados():

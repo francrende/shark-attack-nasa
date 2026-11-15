@@ -162,6 +162,8 @@ export interface UserProfile {
   id: string
   email: string
   nombre: string
+  /** null/[] = el usuario aún no completó el filtro inicial de provincias. */
+  provincias?: string[] | null
   created_at?: string | null
 }
 

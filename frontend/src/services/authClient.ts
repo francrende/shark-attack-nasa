@@ -111,12 +111,14 @@ export function extractUserFromAuthResponse(
       id: candidate.id || '',
       email: candidate.email || fallbackEmail,
       nombre: candidate.nombre || fallbackName,
+      provincias: candidate.provincias ?? null,
     }
   }
   return {
     id: '',
     email: fallbackEmail,
     nombre: fallbackName,
+    provincias: null,
   }
 }
 
@@ -156,6 +158,23 @@ export async function fetchCurrentUser(token: string): Promise<UserProfile> {
       },
     },
     'La sesión ha expirado. Inicie sesión nuevamente.'
+  )
+}
+
+export async function updateUserProvinces(
+  token: string,
+  provincias: string[]
+): Promise<UserProfile> {
+  return requestBackendJson<UserProfile>(
+    '/api/v1/auth/me/provinces',
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ provincias }),
+    },
+    'No fue posible guardar las provincias seleccionadas.'
   )
 }
 

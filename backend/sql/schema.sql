@@ -9,6 +9,14 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
+  -- Provincias elegidas en el filtro inicial (Región Pampeana). NULL = aún no completó el filtro.
+  provincias text[],
+  created_at timestamptz not null default now()
+);
+
+-- Migración idempotente para bases ya existentes
+alter table public.profiles add column if not exists provincias text[];
+
 alter table public.profiles enable row level security;
 
 create policy "profiles_select_own"

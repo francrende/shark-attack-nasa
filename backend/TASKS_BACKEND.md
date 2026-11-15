@@ -531,6 +531,19 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 
 ---
 
+### Tablero de Tareas API FastAPI & Supabase (`backend-celi`)
+
+| ID | Tarea Atómica | Archivos Involucrados | Depende de | Estado |
+| :--- | :--- | :--- | :---: | :---: |
+| `BACK-1` | Estructura base FastAPI, config y cliente Supabase | `backend/main.py`, `backend/config.py`, `backend/providers/supabase_client.py`, `backend/requirements.txt`, `backend/.env.example` | — | `[x]` |
+| `BACK-2` | Esquema SQL en Supabase (`profiles`, `fields`, `campaigns` + RLS) | `backend/sql/schema.sql` | `BACK-1` | `[x]` |
+| `BACK-3` | Endpoints de Auth y dependencia JWT (Supabase Auth) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/main.py` | `BACK-1`, `BACK-2` | `[x]` |
+| `BACK-4` | CRUD de Campos y Campañas/Resultados por Campo | `backend/routers/fields.py`, `backend/routers/campaigns.py`, `backend/schemas.py`, `backend/main.py` | `BACK-2`, `BACK-3` | `[x]` |
+| `BACK-5` | Verificación Live de Auth Supabase, Usuario Demo (`demoereia@gmail.com`) y Nota de Rate Limit Email | `backend/TASKS_BACKEND.md` | `BACK-3` | `[x]` |
+| `BACK-6` | Soporte de Polígono Dibujado (`polygon jsonb`) en Endpoints y Esquema SQL de Campos (`/api/v1/fields`) | `backend/schemas.py`, `backend/routers/fields.py`, `backend/sql/schema.sql`, `backend/TASKS_BACKEND.md` | `BACK-4` | `[x]` |
+
+---
+
 ## 4. Especificación de Tareas Atómicas
 
 ### `[x]` BACK-1: Estructura base FastAPI, configuración y cliente Supabase
