@@ -37,6 +37,16 @@ EscritorCampo = Callable[[str, dict[str, Any]], None]  # (field_id, cambios) -> 
 Proveedor = Callable[..., Awaitable[Any]]
 
 
+async def suelo_segundo_plano(lat: float, lon: float) -> Any:
+    """BACK-32: ISRIC con timeout largo, esperando cupo y sin tocar el corte automático."""
+    return await fetch_perfil_suelo(lat, lon, segundo_plano=True)
+
+
+async def topografia_segundo_plano(lat: float, lon: float) -> Any:
+    """BACK-32: OpenTopoData con timeout largo y sin tocar el corte automático."""
+    return await fetch_topografia(lat, lon, segundo_plano=True)
+
+
 @dataclass
 class Pendiente:
     lat: float
@@ -51,8 +61,8 @@ class ColaReintentos:
         self,
         escritor: EscritorCampo,
         *,
-        proveedor_suelo: Proveedor = fetch_perfil_suelo,
-        proveedor_topo: Proveedor = fetch_topografia,
+        proveedor_suelo: Proveedor = suelo_segundo_plano,
+        proveedor_topo: Proveedor = topografia_segundo_plano,
         intervalo_s: float = INTERVALO_S,
         max_intentos: int = MAX_INTENTOS,
         dormir: Callable[[float], Awaitable[Any]] = asyncio.sleep,
