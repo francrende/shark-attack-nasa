@@ -45,6 +45,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `ML-8` | Recalibración de umbrales de riesgo a la escala MAGyP (50 = año normal): cortes por puntaje esperado, escalón por P10, `umbral_desfavorable`, regla de suelo; cultivos fuera de ventana al final del ranking; `visualize_model.py` actualizado | `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/ml/visualize_model.py`, `backend/routers/test_simulate.py`, `CONTEXT.md` | `ML-10` | `[x]` |
 | `ML-9` | Extender el dataset a las campañas 1990/91–2024/25 (más años para aprender la relación clima–rinde y el contraste entre cultivos) | `backend/ml/generate_dataset.py`, `backend/ml/data/*` | `ML-7` | `[ ]` |
 | `ML-10` | Cultivos sin rinde MAGyP fuera del modelo (puntaje relativo por `Ky` de FAO-56) y penalización por demanda hídrica con perfil seco | `backend/ml/train_baseline.py`, `backend/ml/predictor.py`, `backend/ml/test_predictor.py`, `backend/services/rotation_matrix.py`, `backend/services/test_rotation_matrix.py`, `backend/ml/modelo_agro.joblib`, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-7` | `[x]` |
+| `ML-11` | Lote ocupado por el antecesor de invierno: en verano, tras trigo, cebada o camelina, solo cultivos de segunda; campo `motivo_no_sembrable`; testigo trigo → soja de segunda | `backend/services/rotation_matrix.py`, `backend/ml/predictor.py`, `backend/schemas.py`, `backend/ml/test_predictor.py`, `backend/routers/test_simulate.py`, `CONTEXT.md` | `ML-8` | `[x]` |
+| `ML-12` | Años análogos filtrados por fase ENSO (en lugar del peso gaussiano) y riesgo térmico de verano calculado con esos mismos años | `backend/providers/enso.py`, `backend/ml/escenarios.py`, `backend/ml/predictor.py`, `backend/services/simulation_service.py`, tests, `backend/ml/data/training_metrics.json`, `CONTEXT.md` | `ML-11` | `[x]` |
 
 ---
 
@@ -477,4 +479,33 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     | Tres Arroyos | 59% | −27% | Maíz Tardío (alternativa Sorgo) | `bajo` |
 
     Repetir soja queda `alto` en los tres por el pilar suelo. Latencia: 9 s en frío, 1,5 s con caché.
+
+---
+
+### `[x]` ML-11: Lote ocupado por el antecesor de invierno (solo cultivos de segunda)
+- **Objetivo:** No recomendar cultivos imposibles. Al probar Marcos Juárez con antecesor trigo (15/11), el ranking ponía Soja de Primera segunda y como alternativa, y la estrategia testigo era "trigo → soja de primera". Esa secuencia no existe: el trigo se cosecha en noviembre-diciembre y la soja que va después es, por definición, de segunda. Lo mismo vale para girasol y maíz temprano.
+- **Decisión Acordada con el Desarrollador (2026-11-15):** marcar y mandar al final, no excluir. Campo nuevo y opcional `motivo_no_sembrable` en `ranking_cultivos` (texto o `null`), que también cubre la siembra terminada. `fuera_de_ventana_siembra` se mantiene con su significado (solo fecha).
+- **Regla (`services/rotation_matrix.motivo_lote_ocupado`):** campaña `verano` y antecesor en `CULTIVOS_INVIERNO_COSECHA` (`trigo`, `cebada`, `camelina`) → solo se pueden sembrar `CULTIVOS_DE_SEGUNDA` (`soja_segunda`, `maiz_tardio`, `sorgo`). Las coberturas, el barbecho o un antecesor de verano no restringen.
+- **Testigo:** con antecesor de invierno de cosecha, `compare_rotation_strategies("verano", ...)` usa `soja_segunda` (doble cultivo) en lugar de `soja_primera`.
+- **Archivos:** `backend/services/rotation_matrix.py`, `backend/ml/predictor.py`, `backend/schemas.py` (campo opcional, compatible), `backend/ml/test_predictor.py`, `backend/routers/test_simulate.py`, `CONTEXT.md`.
+- **También en este cambio:** el contraste "menor adaptación al escenario actual" de la explicación se toma del peor cultivo **sembrable**. Antes podía nombrar a uno que quedó último solo por fecha.
+- **Pendiente detectado (no resuelto):** las estrategias "defensiva" y "regenerativa" siguen proponiendo `vicia_cobertura (invierno)` antes del cultivo de verano aunque ese invierno ya fue trigo. Se lee como sugerencia para el año siguiente; conviene aclarar la redacción.
+- **Resultado de la Verificación (2026-11-15):** `pytest -q` da 247 en verde. Marcos Juárez, verano, antecesor trigo: Soja de Segunda (alternativa Maíz Tardío), riesgo bajo; Soja de Primera, Girasol y Maíz Temprano al final con "El lote está ocupado por Trigo hasta la cosecha (noviembre-diciembre): solo se pueden sembrar cultivos de segunda."
+
+---
+
+### `[x]` ML-12: Años análogos por fase ENSO y riesgo térmico coherente
+- **Origen:** revisión externa de la respuesta de Marcos Juárez (15/11/2026, ONI publicado +2,46, El Niño fuerte). Dos observaciones, ambas confirmadas:
+  1. **"Los 19 años análogos no son análogos".** El promedio sí estaba ponderado por ONI, pero con el peso gaussiano (σ = 0,5) y un ONI tan alto, el 81% del peso caía en 2015 y el 19% en 2023 (N efectivo 1,45). Mientras tanto, `anios_desfavorables`, `anios_evaluados` y `peor_escenario` se calculaban **sin pesos** sobre los 19 años. Por eso la explicación citaba como peor caso a 2022 (La Niña, 40 días de más de 34 °C), un año con peso cero.
+  2. **"Riesgo térmico alto" contra riesgo bajo en los cultivos.** `telemetria_nasa.riesgo_termico_verano` era el promedio histórico de días de calor de la celda (31,5 en Marcos Juárez → `alto`), sin mirar el ENSO. En los años El Niño esa zona tuvo 10,8 días de calor en el período crítico de la soja de segunda, contra 18,3 en los años La Niña.
+- **Decisión (propuesta por el agente a partir de la sugerencia del revisor; el desarrollador pidió continuar):**
+  - `providers/enso.py`: `fase_enso` y `pesos_por_fase`. Son análogos los años de la misma fase que hoy (umbral NOAA ±0,5), con peso 1; el resto, peso 0. Si la fase tiene menos de `MIN_ANIOS_ANALOGOS = 5` años, se completa con los de ONI más cercano. `pesos_por_oni` (gaussiano) queda sin uso en producción.
+  - `ml/escenarios.py`: `pesos_analogos` usa `pesos_por_fase`; `escenarios_por_cultivo` devuelve solo los años análogos. Así promedio, P10, P90, conteo, peor escenario y el escenario representativo de las anomalías salen del mismo conjunto. `train_baseline` evalúa con la misma función.
+  - `ml/predictor.py`: la oración de riesgo empieza con "Hoy rige El Niño (ONI +2.5); se comparó con los años de esa misma fase."
+  - `services/simulation_service.py`: en verano, `riesgo_termico_verano` es el que calcula el predictor con los días de calor de los años análogos. En invierno queda el climatológico.
+- **Resultado de la Verificación (2026-11-15):**
+  - `pytest -q`: 248 en verde.
+  - Marcos Juárez, verano, antecesor trigo: Soja de Segunda 72,7, riesgo bajo; 0 de 5 años análogos desfavorables; peor escenario 2023 (El Niño, 19 días de calor) con 51; riesgo térmico `bajo`.
+  - Test 2022–2024 en producción con el filtro por fase: MAE 17.9 (mejora 2,4% sobre "año normal"; con peso gaussiano era 17.93 y 2.3%), AUC de años malos 0,77. Sequía 2022/23: real 22.2, predicho 43.6 (antes 43.9). El modelo es el mismo de ML-10: solo cambia cómo se eligen los años análogos.
+- **Límite que queda:** entre 5 y 8 años por fase son pocos; el P10 es casi el peor año. No se verificó el pronóstico del SMN que cita el revisor: el sistema no usa pronósticos, solo la fase ENSO ya observada.
 

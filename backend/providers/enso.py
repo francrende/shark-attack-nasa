@@ -8,7 +8,10 @@ estacional para la región pampeana: La Niña (ONI ≤ −0,5) suele traer sequ�
 - ``oni_al(t)``: el último ONI **publicado** al decidir en ``t``. NOAA publica la estación
   terminada a comienzos del mes siguiente, así que se toma la estación que termina en el mes
   de ``t − 40 días`` (sin fuga de información en el entrenamiento).
-- ``pesos_por_oni``: pesos gaussianos de los años análogos según su parecido de ONI.
+- ``pesos_por_fase`` (ML-12): años análogos = los de la misma fase ENSO (La Niña / Neutro /
+  El Niño) que la actual, con el mismo peso; el resto queda afuera (peso 0).
+  Si la fase tiene pocos años, se completa con los de ONI más parecido.
+- ``pesos_por_oni``: pesos gaussianos según el parecido de ONI (ML-7; ya no se usa en producción).
 
 Funciones puras sobre una tabla ``{(año, mes_fin): anomalía}``. La tabla sale de
 ``data/oni.ascii.txt`` (copia empaquetada) o de ``actualizar_oni`` (descarga, opcional).
@@ -85,6 +88,39 @@ def oni_mismo_dia(t: date, anios: list[int], tabla: TablaOni | None = None) -> d
 def pesos_por_oni(oni_actual: float, oni_analogos: dict[int, float], sigma: float = SIGMA_PESOS) -> dict[int, float]:
     """Peso gaussiano por año: los años con fase ENSO parecida pesan más (nunca 0)."""
     return {a: math.exp(-0.5 * ((v - oni_actual) / sigma) ** 2) + 1e-6 for a, v in oni_analogos.items()}
+
+
+UMBRAL_FASE = 0.5  # NOAA: El Niño si ONI >= +0,5; La Niña si ONI <= -0,5
+MIN_ANIOS_ANALOGOS = 5
+NOMBRE_FASE = {"nina": "La Niña", "neutro": "ENSO neutro", "nino": "El Niño"}
+
+
+def fase_enso(oni: float) -> str:
+    """``"nina"``, ``"neutro"`` o ``"nino"`` según el ONI."""
+    if oni >= UMBRAL_FASE:
+        return "nino"
+    if oni <= -UMBRAL_FASE:
+        return "nina"
+    return "neutro"
+
+
+def pesos_por_fase(oni_actual: float, oni_analogos: dict[int, float]) -> dict[int, float]:
+    """Peso 1 a los años con la misma fase ENSO que hoy y 0 al resto (ML-12).
+
+    Con el peso gaussiano, un ONI extremo dejaba todo el peso en uno o dos años (N efectivo 1,5
+    con ONI +2,5) mientras el conteo de años desfavorables y el peor escenario seguían usando
+    todos los años, incluso los de la fase opuesta. Filtrar por fase hace que promedio, P10,
+    conteo y peor escenario salgan del mismo conjunto. Si la fase tiene menos de
+    ``MIN_ANIOS_ANALOGOS`` años, se completa hasta ese mínimo con los de ONI más parecido.
+    """
+    fase = fase_enso(oni_actual)
+    pesos = {a: 1.0 if fase_enso(v) == fase else 0.0 for a, v in oni_analogos.items()}
+    faltan = MIN_ANIOS_ANALOGOS - int(sum(pesos.values()))
+    if faltan > 0:
+        otros = sorted((a for a, p in pesos.items() if p == 0.0), key=lambda a: (abs(oni_analogos[a] - oni_actual), a))
+        for a in otros[:faltan]:
+            pesos[a] = 1.0
+    return pesos
 
 
 async def actualizar_oni(client, ruta: Path = RUTA_ONI, timeout_s: float = 20.0) -> TablaOni:  # pragma: no cover - red

@@ -391,6 +391,34 @@ HUMEDAD_PERFIL_SECO_RANGO_PCT = 20.0
 PENALIZACION_DEMANDA_MAX = 10.0
 
 
+# ---------------------------------------------------------------------------
+# ML-11: lote ocupado por un cultivo de invierno de cosecha
+# ---------------------------------------------------------------------------
+# Trigo, cebada y camelina se cosechan entre noviembre y diciembre: en la campaña de verano que
+# sigue, el lote solo admite cultivos "de segunda". Las coberturas (vicia, avena) se secan en
+# septiembre-octubre justamente para liberar el lote, así que no restringen.
+CULTIVOS_INVIERNO_COSECHA: frozenset[str] = frozenset({"trigo", "cebada", "camelina"})
+CULTIVOS_DE_SEGUNDA: frozenset[str] = frozenset({"soja_segunda", "maiz_tardio", "sorgo"})
+
+
+def motivo_lote_ocupado(campana: Campaign, cultivo_anterior: str | None, cultivo_candidato: str) -> str | None:
+    """Motivo por el que ``cultivo_candidato`` no se puede sembrar tras ``cultivo_anterior``, o None.
+
+    En verano, después de un cultivo de invierno de cosecha, solo valen los cultivos de segunda.
+    """
+    prev_id = _normalize_previous_crop(cultivo_anterior)
+    if campana != "verano" or prev_id not in CULTIVOS_INVIERNO_COSECHA:
+        return None
+    candidato = get_crop_profile(cultivo_candidato).id
+    if candidato in CULTIVOS_DE_SEGUNDA:
+        return None
+    nombre = CROP_PROFILES[prev_id].nombre_legible
+    return (
+        f"El lote está ocupado por {nombre} hasta la cosecha (noviembre-diciembre): "
+        "solo se pueden sembrar cultivos de segunda."
+    )
+
+
 def penalizacion_demanda_hidrica(cultivo: str, humedad_radicular_pct: float) -> float:
     """Puntos que se restan a S_hidroclimatico por sembrar un cultivo demandante con perfil seco.
 
@@ -864,6 +892,8 @@ def compare_rotation_strategies(
     # - sin anterior -> monocultivo del cultivo convencional.
     prev_id = _normalize_previous_crop(cultivo_anterior)
     convencional = "soja_primera" if campana == "verano" else "trigo"
+    if campana == "verano" and prev_id in CULTIVOS_INVIERNO_COSECHA:
+        convencional = "soja_segunda"  # ML-11: doble cultivo, el de primera no es posible
     if prev_id in evals:
         testigo_res = evals[prev_id]
         testigo_titulo = "Estrategia Testigo (Repetir Cultivo / Barbecho Desnudo)"

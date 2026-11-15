@@ -99,7 +99,12 @@ def armar_respuesta(insumos: InsumosML, request: SimulateRequest) -> dict[str, A
     )
 
     # Bloques descriptivos: dato satelital real, sin los topes del modelo ni el What-If.
+    riesgo_termico_analogos = respuesta["telemetria_nasa"]["riesgo_termico_verano"]
     respuesta["telemetria_nasa"] = insumos.telemetria.model_dump(mode="json")
+    if request.campana == "verano":
+        # ML-12: días de calor esperados en los años análogos (misma fase ENSO), no el promedio
+        # de todos los años, para que no contradiga el riesgo de los cultivos.
+        respuesta["telemetria_nasa"]["riesgo_termico_verano"] = riesgo_termico_analogos
     respuesta["topografia_srtm"].update(
         elevacion_m=round(float(topo.elevacion_m), 1),
         pendiente_terreno_pct=round(float(topo.pendiente_terreno_pct), 1),

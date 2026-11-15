@@ -44,6 +44,7 @@ try:
         evaluate_campaign_soil,
         get_crop_profile,
         get_crops_for_campaign,
+        motivo_lote_ocupado,
         penalizacion_demanda_hidrica,
     )
 except ImportError:
@@ -54,15 +55,18 @@ except ImportError:
         evaluate_campaign_soil,
         get_crop_profile,
         get_crops_for_campaign,
+        motivo_lote_ocupado,
         penalizacion_demanda_hidrica,
     )
 
 try:
     from backend.ml import calendario_siembra as cal
     from backend.ml.fao_labels import CROP_CATALOG as FAO_CROP_CATALOG
+    from backend.providers.enso import NOMBRE_FASE, fase_enso
 except ImportError:
     from ml import calendario_siembra as cal  # type: ignore[no-redef]
     from ml.fao_labels import CROP_CATALOG as FAO_CROP_CATALOG  # type: ignore[no-redef]
+    from providers.enso import NOMBRE_FASE, fase_enso  # type: ignore[no-redef]
 
 Campaign = Literal["invierno", "verano"]
 ProducerObjective = Literal[
@@ -460,8 +464,19 @@ def crop_with_article(crop_id: str) -> str:
     return f"{articulo} {crop_prose_name(crop_id)}"
 
 
-def build_ensemble_risk_sentence(dist: Mapping[str, Any]) -> str:
-    """Oración de riesgo del ganador para ``explicacion`` a partir de su distribución."""
+def build_ensemble_risk_sentence(dist: Mapping[str, Any], oni_actual: float | None = None) -> str:
+    """Oración de riesgo del ganador para ``explicacion`` a partir de su distribución.
+
+    Con ``oni_actual`` aclara de qué fase ENSO son los años análogos (ML-12).
+    """
+    texto = _ensemble_risk_sentence(dist)
+    if oni_actual is None:
+        return texto
+    fase = NOMBRE_FASE[fase_enso(float(oni_actual))]
+    return f"Hoy rige {fase} (ONI {float(oni_actual):+.1f}); se comparó con los años de esa misma fase. {texto}"
+
+
+def _ensemble_risk_sentence(dist: Mapping[str, Any]) -> str:
     n = int(dist["anios_evaluados"])
     k = int(dist["anios_desfavorables"])
     umbral = float(dist["umbral_desfavorable"])
@@ -678,6 +693,21 @@ class AgroPredictor:
     def fuera_de_ventana_siembra(self, crop: str, campana: Campaign, fecha: date) -> bool:
         """La siembra del cultivo ya terminó en la campaña vigente (se marca, no se excluye)."""
         return fecha > cal.fin_siembra(crop, self._anio_campana_para(campana, fecha))
+
+    def motivo_no_sembrable(
+        self, crop: str, campana: Campaign, fecha: date, cultivo_anterior: str | None
+    ) -> str | None:
+        """Por qué no se puede sembrar ``crop`` hoy en este lote (None si se puede).
+
+        ML-11: lote ocupado por el cultivo de invierno anterior; ML-7: siembra ya terminada.
+        """
+        motivo = motivo_lote_ocupado(campana, cultivo_anterior, crop)
+        if motivo is not None:
+            return motivo
+        if self.fuera_de_ventana_siembra(crop, campana, fecha):
+            fin = cal.fin_siembra(crop, self._anio_campana_para(campana, fecha))
+            return f"La ventana de siembra de {crop_prose_name(crop)} terminó el {fin:%d/%m}."
+        return None
 
     def _default(self, feat: str, campana: Campaign) -> float:
         if feat == "oni_actual":
@@ -1059,7 +1089,9 @@ class AgroPredictor:
             rain_desc = f"lluvias cercanas a la normal histórica ({anomalia:+.1f}%)"
 
         # Identificar cultivos de peor desempeño para contrastar el porqué
-        lowest_crop = ranking[-1]["cultivo"]
+        # El peor entre los sembrables: los fuera de ventana van al final por fecha, no por aptitud.
+        sembrables = [item for item in ranking if not item.get("motivo_no_sembrable")]
+        lowest_crop = (sembrables or ranking)[-1]["cultivo"]
         contrast_parts: list[str] = []
 
         riesgo_maiz = (riesgo_por_cultivo or {}).get("maiz_temprano", "critico")
@@ -1220,14 +1252,15 @@ class AgroPredictor:
                     "sub_scores": sub_scores_by_crop[crop_id],
                     "meses_suelo_desnudo": soil_evals[crop_id].meses_suelo_desnudo,
                     "fuera_de_ventana_siembra": self.fuera_de_ventana_siembra(crop_id, campana, fecha),
+                    "motivo_no_sembrable": self.motivo_no_sembrable(crop_id, campana, fecha, cultivo_anterior),
                 }
             )
 
-        # Los cultivos cuya siembra ya terminó siguen en el ranking, pero detrás de los sembrables:
-        # nunca se recomienda sembrar algo fuera de su ventana.
+        # Los cultivos que hoy no se pueden sembrar (lote ocupado o siembra terminada) siguen en el
+        # ranking, pero detrás de los sembrables: nunca son el recomendado ni la alternativa.
         ranking.sort(
             key=lambda item: (
-                item["fuera_de_ventana_siembra"],
+                item["motivo_no_sembrable"] is not None,
                 -item["score_final"],
                 -item["sub_scores"]["hidroclimatico"],
                 -item["sub_scores"]["suelo"],
@@ -1237,7 +1270,7 @@ class AgroPredictor:
         winner_item = ranking[0]
         winner_crop = winner_item["cultivo"]
         # La alternativa también tiene que poder sembrarse (si hay otra sembrable).
-        alternativas = [i["cultivo"] for i in ranking[1:] if not i["fuera_de_ventana_siembra"]]
+        alternativas = [i["cultivo"] for i in ranking[1:] if i["motivo_no_sembrable"] is None]
         if not alternativas:
             alternativas = [i["cultivo"] for i in ranking[1:]]
         runner_up_crop = alternativas[0] if alternativas else None
@@ -1260,7 +1293,8 @@ class AgroPredictor:
             riesgo_por_cultivo={item["cultivo"]: item["riesgo"] for item in ranking},
         )
         if ensemble is not None:
-            explicacion = f"{explicacion} {build_ensemble_risk_sentence(ensemble[winner_crop])}"
+            con_fase = oni_actual if isinstance(escenarios_historicos, Mapping) else None
+            explicacion = f"{explicacion} {build_ensemble_risk_sentence(ensemble[winner_crop], con_fase)}"
         gwetroot_efectivo = float(effective_features["gwetroot_saturacion_pct"])
         penalizaciones = {c: penalizacion_demanda_hidrica(c, gwetroot_efectivo) for c in hydro_scores}
         mas_penalizado = max(penalizaciones, key=penalizaciones.__getitem__)
@@ -1319,6 +1353,7 @@ class AgroPredictor:
                 "score_final": item["score_final"],
                 "riesgo": item["riesgo"],
                 "fuera_de_ventana_siembra": item["fuera_de_ventana_siembra"],
+                "motivo_no_sembrable": item["motivo_no_sembrable"],
             }
             if ensemble is not None:
                 dist = ensemble[item["cultivo"]]

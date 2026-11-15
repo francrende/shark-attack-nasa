@@ -332,14 +332,27 @@ def test_escenarios_por_cultivo_excluye_el_anio_y_pondera_por_oni():
         anio_campana=2022, oni_actual=enso.oni_al(corte), excluir_anio=2022,
     )
     anios = {e["anio"] for e in esc["maiz_temprano"]}
-    assert 2022 not in anios and 2006 in anios
+    assert 2022 not in anios
     assert 2025 not in anios  # la ventana 2025/26 no está completa
     assert set(FEATURES_PERIODO_CRITICO) | {"anio", "peso"} <= set(esc["maiz_temprano"][0])
-    # 2022/23 (La Niña) se parece más a 2010/11 (La Niña) que a 2015/16 (El Niño fuerte)
-    pesos = {e["anio"]: e["peso"] for e in esc["maiz_temprano"]}
-    assert pesos[2010] > pesos[2015]
+    # ML-12: 2022/23 fue La Niña → son análogos 2010/11 (La Niña), no 2015/16 (El Niño fuerte)
+    assert 2010 in anios and 2015 not in anios
+    assert len(anios) == enso.MIN_ANIOS_ANALOGOS  # pocas Niñas a esa fecha: se completa por cercanía
+    assert all(enso.oni_al(fecha_equivalente(corte, 2022, a)) < 0 for a in anios)
+    assert all(e["peso"] == 1.0 for e in esc["maiz_temprano"])
     assert pesos_analogos(corte, 2022, [2010, 2015], None) == {2010: 1.0, 2015: 1.0}
     assert fecha_equivalente(date(2023, 1, 5), 2022, 2010) == date(2011, 1, 5)
+
+
+def test_pesos_por_fase_y_completado_por_cercania():
+    """ML-12: misma fase → 1, otra → 0; con pocos años en la fase se completa con los más cercanos."""
+    onis = {2007: -1.0, 2010: -1.4, 2011: -0.8, 2020: -0.8, 2021: -0.6, 2013: -0.3, 2015: 2.0, 2023: 1.5, 2009: 0.7}
+    assert enso.fase_enso(0.5) == "nino" and enso.fase_enso(-0.5) == "nina" and enso.fase_enso(0.49) == "neutro"
+    pesos = enso.pesos_por_fase(-0.9, onis)
+    assert {a for a, p in pesos.items() if p} == {2007, 2010, 2011, 2020, 2021}
+    completado = enso.pesos_por_fase(2.4, onis)  # 3 años El Niño → se suman los 2 de ONI más cercano
+    assert {a for a, p in completado.items() if p} == {2015, 2023, 2009, 2013, 2021}
+    assert set(completado.values()) == {0.0, 1.0}
 
 
 def test_escenarios_out_tiene_todos_los_cultivos_y_anios():

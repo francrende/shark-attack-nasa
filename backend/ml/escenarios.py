@@ -2,8 +2,8 @@
 
 Lo usan el predictor en producción y ``train_baseline.py`` para evaluar igual que producción.
 Para cada cultivo y cada año histórico ``y`` se miden tormentas, calor, heladas y lluvia en la
-ventana crítica de ese cultivo en la campaña ``y`` (``calendario_siembra``). El peso del año es
-gaussiano en la diferencia entre el ONI publicado hoy y el publicado en la misma fecha de ``y``.
+ventana crítica de ese cultivo en la campaña ``y`` (``calendario_siembra``). Son análogos los
+años cuya fase ENSO (ONI publicado en la misma fecha de ``y``) coincide con la de hoy (ML-12).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from datetime import date
 from typing import Any
 
 from ml import calendario_siembra as cal
-from providers.enso import TablaOni, oni_al, pesos_por_oni
+from providers.enso import TablaOni, oni_al, pesos_por_fase
 from providers.features import features_ventana
 
 
@@ -33,12 +33,12 @@ def pesos_analogos(
     oni_actual: float | None,
     tabla: TablaOni | None = None,
 ) -> dict[int, float]:
-    """Peso por año análogo según ENSO; uniforme si no hay ONI actual."""
+    """Peso por año: 1 si comparte la fase ENSO de hoy, 0 si no; uniforme si no hay ONI actual."""
     anios = list(anios)
     if oni_actual is None:
         return {a: 1.0 for a in anios}
     oni_analogos = {a: oni_al(fecha_equivalente(corte, anio_campana, a), tabla) for a in anios}
-    return pesos_por_oni(oni_actual, oni_analogos)
+    return pesos_por_fase(oni_actual, oni_analogos)
 
 
 def features_criticas(
@@ -60,7 +60,10 @@ def escenarios_por_cultivo(
     excluir_anio: int | None = None,
     tabla: TablaOni | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
-    """``{cultivo: [{anio, tormentas, calor, heladas, lluvia, peso}, ...]}`` con ventana completa."""
+    """``{cultivo: [{anio, tormentas, calor, heladas, lluvia, peso}, ...]}`` con ventana completa.
+
+    Solo devuelve los años análogos (peso > 0): los de otra fase ENSO no aparecen.
+    """
     anio_campana = cal.anio_campana(corte) if anio_campana is None else anio_campana
     anios = sorted(a for a in calendario_eventos if a != excluir_anio)
     out: dict[str, list[dict[str, Any]]] = {}
@@ -75,5 +78,5 @@ def escenarios_por_cultivo(
             pesos = pesos_analogos(corte, anio_campana, anios, oni_actual, tabla)
         for e in lista:
             e["peso"] = pesos[e["anio"]]
-        out[cultivo] = lista
+        out[cultivo] = [e for e in lista if e["peso"] > 0.0]
     return out

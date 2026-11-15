@@ -1,7 +1,7 @@
 {
   "bundle_version": "2.0.0",
   "model_version": "ml10-magyp",
-  "trained_at": "2026-11-15T05:32:10.089147+00:00",
+  "trained_at": "2026-11-15T13:43:02.615128+00:00",
   "sklearn_version": "1.9.1",
   "model_name": "hist_gradient_boosting_monotonic",
   "model_params": {
@@ -514,24 +514,24 @@
     "test_produccion_oni": {
       "global": {
         "n": 42034,
-        "mae": 17.928,
-        "rmse": 23.329,
-        "r2": 0.0214
+        "mae": 17.907,
+        "rmse": 23.268,
+        "r2": 0.0265
       },
       "por_cultivo": {
-        "cebada": 23.931,
-        "girasol": 10.35,
-        "maiz_tardio": 16.444,
-        "maiz_temprano": 16.439,
-        "soja_primera": 16.892,
-        "soja_segunda": 21.136,
-        "sorgo": 21.061,
-        "trigo": 18.52
+        "cebada": 23.655,
+        "girasol": 10.313,
+        "maiz_tardio": 16.746,
+        "maiz_temprano": 16.081,
+        "soja_primera": 17.115,
+        "soja_segunda": 21.374,
+        "sorgo": 21.264,
+        "trigo": 18.064
       },
       "por_anio": {
         "2022": {
           "real": 22.2,
-          "predicho": 43.9
+          "predicho": 43.6
         },
         "2023": {
           "real": 49.7,
@@ -539,14 +539,14 @@
         },
         "2024": {
           "real": 51.0,
-          "predicho": 52.2
+          "predicho": 52.0
         }
       },
-      "spearman_cultivos_medio": 0.054,
+      "spearman_cultivos_medio": 0.03,
       "anios_malos": {
         "umbral": 35.0,
         "n": 1020,
-        "auc": 0.757
+        "auc": 0.766
       }
     },
     "test_produccion_uniforme": {
@@ -666,39 +666,39 @@
     "base_fao_mapeado_test": {
       "global": {
         "n": 42034,
-        "mae": 23.47,
-        "rmse": 29.43,
-        "r2": -0.5573
+        "mae": 23.558,
+        "rmse": 29.503,
+        "r2": -0.565
       },
       "por_cultivo": {
-        "cebada": 24.7,
-        "girasol": 15.801,
-        "maiz_tardio": 21.407,
-        "maiz_temprano": 27.304,
-        "soja_primera": 22.371,
-        "soja_segunda": 24.593,
-        "sorgo": 20.454,
-        "trigo": 27.085
+        "cebada": 24.566,
+        "girasol": 16.156,
+        "maiz_tardio": 21.66,
+        "maiz_temprano": 27.231,
+        "soja_primera": 22.454,
+        "soja_segunda": 24.853,
+        "sorgo": 20.523,
+        "trigo": 26.995
       },
       "por_anio": {
         "2022": {
           "real": 22.2,
-          "predicho": 33.1
+          "predicho": 32.7
         },
         "2023": {
           "real": 49.7,
-          "predicho": 43.4
+          "predicho": 43.9
         },
         "2024": {
           "real": 51.0,
-          "predicho": 41.1
+          "predicho": 40.9
         }
       },
-      "spearman_cultivos_medio": 0.043,
+      "spearman_cultivos_medio": 0.039,
       "anios_malos": {
         "umbral": 35.0,
         "n": 1020,
-        "auc": 0.639
+        "auc": 0.643
       }
     },
     "cv_loso": {
@@ -711,7 +711,7 @@
           "mejor_iteracion": 708,
           "cv_mae": 17.794,
           "cv_mae_ultima_iteracion": 17.85,
-          "segundos": 97.4
+          "segundos": 99.5
         },
         "hgb_v2": {
           "learning_rate": 0.03,
@@ -721,7 +721,7 @@
           "mejor_iteracion": 200,
           "cv_mae": 17.871,
           "cv_mae_ultima_iteracion": 18.07,
-          "segundos": 115.5
+          "segundos": 125.2
         },
         "hgb_v3": {
           "learning_rate": 0.03,
@@ -731,7 +731,7 @@
           "mejor_iteracion": 596,
           "cv_mae": 17.831,
           "cv_mae_ultima_iteracion": 17.871,
-          "segundos": 94.4
+          "segundos": 103.6
         },
         "hgb_v4": {
           "learning_rate": 0.05,
@@ -741,7 +741,7 @@
           "mejor_iteracion": 203,
           "cv_mae": 17.885,
           "cv_mae_ultima_iteracion": 18.28,
-          "segundos": 109.0
+          "segundos": 123.6
         }
       },
       "base_anio_normal": 18.918
@@ -756,7 +756,7 @@
       "mejor_iteracion": 708,
       "cv_mae": 17.794,
       "cv_mae_ultima_iteracion": 17.85,
-      "segundos": 97.4
+      "segundos": 99.5
     },
     "hgb_v2": {
       "learning_rate": 0.03,
@@ -766,7 +766,7 @@
       "mejor_iteracion": 200,
       "cv_mae": 17.871,
       "cv_mae_ultima_iteracion": 18.07,
-      "segundos": 115.5
+      "segundos": 125.2
     },
     "hgb_v3": {
       "learning_rate": 0.03,
@@ -776,7 +776,7 @@
       "mejor_iteracion": 596,
       "cv_mae": 17.831,
       "cv_mae_ultima_iteracion": 17.871,
-      "segundos": 94.4
+      "segundos": 103.6
     },
     "hgb_v4": {
       "learning_rate": 0.05,
@@ -786,7 +786,7 @@
       "mejor_iteracion": 203,
       "cv_mae": 17.885,
       "cv_mae_ultima_iteracion": 18.28,
-      "segundos": 109.0
+      "segundos": 123.6
     }
   },
   "sanity_checks": {
@@ -799,7 +799,7 @@
       "passed": true
     },
     "latencia_ms_ensemble_6x20": {
-      "p95": 4.285,
+      "p95": 4.373,
       "umbral": 15.0,
       "passed": true
     },
@@ -818,12 +818,12 @@
     },
     "aceptacion": {
       "produccion_vs_anio_normal": {
-        "mejora": 0.0232,
+        "mejora": 0.0244,
         "minimo": 0.05,
         "passed": false
       },
       "produccion_vs_fao": {
-        "mejora": 0.2361,
+        "mejora": 0.2399,
         "minimo": 0.1,
         "passed": true
       },

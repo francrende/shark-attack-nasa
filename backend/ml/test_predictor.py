@@ -101,9 +101,9 @@ class TestAgroPredictorML4(unittest.TestCase):
         self.assertIn(f"Recomendación: Sembrar {crop_prose_name(rec['cultivo'])}", rec["explicacion"])
         self.assertEqual(len(ranking), 6)
         # Primero los sembrables (por puntaje), después los que ya pasaron su ventana de siembra.
-        claves = [(item["fuera_de_ventana_siembra"], -item["score_final"]) for item in ranking]
+        claves = [(item["motivo_no_sembrable"] is not None, -item["score_final"]) for item in ranking]
         self.assertEqual(claves, sorted(claves))
-        self.assertFalse(ranking[0]["fuera_de_ventana_siembra"])
+        self.assertIsNone(ranking[0]["motivo_no_sembrable"])
         for item in ranking:
             self.assertTrue(0.0 <= item["score_final"] <= 100.0)
             self.assertIn(item["riesgo"], ("bajo", "medio", "alto", "critico"))
@@ -112,7 +112,7 @@ class TestAgroPredictorML4(unittest.TestCase):
         soil = evaluate_campaign_soil("verano", "soja_primera", 18.4, 1.8, 24.5, None)
         self.assertEqual(round(float(soil["sorgo"].s_suelo), 1), 95.0)
         # Repetir soja (monocultivo) queda último entre los sembrables por el pilar suelo
-        sembrables = [item["cultivo"] for item in ranking if not item["fuera_de_ventana_siembra"]]
+        sembrables = [item["cultivo"] for item in ranking if item["motivo_no_sembrable"] is None]
         self.assertEqual(sembrables[-1], "soja_primera")
 
     def test_03_what_if_internal_coupling_and_independent_controls(self) -> None:
@@ -449,7 +449,7 @@ class TestEnsembleML5(unittest.TestCase):
              "perfil_mercado", "factores_clave_ml", "explicacion"],
         )
         for item in resp["ranking_cultivos"]:
-            self.assertEqual(set(item), {"cultivo", "score_final", "riesgo", "fuera_de_ventana_siembra"})
+            self.assertEqual(set(item), {"cultivo", "score_final", "riesgo", "fuera_de_ventana_siembra", "motivo_no_sembrable"})
 
     def test_09_contract_with_scenarios(self) -> None:
         """Con escenarios, S_hidro es el promedio y se agregan los campos del contrato §5."""
@@ -663,6 +663,9 @@ class TestCoberturasYDemandaHidricaML10(unittest.TestCase):
         self.assertEqual([i["cultivo"] for i in ranking[-2:]], [c for c in [i["cultivo"] for i in ranking] if c in fuera])
         self.assertNotIn(resp["recomendacion_principal"]["cultivo"], fuera)
         explicacion = resp["recomendacion_principal"]["explicacion"]
+        # El contraste "menor adaptación" tampoco puede ser un cultivo fuera de ventana.
+        for cultivo in fuera:
+            self.assertNotIn(f"{crop_with_article(cultivo)} (menor adaptación", explicacion.replace("A diferencia de la", "la"))
         self.assertNotIn("Vicia", explicacion.split(".")[0])
         self.assertNotIn("Avena", explicacion.split(".")[0])
 
@@ -685,6 +688,51 @@ class TestUmbralesRiesgoML8(unittest.TestCase):
     def test_anio_normal_no_es_riesgo_alto(self) -> None:
         """Un cultivo en año normal, con suelo sano y P10 aceptable, no queda alto ni crítico."""
         self.assertEqual(escalate_risk_level(classify_crop_risk(52.0, 70.0), 35.0), "bajo")
+
+
+class TestLoteOcupadoML11(unittest.TestCase):
+    """ML-11: en verano, después de trigo, cebada o camelina, solo se recomiendan cultivos de segunda."""
+
+    FEATURES = {
+        "gwetroot_saturacion_pct": 44.0, "gwettop_saturacion_pct": 32.0,
+        "tendencia_humedad_15d_pct": -1.0, "anomalia_lluvia_90d_pct": 20.0,
+        "frecuencia_tormentas_extremas": 1.0, "frecuencia_estres_termico": 12.0,
+        "frecuencia_riesgo_helada": 0.0, "indice_aridez_evaporativa": 1.2,
+        "pendiente_terreno_pct": 0.2, "elevacion_m": 115.0, "textura_arcilla_pct": 24.5,
+    }
+    SEGUNDA = {"soja_segunda", "maiz_tardio", "sorgo"}
+
+    def _resp(self, anterior: str | None, fecha: str = "2026-10-20") -> dict:
+        return run_recommendation(self.FEATURES, campana="verano", cultivo_anterior=anterior, fecha_ultimo_dato_valido=fecha)
+
+    def test_tras_trigo_solo_cultivos_de_segunda(self) -> None:
+        for anterior in ("trigo", "cebada", "camelina"):
+            resp = self._resp(anterior)
+            ranking = resp["ranking_cultivos"]
+            sembrables = [i["cultivo"] for i in ranking if i["motivo_no_sembrable"] is None]
+            self.assertEqual(set(sembrables), self.SEGUNDA, anterior)
+            self.assertEqual([i["cultivo"] for i in ranking[:3]], sembrables)
+            self.assertIn(resp["recomendacion_principal"]["cultivo"], self.SEGUNDA)
+            for item in ranking[3:]:
+                self.assertIn("ocupado", item["motivo_no_sembrable"])
+                self.assertFalse(item["fuera_de_ventana_siembra"])  # 20/10: la ventana sigue abierta
+            primera_oracion = resp["recomendacion_principal"]["explicacion"].split(".")[0]
+            for cultivo in ("Soja de Primera", "Girasol", "Maíz Temprano"):
+                self.assertNotIn(cultivo, primera_oracion)
+            testigo = resp["comparacion_estrategias"][0]
+            self.assertEqual(testigo["cultivo_evaluado"], "soja_segunda")
+
+    def test_coberturas_y_barbecho_no_restringen(self) -> None:
+        for anterior in ("vicia_cobertura", "avena_cobertura", None, "soja_primera"):
+            ranking = self._resp(anterior)["ranking_cultivos"]
+            self.assertTrue(all(i["motivo_no_sembrable"] is None for i in ranking), anterior)
+
+    def test_motivo_de_ventana_terminada(self) -> None:
+        ranking = self._resp("vicia_cobertura", fecha="2026-11-15")["ranking_cultivos"]
+        maiz = next(i for i in ranking if i["cultivo"] == "maiz_temprano")
+        self.assertTrue(maiz["fuera_de_ventana_siembra"])
+        self.assertIn("terminó el 31/10", maiz["motivo_no_sembrable"])
+        self.assertEqual(ranking[-1]["cultivo"], "maiz_temprano")
 
 
 if __name__ == "__main__":
