@@ -193,6 +193,9 @@ class FieldResponse(BaseModel):
     topo_distancia_fuente_km: float | None = None
     reintentar_srtm: bool = True
     created_at: datetime
+    # BACK-25: hay un reintento en segundo plano de ISRIC/SRTM para este campo. Mientras sea
+    # true, el frontend consulta GET /fields/{id} cada 30 s para ver si llegó el dato real.
+    reintento_en_curso: bool = False
 
     @field_validator("suelo_advertencias", "topo_advertencias", mode="before")
     @classmethod
