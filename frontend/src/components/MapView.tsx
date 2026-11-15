@@ -13,8 +13,8 @@ import {
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
-  getLotHistoricalVisualForYear,
   type HistoricalMetricId,
+  type VisualHistorico,
 } from '../data/historicalData'
 import { getFieldColorByIndex, THEME_COLORS } from '../theme/mapColors'
 import type {
@@ -38,6 +38,8 @@ export interface HistoricalMapConfig {
   year: number
   metric: HistoricalMetricId
   gibsDateIso: string
+  /** FRONT-39: color y textos reales del lote seleccionado para la campaña (null sin datos). */
+  visual: VisualHistorico | null
 }
 
 const VERTEX_HANDLE_ICON = L.divIcon({
@@ -266,14 +268,9 @@ export function MapView({
 
   const isHistoricalActive = Boolean(historicalMode?.active)
 
+  // FRONT-39: solo el lote seleccionado tiene historial real (se pide al backend al abrir la pestaña).
   const selectedCoordHistoricalVisual =
-    isHistoricalActive && historicalMode
-      ? getLotHistoricalVisualForYear(
-          selectedCoords,
-          historicalMode.year,
-          historicalMode.metric
-        )
-      : null
+    isHistoricalActive && historicalMode ? historicalMode.visual : null
 
   const commitPolygonPoints = (nextPoints: [number, number][]) => {
     const centroid =
@@ -401,17 +398,10 @@ export function MapView({
         {userFields.map((field, idx) => {
           if (field.id === editingFieldId) return null
           const isSelected = !isDrawingNewField && field.id === selectedFieldId
-          const fieldCoords = { lat: field.lat, lon: field.lon }
           const { hex: fieldColor } = getFieldColorByIndex(idx)
 
           const histVisual =
-            isHistoricalActive && historicalMode
-              ? getLotHistoricalVisualForYear(
-                  fieldCoords,
-                  historicalMode.year,
-                  historicalMode.metric
-                )
-              : null
+            isHistoricalActive && historicalMode && isSelected ? historicalMode.visual : null
 
           const strokeColor = histVisual
             ? isSelected

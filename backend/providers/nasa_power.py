@@ -16,6 +16,9 @@ from typing import Any
 import httpx
 
 BASE_URL = "https://power.larc.nasa.gov/api/temporal/daily/point"
+# BACK-31: series mensuales (incluye el total/promedio anual con el mes "13", que se descarta)
+BASE_URL_MENSUAL = "https://power.larc.nasa.gov/api/temporal/monthly/point"
+TIMEOUT_MENSUAL_S = 30.0
 PARAMETROS: list[str] = [
     "GWETROOT",
     "GWETTOP",
@@ -134,11 +137,13 @@ def _parsear(payload: Any) -> dict[str, dict[date, float | None]]:
     return series
 
 
-async def _get_con_reintento(client: httpx.AsyncClient, params: dict[str, str]) -> Any:
+async def _get_con_reintento(
+    client: httpx.AsyncClient, params: dict[str, str], url: str = BASE_URL, timeout_s: float = TIMEOUT_S
+) -> Any:
     ultimo_error: Exception | None = None
     for _ in range(MAX_INTENTOS):
         try:
-            respuesta = await client.get(BASE_URL, params=params, timeout=TIMEOUT_S)
+            respuesta = await client.get(url, params=params, timeout=timeout_s)
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             ultimo_error = exc
             continue
@@ -221,3 +226,57 @@ async def fetch_daily_range(
     return NasaPowerDailySeries(
         lat=lat, lon=lon, start=start, end=end, series=_parsear(payload), elevacion_m=_elevacion(payload)
     )
+
+
+async def fetch_monthly_range(
+    lat: float,
+    lon: float,
+    anio_desde: int,
+    anio_hasta: int,
+    parametros: list[str],
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, dict[tuple[int, int], float | None]]:
+    """Serie mensual ``{param: {(año, mes): valor}}`` de ``anio_desde`` a ``anio_hasta`` (BACK-31).
+
+    Descarta el mes 13 (resumen anual) y limpia los ``-999``. NASA POWER publica los meses de un
+    año recién cuando el año terminó: el año en curso hay que pedirlo diario.
+
+    Raises:
+        ValueError: coordenadas fuera de rango, años invertidos o sin parámetros.
+        NasaPowerUnavailable: falla de red, timeout, HTTP no-2xx o JSON inválido.
+    """
+    _validar_coordenadas(lat, lon)
+    if anio_desde > anio_hasta:
+        raise ValueError(f"Años invertidos: {anio_desde} > {anio_hasta}")
+    if not parametros:
+        raise ValueError("Se requiere al menos un parámetro")
+    params = {
+        "parameters": ",".join(parametros),
+        "community": "AG",
+        "longitude": str(lon),
+        "latitude": str(lat),
+        "start": str(anio_desde),
+        "end": str(anio_hasta),
+        "format": "JSON",
+    }
+    if client is None:
+        async with httpx.AsyncClient() as propio:
+            payload = await _get_con_reintento(propio, params, BASE_URL_MENSUAL, TIMEOUT_MENSUAL_S)
+    else:
+        payload = await _get_con_reintento(client, params, BASE_URL_MENSUAL, TIMEOUT_MENSUAL_S)
+    try:
+        parametros_json = payload["properties"]["parameter"]
+    except (KeyError, TypeError) as exc:
+        raise NasaPowerUnavailable("Respuesta mensual de NASA POWER sin 'properties.parameter'") from exc
+    salida: dict[str, dict[tuple[int, int], float | None]] = {}
+    for param, por_mes in parametros_json.items():
+        serie: dict[tuple[int, int], float | None] = {}
+        for clave, valor in (por_mes or {}).items():
+            if len(clave) != 6 or not clave.isdigit():
+                continue
+            anio, mes = int(clave[:4]), int(clave[4:])
+            if 1 <= mes <= 12:
+                serie[(anio, mes)] = _limpiar(valor)
+        salida[param] = serie
+    return salida

@@ -107,6 +107,17 @@
    "titulo": "Estrategia Regenerativa de Suelo y Cobertura Continua"
   }
  ],
+ "departamento_referencia": {
+  "codigo": "06623",
+  "distancia_km": 12.9,
+  "nombre": "Pergamino",
+  "provincia": "Buenos Aires"
+ },
+ "fase_enso": {
+  "anios_analogos_desde": 1981,
+  "fase": "nino",
+  "oni": 2.46
+ },
  "perfil_suelo": {
   "arcilla_pct": 23.4,
   "carbono_organico_g_kg": 17.9,
@@ -117,10 +128,22 @@
   {
    "anios_desfavorables": 0,
    "anios_evaluados": 5,
+   "anticipa_diferencias": true,
    "cultivo": "maiz_tardio",
    "fuera_de_ventana_siembra": false,
    "motivo_no_sembrable": null,
+   "prob_anio_malo": 0.19,
+   "prob_anio_malo_tipica": 0.28,
+   "puntaje_anio_bueno": 85.9,
+   "puntaje_anio_malo": 21.3,
    "riesgo": "bajo",
+   "rinde_kg_ha": {
+    "anio_bueno": 10450.0,
+    "anio_malo": 5500.0,
+    "esperado": 8300.0,
+    "motivo_sin_dato": null,
+    "normal": 7700.0
+   },
    "score_final": 74.5,
    "score_hidroclimatico_p10": 58.1,
    "sub_scores": {
@@ -131,10 +154,22 @@
   {
    "anios_desfavorables": 0,
    "anios_evaluados": 5,
+   "anticipa_diferencias": false,
    "cultivo": "sorgo",
    "fuera_de_ventana_siembra": false,
    "motivo_no_sembrable": null,
+   "prob_anio_malo": null,
+   "prob_anio_malo_tipica": 0.26,
+   "puntaje_anio_bueno": 78.1,
+   "puntaje_anio_malo": 10.5,
    "riesgo": "bajo",
+   "rinde_kg_ha": {
+    "anio_bueno": 7500.0,
+    "anio_malo": 3550.0,
+    "esperado": 5850.0,
+    "motivo_sin_dato": null,
+    "normal": 5850.0
+   },
    "score_final": 72.4,
    "score_hidroclimatico_p10": 53.8,
    "sub_scores": {
@@ -145,10 +180,22 @@
   {
    "anios_desfavorables": 0,
    "anios_evaluados": 5,
+   "anticipa_diferencias": false,
    "cultivo": "girasol",
    "fuera_de_ventana_siembra": false,
    "motivo_no_sembrable": null,
+   "prob_anio_malo": null,
+   "prob_anio_malo_tipica": 0.18,
+   "puntaje_anio_bueno": 70.8,
+   "puntaje_anio_malo": 25.9,
    "riesgo": "medio",
+   "rinde_kg_ha": {
+    "anio_bueno": 3900.0,
+    "anio_malo": 2450.0,
+    "esperado": 3200.0,
+    "motivo_sin_dato": null,
+    "normal": 3200.0
+   },
    "score_final": 58.2,
    "score_hidroclimatico_p10": 49.4,
    "sub_scores": {
@@ -159,10 +206,22 @@
   {
    "anios_desfavorables": 0,
    "anios_evaluados": 5,
+   "anticipa_diferencias": true,
    "cultivo": "soja_segunda",
    "fuera_de_ventana_siembra": false,
    "motivo_no_sembrable": null,
+   "prob_anio_malo": 0.21,
+   "prob_anio_malo_tipica": 0.29,
+   "puntaje_anio_bueno": 92.6,
+   "puntaje_anio_malo": 22.0,
    "riesgo": "alto",
+   "rinde_kg_ha": {
+    "anio_bueno": 3200.0,
+    "anio_malo": 1600.0,
+    "esperado": 2450.0,
+    "motivo_sin_dato": null,
+    "normal": 2250.0
+   },
    "score_final": 39.9,
    "score_hidroclimatico_p10": 59.4,
    "sub_scores": {
@@ -173,10 +232,22 @@
   {
    "anios_desfavorables": 0,
    "anios_evaluados": 5,
+   "anticipa_diferencias": true,
    "cultivo": "soja_primera",
    "fuera_de_ventana_siembra": false,
    "motivo_no_sembrable": null,
+   "prob_anio_malo": 0.17,
+   "prob_anio_malo_tipica": 0.24,
+   "puntaje_anio_bueno": 80.0,
+   "puntaje_anio_malo": 22.5,
    "riesgo": "alto",
+   "rinde_kg_ha": {
+    "anio_bueno": 5600.0,
+    "anio_malo": 3100.0,
+    "esperado": 4650.0,
+    "motivo_sin_dato": null,
+    "normal": 4300.0
+   },
    "score_final": 37.3,
    "score_hidroclimatico_p10": 58.3,
    "sub_scores": {
@@ -187,10 +258,22 @@
   {
    "anios_desfavorables": 0,
    "anios_evaluados": 5,
+   "anticipa_diferencias": true,
    "cultivo": "maiz_temprano",
    "fuera_de_ventana_siembra": true,
    "motivo_no_sembrable": "La ventana de siembra de Maíz Temprano terminó el 31/10.",
+   "prob_anio_malo": 0.31,
+   "prob_anio_malo_tipica": 0.28,
+   "puntaje_anio_bueno": 74.7,
+   "puntaje_anio_malo": 9.3,
    "riesgo": "medio",
+   "rinde_kg_ha": {
+    "anio_bueno": 9600.0,
+    "anio_malo": 4550.0,
+    "esperado": 7500.0,
+    "motivo_sin_dato": null,
+    "normal": 7700.0
+   },
    "score_final": 69.3,
    "score_hidroclimatico_p10": 47.7,
    "sub_scores": {
@@ -204,6 +287,7 @@
   "distribucion_hidroclimatica": {
    "anios_desfavorables": 0,
    "anios_evaluados": 5,
+   "anticipa_diferencias": true,
    "p10": 58.1,
    "p90": 58.1,
    "peor_escenario": {
@@ -213,7 +297,18 @@
     "frecuencia_tormentas_extremas": 0,
     "score": 58.1
    },
+   "prob_anio_malo": 0.19,
+   "prob_anio_malo_tipica": 0.28,
    "promedio": 58.1,
+   "puntaje_anio_bueno": 85.9,
+   "puntaje_anio_malo": 21.3,
+   "rinde_kg_ha": {
+    "anio_bueno": 10450.0,
+    "anio_malo": 5500.0,
+    "esperado": 8300.0,
+    "motivo_sin_dato": null,
+    "normal": 7700.0
+   },
    "umbral_desfavorable": 40.0
   },
   "explicacion": "Recomendación: Sembrar Maíz Tardío (o Sorgo como alternativa). Detectamos vía satélite una reserva hídrica ajustada en las raíces (46% de saturación), un déficit de lluvias del 6% en los últimos 90 días y una pendiente del 0.1% (SRTM). A diferencia de repetir Soja de Primera (degradación de carbono y riesgo de erosión por suelo desnudo), el Maíz Tardío tiene un rinde esperado por encima de lo normal (58, donde 50 es un año normal) y un aporte al suelo y la rotación de 91 sobre 100. Ya cerró la ventana de siembra de Maíz Temprano. Hoy rige El Niño (ONI +2.5); se comparó con los años de esa misma fase. En los 5 años análogos el puntaje hidroclimático se mantuvo en 40 o más; el peor escenario (como en 2006) da 58.",
@@ -222,6 +317,13 @@
    "Rotación virtuosa leguminosa → gramínea (Soja de Primera → Maíz Tardío): capitaliza nitrógeno residual y recompone rastrojo tras soja."
   ],
   "perfil_mercado": "Estabilidad superior ante golpes de calor de enero; alto aporte de rastrojo de lenta descomposición.",
+  "rinde_kg_ha": {
+   "anio_bueno": 10450.0,
+   "anio_malo": 5500.0,
+   "esperado": 8300.0,
+   "motivo_sin_dato": null,
+   "normal": 7700.0
+  },
   "score_final": 74.5,
   "secuencia_sugerida": "barbecho (invierno) -> maiz_tardio (verano); próximo ciclo: vicia_cobertura (invierno) -> maiz_tardio (verano)",
   "sub_scores": {

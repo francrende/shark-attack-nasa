@@ -4432,3 +4432,604 @@ h1.brand-wordmark {
   background-color: var(--color-heat-soil);
   color: var(--color-bg-elevated);
 }
+
+/* ==========================================================================
+   FRONT-36: riesgo de año malo y rinde en qq/ha en lenguaje de productor
+   ========================================================================== */
+
+.ranking-resumen-compacto {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-align: right;
+  line-height: 1.3;
+}
+
+.rr-resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 4px;
+}
+
+.rr-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rr-riesgo {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--color-border-strong);
+  background-color: var(--color-bg-card);
+}
+
+.rr-riesgo.nivel-malo {
+  border-left-color: var(--color-risk-high);
+  background-color: var(--color-risk-high-bg);
+}
+
+.rr-riesgo.nivel-bueno {
+  border-left-color: var(--color-risk-low);
+  background-color: var(--color-risk-low-bg);
+}
+
+.rr-riesgo-linea {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.rr-frecuencia {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.rr-info {
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: -2px;
+  color: var(--color-text-muted);
+  cursor: help;
+}
+
+.rr-detalle {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+.rr-detalle svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.rr-riesgo.nivel-malo .rr-detalle {
+  color: var(--color-risk-high);
+}
+
+.rr-riesgo.nivel-bueno .rr-detalle {
+  color: var(--color-risk-low);
+}
+
+.rr-rinde {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.rr-rango {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rr-rango-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background-color: var(--color-bg-muted);
+}
+
+.rr-rango-banda {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--color-risk-high-bg),
+    var(--color-primary-soft) 50%,
+    var(--color-risk-low-bg)
+  );
+  border: 1px solid var(--color-border-strong);
+}
+
+.rr-rango-normal {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background-color: var(--color-text-muted);
+}
+
+.rr-rango-esperado {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  border: 2px solid var(--color-bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.rr-rango-etiquetas {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}
+
+.rr-nota,
+.rr-pie {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.pillar-score.nivel-bueno {
+  color: var(--color-risk-low);
+}
+
+.pillar-score.nivel-neutro {
+  color: var(--color-risk-medium);
+}
+
+.pillar-score.nivel-malo {
+  color: var(--color-risk-high);
+}
+
+.detalle-tecnico-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.detalle-tecnico-tabla {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.detalle-tecnico-tabla th,
+.detalle-tecnico-tabla td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.detalle-tecnico-tabla th {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  width: 58%;
+}
+
+.detalle-tecnico-tabla td {
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+/* Estados cuando el backend no responde */
+.aviso-datos {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-card);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.aviso-datos.aviso-info {
+  border-color: var(--color-water-rain-border);
+  background-color: var(--color-water-rain-soft);
+}
+
+.aviso-datos.aviso-alerta {
+  border-color: var(--color-heat-soil-border);
+  background-color: var(--color-risk-high-bg);
+}
+
+.aviso-datos.aviso-demo {
+  border-color: var(--color-gold-yellow);
+  background-color: var(--color-gold-yellow-soft);
+}
+
+.aviso-icono {
+  display: inline-flex;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.aviso-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.aviso-texto p {
+  margin: 2px 0 0;
+  color: var(--color-text-secondary);
+}
+
+.aviso-reintentar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 999px;
+  background-color: var(--color-bg-card);
+  color: var(--color-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.aviso-reintentar:hover {
+  background-color: var(--color-primary-soft);
+}
+
+.aviso-girando {
+  animation: aviso-giro 1s linear infinite;
+}
+
+@keyframes aviso-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aviso-girando {
+    animation: none;
+  }
+}
+
+.what-if-sin-conexion p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+/* ==========================================================================
+   FRONT-37: registrar siembra y seguimiento de la campaña
+   ========================================================================== */
+
+.seguimiento-section .section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.seg-contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seg-encabezado,
+.seg-etapa,
+.seg-evolucion,
+.seg-porque,
+.seg-invitacion,
+.seg-cargando {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.seg-etapa,
+.seg-porque {
+  color: var(--color-text-secondary);
+}
+
+.seg-invitacion {
+  margin-bottom: 8px;
+}
+
+.seg-avance {
+  height: 8px;
+  border-radius: 999px;
+  background-color: var(--color-bg-muted);
+  overflow: hidden;
+}
+
+.seg-avance-relleno {
+  height: 100%;
+  border-radius: 999px;
+  background-color: var(--color-primary);
+}
+
+.seg-evolucion strong {
+  font-size: 15px;
+}
+
+.seg-flecha {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.seg-evolucion.nivel-malo .seg-flecha {
+  color: var(--color-risk-high);
+}
+
+.seg-evolucion.nivel-bueno .seg-flecha {
+  color: var(--color-risk-low);
+}
+
+.seg-evolucion.nivel-neutro .seg-flecha {
+  color: var(--color-text-muted);
+}
+
+.seg-grafico {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.seg-periodo {
+  fill: var(--color-primary-soft);
+  opacity: 0.6;
+}
+
+.seg-eje {
+  font-size: 8px;
+  fill: var(--color-text-muted);
+}
+
+.seg-habitual {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.seg-linea-prob {
+  fill: none;
+  stroke: var(--color-risk-high);
+  stroke-width: 2;
+}
+
+.seg-punto-prob {
+  fill: var(--color-risk-high);
+}
+
+.seg-banda {
+  fill: var(--color-water-rain-soft);
+  stroke: var(--color-water-rain-border);
+}
+
+.seg-linea-rinde {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2;
+}
+
+.seg-punto-rinde {
+  fill: var(--color-primary);
+}
+
+.seg-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seg-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.seg-form select,
+.seg-form input {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg-card);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 500;
+}
+
+.seg-form-acciones {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+}
+
+.seg-form-acciones .aviso-reintentar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.seg-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-risk-high);
+}
+
+/* FRONT-38: cerrar o borrar la campaña en curso */
+.seg-acciones {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.seg-acciones-form,
+.seg-confirmar {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.seg-confirmar p {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.seg-form textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg-card);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 500;
+  resize: vertical;
+}
+
+.seg-ayuda {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.seg-link-peligro {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-risk-critical);
+}
+
+.seg-boton-peligro {
+  border-color: var(--color-risk-critical);
+  color: var(--color-risk-critical);
+}
+
+.seg-boton-peligro:hover {
+  background-color: var(--color-risk-critical-bg);
+}
+
+/* ==========================================================================
+   FRONT-39: información histórica real por campaña
+   ========================================================================== */
+
+.hist-kpi-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.hist-desvio {
+  font-weight: 700;
+}
+
+.hist-desvio.bueno {
+  color: var(--color-water-rain-dark);
+}
+
+.hist-desvio.malo {
+  color: var(--color-risk-high);
+}
+
+.hist-desvio.neutro {
+  color: var(--color-text-muted);
+}
+
+.hist-nota {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.hist-cosechas {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.hist-tabla {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.hist-tabla th,
+.hist-tabla td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.hist-tabla th {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.hist-grafico {
+  width: 100%;
+  height: auto;
+  margin: 12px 0 4px;
+}
+
+.hist-barra-g {
+  cursor: pointer;
+}
+
+.hist-barra {
+  opacity: 0.75;
+}
+
+.hist-barra.seleccionada {
+  opacity: 1;
+  stroke: var(--color-text);
+  stroke-width: 1.2;
+}
+
+.hist-barra.parcial {
+  opacity: 0.4;
+}
+
+.hist-eje-sel {
+  font-weight: 700;
+  fill: var(--color-text);
+}

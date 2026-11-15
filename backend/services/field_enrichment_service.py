@@ -5,6 +5,8 @@ Centraliza:
 - Conversión entre ``PerfilSueloSatelital`` / ``TopografiaSrtm`` y las columnas propias
   de ``public.fields``.
 - Consulta paralela de SoilGrids + SRTM al crear o actualizar ubicación de un campo.
+- Departamento MAGyP de referencia del campo para el rinde en kg/ha (BACK-28 / ML-17).
+- Lectura de suelo y topografía guardados para ``POST /api/v1/simulate`` con ``field_id`` (BACK-28).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from ml.departamentos import departamento_mas_cercano
 from providers.soilgrids import PerfilSueloSatelital, SoilGridsUnavailable, fetch_perfil_suelo
 from providers.srtm import SrtmUnavailable, TopografiaSrtm, fetch_topografia
 
@@ -223,6 +226,66 @@ def columnas_field_a_topografia_telemetria(
     return topo, advertencias
 
 
+COLUMNAS_DEPARTAMENTO: tuple[str, ...] = (
+    "departamento_codigo",
+    "departamento_nombre",
+    "departamento_provincia",
+    "departamento_distancia_km",
+)
+
+
+def departamento_a_columnas_field(lat: float, lon: float) -> dict[str, Any]:
+    """Departamento MAGyP más cercano (ML-17) como columnas de ``public.fields``.
+
+    Fuera de cobertura (más de 75 km del centroide pampeano más cercano) las columnas quedan en
+    ``None``: el rinde en kg/ha dirá que el lote está fuera de la zona con datos.
+    """
+    dep = departamento_mas_cercano(float(lat), float(lon))
+    if dep is None:
+        return {c: None for c in COLUMNAS_DEPARTAMENTO}
+    return {
+        "departamento_codigo": dep["codigo"],
+        "departamento_nombre": dep["nombre"],
+        "departamento_provincia": dep["provincia"],
+        "departamento_distancia_km": dep["distancia_km"],
+    }
+
+
+def columnas_field_a_perfil_suelo(row: Mapping[str, Any]) -> PerfilSueloSatelital | None:
+    """Suelo guardado del campo como ``PerfilSueloSatelital`` (``None`` si hay que reconsultar)."""
+    if not tiene_suelo_propio_valido(row) or row.get("arcilla_pct") is None:
+        return None
+    return PerfilSueloSatelital(
+        arcilla_pct=float(row["arcilla_pct"]),
+        arena_pct=redondear_opcional(row.get("arena_pct"), 1),
+        limo_pct=redondear_opcional(row.get("limo_pct"), 1),
+        carbono_organico_g_kg=redondear_opcional(row.get("carbono_organico_g_kg"), 1),
+        ph=redondear_opcional(row.get("ph"), 2),
+        textura_predominante=row.get("textura_predominante"),
+        fuente=row["suelo_fuente"],
+        distancia_fuente_km=float(row.get("suelo_distancia_fuente_km") or 0.0),
+        localidad_fallback=row.get("suelo_localidad_fallback"),
+        advertencias=tuple(str(a) for a in (row.get("suelo_advertencias") or [])),
+        reintentar_soilgrids=False,
+    )
+
+
+def columnas_field_a_topografia(row: Mapping[str, Any]) -> TopografiaSrtm | None:
+    """Topografía guardada del campo como ``TopografiaSrtm`` (``None`` si hay que reconsultar)."""
+    if not tiene_topografia_propia_valida(row):
+        return None
+    return TopografiaSrtm(
+        elevacion_m=float(row["elevacion_m"]),
+        pendiente_terreno_pct=float(row["pendiente_terreno_pct"]),
+        fuente=row["topo_fuente"],
+        fuente_elevacion=row.get("fuente_elevacion") or "srtm30m",
+        distancia_fuente_km=float(row.get("topo_distancia_fuente_km") or 0.0),
+        localidad_fallback=row.get("topo_localidad_fallback"),
+        advertencias=tuple(str(a) for a in (row.get("topo_advertencias") or [])),
+        reintentar_srtm=False,
+    )
+
+
 async def enriquecer_datos_campo(
     lat: float,
     lon: float,
@@ -262,4 +325,4 @@ async def enriquecer_datos_campo(
     else:
         columnas_topo = topografia_a_columnas_field(topo_res)
 
-    return {**columnas_suelo, **columnas_topo}
+    return {**columnas_suelo, **columnas_topo, **departamento_a_columnas_field(lat, lon)}

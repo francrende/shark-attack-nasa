@@ -357,7 +357,11 @@ def test_regresion_ensemble_back24():
 # ---------- BACK-24: field_id en /simulate ----------
 
 from routers.telemetry import get_field_store  # noqa: E402
-from services.field_enrichment_service import suelo_a_columnas_field, topografia_a_columnas_field  # noqa: E402
+from services.field_enrichment_service import (  # noqa: E402
+    departamento_a_columnas_field,
+    suelo_a_columnas_field,
+    topografia_a_columnas_field,
+)
 
 FIELD_ID = "33333333-3333-3333-3333-333333333333"
 AUTH = {"Authorization": "Bearer fake-token"}
@@ -387,6 +391,8 @@ def _fila_con_datos_del_mock(**extra) -> dict:
     fila = {"id": FIELD_ID, "lat": BODY["coordenadas"]["lat"], "lon": BODY["coordenadas"]["lon"]}
     fila.update(suelo_a_columnas_field(insumos.perfil_suelo))
     fila.update(topografia_a_columnas_field(insumos.topografia))
+    # BACK-28: los campos nuevos guardan su departamento MAGyP al crearse.
+    fila.update(departamento_a_columnas_field(fila["lat"], fila["lon"]))
     fila.update(extra)
     # Caché vacía: así una consulta a ISRIC/SRTM en el POST queda registrada por el handler.
     from providers.cache import CacheEnCapas, CacheMemoria, configurar_cache
@@ -455,3 +461,109 @@ def test_sin_field_id_no_cambia_el_contrato():
     r, store, _ = _post_con_campo(None, body=BODY, headers={})
     assert r.status_code == 200
     assert store.actualizaciones == []
+
+
+# ---------------------------------------------------------------------------
+# BACK-27: probabilidad de año malo, rinde en kg/ha, departamento y fase ENSO (ML-16 / ML-17)
+# ---------------------------------------------------------------------------
+
+CAMPOS_ML16 = ("prob_anio_malo", "prob_anio_malo_tipica", "anticipa_diferencias", "puntaje_anio_malo", "puntaje_anio_bueno")
+
+
+def test_campos_nuevos_en_ranking_y_recomendacion(cliente):
+    data = cliente.post("/api/v1/simulate", json=BODY).json()
+    SimulateResponse.model_validate(data)
+    assert data["departamento_referencia"]["nombre"] == "Pergamino"
+    for item in data["ranking_cultivos"]:
+        for campo in CAMPOS_ML16:
+            assert campo in item, campo
+        assert item["prob_anio_malo_tipica"] is not None
+        r = item["rinde_kg_ha"]
+        assert r["normal"] is not None and r["anio_malo"] < r["anio_bueno"]
+        if item["anticipa_diferencias"]:
+            assert 0.0 <= item["prob_anio_malo"] <= 1.0
+        else:
+            assert item["prob_anio_malo"] is None
+            assert r["esperado"] == r["normal"]
+    rec = data["recomendacion_principal"]
+    ganador = next(i for i in data["ranking_cultivos"] if i["cultivo"] == rec["cultivo"])
+    assert rec["rinde_kg_ha"] == ganador["rinde_kg_ha"]
+    assert rec["distribucion_hidroclimatica"]["prob_anio_malo_tipica"] == ganador["prob_anio_malo_tipica"]
+
+
+def test_what_if_seco_no_baja_la_probabilidad(cliente):
+    base = cliente.post("/api/v1/simulate", json=BODY).json()
+    seco = cliente.post(
+        "/api/v1/simulate",
+        json={**BODY, "simulacion_what_if": {"override_humedad_radicular_pct": 10, "variacion_lluvia_esperada_pct": -50}},
+    ).json()
+    prob = lambda d: {i["cultivo"]: i["prob_anio_malo"] for i in d["ranking_cultivos"] if i["anticipa_diferencias"]}  # noqa: E731
+    assert prob(base)
+    for crop, p in prob(base).items():
+        assert prob(seco)[crop] >= p, crop
+
+
+def test_trigo_sin_probabilidad_pero_con_frecuencia_habitual(cliente):
+    cliente.estado["hoy"] = date(2026, 5, 1)
+    data = cliente.post("/api/v1/simulate", json={**BODY, "campana": "invierno", "cultivo_anterior": "maiz_tardio"}).json()
+    trigo = next(i for i in data["ranking_cultivos"] if i["cultivo"] == "trigo")
+    assert trigo["prob_anio_malo"] is None
+    assert trigo["prob_anio_malo_tipica"] is not None
+    assert trigo["anticipa_diferencias"] is False
+    vicia = next(i for i in data["ranking_cultivos"] if i["cultivo"] == "vicia_cobertura")
+    assert vicia["prob_anio_malo_tipica"] is None
+    assert vicia["rinde_kg_ha"]["esperado"] is None and vicia["rinde_kg_ha"]["motivo_sin_dato"]
+
+
+def test_fuera_de_cobertura_sin_departamento(cliente):
+    data = cliente.post("/api/v1/simulate", json={**BODY, "coordenadas": {"lat": -32.89, "lon": -68.83}}).json()
+    assert data["departamento_referencia"] is None
+    assert all(i["rinde_kg_ha"]["esperado"] is None for i in data["ranking_cultivos"])
+
+
+def test_fase_enso(cliente):
+    cliente.estado["insumos"] = InsumosML(**{**_insumos().__dict__, "oni_actual": -1.2})
+    data = cliente.post("/api/v1/simulate", json=BODY).json()
+    assert data["fase_enso"] == {"fase": "nina", "oni": -1.2, "anios_analogos_desde": 1981}
+
+
+def test_respuesta_vieja_sin_campos_nuevos_sigue_validando(cliente):
+    """Las simulaciones guardadas antes de BACK-27 (campaigns.simulacion_json) siguen siendo válidas."""
+    data = cliente.post("/api/v1/simulate", json=BODY).json()
+    for k in ("departamento_referencia", "fase_enso"):
+        data.pop(k, None)
+    data["recomendacion_principal"].pop("rinde_kg_ha", None)
+    for campo in (*CAMPOS_ML16, "rinde_kg_ha"):
+        data["recomendacion_principal"]["distribucion_hidroclimatica"].pop(campo, None)
+        for item in data["ranking_cultivos"]:
+            item.pop(campo, None)
+    SimulateResponse.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# BACK-28: departamento MAGyP guardado en el campo (sobre el field_id de BACK-24)
+# ---------------------------------------------------------------------------
+
+
+def test_departamento_guardado_marcos_juarez_existe():
+    from ml.departamentos import departamento_por_codigo
+
+    assert departamento_por_codigo("14063")["nombre"] == "Marcos Juárez"
+
+
+def test_field_id_usa_el_departamento_guardado():
+    fila = _fila_con_datos_del_mock(departamento_codigo="14063", departamento_nombre="Marcos Juárez")
+    r, store, _ = _post_con_campo(fila)
+    assert r.status_code == 200, r.text
+    assert r.json()["departamento_referencia"]["codigo"] == "14063"
+    assert store.actualizaciones == []
+
+
+def test_campo_viejo_sin_departamento_lo_calcula_y_lo_guarda():
+    fila = _fila_con_datos_del_mock(
+        departamento_codigo=None, departamento_nombre=None, departamento_provincia=None, departamento_distancia_km=None
+    )
+    r, store, _ = _post_con_campo(fila)
+    assert r.status_code == 200, r.text
+    assert r.json()["departamento_referencia"]["nombre"] == "Pergamino"
+    assert [a["departamento_nombre"] for a in store.actualizaciones if "departamento_nombre" in a] == ["Pergamino"]

@@ -9,6 +9,8 @@ Genera en `backend/ml/reports/`:
   05_curvas_respuesta_verano.png   Curvas de respuesta (PDP manual) de cultivos de verano
   06_curvas_respuesta_invierno.png Curvas de respuesta de cultivos de invierno
   07_arbol_ilustrativo.png         Primer árbol del ensamble HGB (profundidad limitada)
+  08_calibracion_anio_malo.png     ML-16: calibración de la probabilidad de año malo (fuera de muestra)
+  09_seguimiento_retrospectivo.png ML-18: mejora de la predicción según el avance del período crítico
 
 Uso:
     backend\\.venv\\Scripts\\pip.exe install -r backend/ml/requirements-dev.txt
@@ -268,6 +270,89 @@ def plot_tree(bundle: dict[str, Any], max_depth: int = 3) -> None:
     _save(fig, "07_arbol_ilustrativo.png")
 
 
+def plot_calibracion_anio_malo(bundle: dict[str, Any]) -> None:
+    """ML-16: diagrama de calibración, mejora por cultivo y probabilidad por campaña (fuera de muestra)."""
+    cal = bundle.get("calibracion_anio_malo")
+    if not cal:
+        print("  - (sin calibracion_anio_malo en el bundle: se omite 08)")
+        return
+    met = cal["metricas"]
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8))
+
+    ax = axes[0]
+    tramos = met["diagrama"]
+    pred = [t["prob_media"] for t in tramos]
+    real = [t["frecuencia_real"] for t in tramos]
+    tam = [max(20.0, 600.0 * t["fraccion_peso"]) for t in tramos]
+    ax.plot([0, 0.5], [0, 0.5], "--", color="#9e9e9e", label="Calibración perfecta")
+    ax.scatter(pred, real, s=tam, color="#2e7d32", zorder=3, label="Tramos (tamaño = casos)")
+    ax.axhline(met["tasa_anios_malos"], color="#ef5350", lw=1, label=f"Tasa media ({met['tasa_anios_malos']:.0%})")
+    ax.set_xlim(0, 0.5)
+    ax.set_ylim(0, 0.5)
+    ax.set_xlabel("Probabilidad predicha de año malo")
+    ax.set_ylabel("Frecuencia real de año malo")
+    ax.set_title(f"Calibración fuera de muestra ({len(cal['campanas'])} campañas)")
+    ax.legend(fontsize=8, loc="upper left")
+
+    ax = axes[1]
+    por_cultivo = met["por_cultivo"]
+    crops = sorted(por_cultivo, key=lambda c: por_cultivo[c]["brier_skill"])
+    skill = [por_cultivo[c]["brier_skill"] * 100 for c in crops]
+    colores = ["#2e7d32" if cal["prob_valida_por_cultivo"][c] else "#bdbdbd" for c in crops]
+    ax.barh(crops, skill, color=colores)
+    ax.axvline(0, color="black", lw=0.8)
+    ax.set_xlabel("Mejora del Brier contra la probabilidad típica (%)")
+    ax.set_title("Por cultivo (gris: se muestra solo la frecuencia habitual)")
+
+    ax = axes[2]
+    camp = met["por_campana"]
+    anios = sorted(camp, key=int)
+    x = np.arange(len(anios))
+    ax.bar(x - 0.2, [camp[a]["tasa_real"] for a in anios], 0.4, label="Tasa real de años malos", color="#ef5350")
+    ax.bar(x + 0.2, [camp[a]["prob_media"] for a in anios], 0.4, label="Probabilidad media predicha", color="#42a5f5")
+    ax.set_xticks(x, [f"{a[2:]}/{(int(a) + 1) % 100:02d}" for a in anios], rotation=60, fontsize=7)
+    ax.set_title("Por campaña: lo que pasó vs. lo que se anticipaba")
+    ax.legend(fontsize=8)
+    _save(fig, "08_calibracion_anio_malo.png")
+
+
+def plot_seguimiento(bundle: dict[str, Any]) -> None:
+    """ML-18: cómo mejora la predicción a medida que se observa el período crítico."""
+    seg = bundle.get("seguimiento")
+    if not seg:
+        print("  - (sin seguimiento en el bundle: se omite 09)")
+        return
+    res = seg["resumen"]
+    niveles = seg["niveles"]
+    x = [float(n) * 100 for n in niveles]
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
+
+    ax = axes[0]
+    ax.plot(x, [res[n]["brier_skill"] * 100 for n in niveles], "o-", color="#2e7d32", label="Mejora del Brier vs. típica")
+    ax.plot(x, [(res[n]["auc_anios_malos"] - 0.5) * 100 for n in niveles], "s--", color="#42a5f5", label="AUC − 0,5 (×100)")
+    ax.set_xlabel("Avance del período crítico (%)")
+    ax.set_ylabel("%")
+    ax.set_title("Detección de años malos")
+    ax.legend(fontsize=8)
+
+    ax = axes[1]
+    ax.plot(x, [res[n]["mae"] for n in niveles], "o-", color="#ef5350", label="MAE")
+    ax.plot(x, [res[n]["ancho_rango_medio"] / 2 for n in niveles], "s--", color="#8d6e63", label="Medio ancho del rango")
+    ax.set_xlabel("Avance del período crítico (%)")
+    ax.set_ylabel("Puntos (50 = año normal)")
+    ax.set_title("Error y rango")
+    ax.legend(fontsize=8)
+
+    ax = axes[2]
+    ax.plot(x, [res[n]["sequia_2022_prob_media"] for n in niveles], "o-", color="#b8292f", label="Probabilidad media 2022/23")
+    ax.axhline(res[niveles[0]]["sequia_2022_prob_tipica"], color="#9e9e9e", ls="--", label="Probabilidad típica")
+    ax.set_xlabel("Avance del período crítico (%)")
+    ax.set_ylabel("Probabilidad de año malo")
+    ax.set_title("Sequía 2022/23: cuándo la anticipa")
+    ax.legend(fontsize=8)
+    _save(fig, "09_seguimiento_retrospectivo.png")
+
+
 def main() -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     bundle = joblib.load(MODEL_PATH)
@@ -282,6 +367,8 @@ def main() -> None:
     plot_response_curves(bundle, "verano", "05_curvas_respuesta_verano.png")
     plot_response_curves(bundle, "invierno", "06_curvas_respuesta_invierno.png")
     plot_tree(bundle)
+    plot_calibracion_anio_malo(bundle)
+    plot_seguimiento(bundle)
     print("Listo.")
 
 

@@ -66,6 +66,10 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-33** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
 | **FRONT-34** | Conexión de `Info general` a `GET /api/v1/telemetry` al Seleccionar Campo, Fallback de Suelo, Fix de Riesgo Térmico y Último Cultivo desde BD (`BACK-20`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `BACK-20` | `[x]` |
 | **FRONT-35** | Datos Propios de Suelo/Topografía por Campo (`UserField`), Materia Orgánica en `%` y Consulta Dinámica de NASA POWER con `field_id` (`BACK-21..23`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-34`, `BACK-21`, `BACK-22`, `BACK-23` | `[x]` |
+| **FRONT-36** | Panel de recomendación en lenguaje de productor: riesgo de año malo como frecuencia ("3 de cada 10 campañas"), rinde en qq/ha contra el normal de la zona, rango año malo / año bueno, detalle técnico desplegable y estados sin backend (último resultado real guardado, nunca datos de ejemplo) | `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `BACK-27` | `[~]` |
+| **FRONT-37** | Registrar siembra y vista de seguimiento de campaña: avance del período que define el rinde, evolución semanal del riesgo, qué pasó con el clima desde la siembra y rinde esperado actualizado | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/RegistrarSiembraForm.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx` (nuevo), `frontend/src/utils/lenguajeProductor.ts`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-36`, `BACK-29` | `[~]` |
+| **FRONT-38** | Cerrar la campaña en curso (fecha de cosecha, rinde cosechado en qq/ha y notas) y borrarla con confirmación | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/AccionesCampana.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-37`, `BACK-30` | `[~]` |
+| **FRONT-39** | *Información histórica* con datos reales (BACK-31): lluvia y agua en raíces por campaña con gráfico contra lo normal, cosechas del lote, rinde de la zona; sin datos inventados; el mapa colorea solo el lote seleccionado | `frontend/src/data/historicalData.ts`, `frontend/src/components/HistoricalPanel.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/apiClient.ts`, `frontend/src/types/api.ts`, `frontend/src/App.tsx`, `frontend/src/App.css` | `BACK-31` | `[~]` |
 
 ---
 
@@ -707,3 +711,192 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   4. En `frontend/src/components/TelemetryCards.tsx`, calcular y renderizar **Materia orgánica del suelo** en `%` (`materia_organica_g_kg / 10`, o fallback desde `carbono_organico_g_kg × 1.724 / 10`), con umbrales calibrados en `%` (`< 2.9%`, `2.9%–3.5%`, `≥ 3.5%`) y detalle edáfico (`pH`, textura granulométrica, carbono orgánico) dentro del cajón expandible.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[~]` FRONT-36: Panel de recomendación en lenguaje de productor (riesgo de año malo y rinde en qq/ha)
+- **Objetivo:** Mostrar lo que el modelo sabe de una forma que el productor argentino, su asesor o una empresa (aseguradora, acopio, financiera) entiendan sin explicación: **cuántas campañas de cada 10 salen mal, cuántos quintales se esperan contra lo normal de la zona y cuánto se cae en un año malo**. Hoy el panel muestra un anillo "/100" que se lee como nota de examen (53/100 parece malo, pero significa "un poco mejor que un año normal"), y no muestra ni el rango ni los años malos que la API ya devuelve.
+- **Archivos Permitidos:** `frontend/src/types/api.ts`, `frontend/src/components/RecommendationPanel.tsx`, `frontend/src/components/RiesgoRindeResumen.tsx` (nuevo), `frontend/src/utils/formatters.ts`, `frontend/src/utils/lenguajeProductor.ts` (nuevo), `frontend/src/services/apiClient.ts`, `frontend/src/services/ultimoResultado.ts` (nuevo), `frontend/src/components/AvisoEstadoDatos.tsx` (nuevo), `frontend/src/App.tsx` (solo el flujo de carga y error de la simulación), `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **No se muestra jerga técnica en la vista principal.** Ningún texto visible dice "P10", "P90", "puntaje", "score", "ensemble", "análogos", "ONI", "calibración" ni "/100". Todo pasa por la tabla de traducción de abajo, implementada en `utils/lenguajeProductor.ts` como funciones puras.
+  2. **Rinde en quintales por hectárea (qq/ha)**, la unidad de uso en Argentina (1 qq = 100 kg), redondeado a entero. Los kg/ha quedan solo en el detalle técnico.
+  3. **Probabilidad como frecuencia**, no como porcentaje: "3 de cada 10 campañas como esta". Siempre va acompañada de la referencia habitual.
+     - **Solo cuando `anticipa_diferencias` es `true`** (hoy maíz y soja). Para el resto de los cultivos (hoy trigo, cebada, girasol y sorgo) se muestra **solo la frecuencia habitual** y se dice que el sistema todavía no anticipa diferencias entre años para ese cultivo (ML-16: medido fuera de muestra, no le gana a la frecuencia habitual). Nunca se inventa una comparación.
+  4. **Lo que el sistema no sabe se dice, no se inventa:**
+     - Si un campo viene `null`, se muestra el motivo en palabras y no un número.
+     - **Nunca se muestra una recomendación inventada como si fuera del lote.** Hoy, si `/simulate` falla, el bloque `catch` de `App.tsx` cae en silencio a `generateSimulatedResponse`. Ese reemplazo se elimina. Cuando el backend falla, el front sigue la tabla de *Estados cuando el backend no responde* (abajo): muestra el último resultado real guardado o un error claro, pero nunca datos de ejemplo.
+     - **El modo demo sigue existiendo, pero solo si se activa a propósito.** `generateSimulatedResponse` se usa solo cuando `USE_SIMULATED_MODE` está activado (por ejemplo, para una presentación sin backend), nunca como respuesta a un error.
+       - En ese modo hay un aviso fijo arriba del panel: **"Modo demostración: datos de ejemplo, no corresponden a tu lote."**
+       - En ese modo no se generan probabilidades ni kg/ha.
+       - La respuesta se marca con `es_ejemplo: true`, un campo solo del front.
+  5. **Vista para empresas:** un desplegable **"Ver detalle técnico"** al pie de cada cultivo con los valores exactos. La vista principal no cambia.
+- **Tabla de traducción (fuente única: `utils/lenguajeProductor.ts`):**
+
+  | Dato de la API | Texto para el productor | Regla |
+  | :--- | :--- | :--- |
+  | `prob_anio_malo` (con `anticipa_diferencias = true`) | "**3 de cada 10** campañas como esta terminan con un rinde bajo" | **Una sola escala para todas las frecuencias** (corregido el 2026-11-15 tras la revisión visual): por debajo de 0,35, "1 de cada N" con N = `round(1 / p)`; desde 0,35, "N de cada 10"; hasta 0,05, "menos de 1 de cada 20". Antes se mezclaba "2 de cada 10" con "1 de cada 4" y, redondeando a décimos, 0,18 y 0,24 se leían iguales. "Rinde bajo" = 15% o más bajo lo normal de la zona; se explica en un ícono (i). El valor nunca supera el tope del modelo (hoy 0,35 → "4 de cada 10" como máximo). |
+  | `anticipa_diferencias = false` | "En esta zona, **1 de cada 4** campañas de trigo termina con rinde bajo. Para este cultivo todavía no podemos anticipar si este año viene mejor o peor que lo habitual." | La frecuencia sale de `prob_anio_malo_tipica`, con la misma escala que la fila anterior (`frecuencia(p)` en `lenguajeProductor.ts`). Sin flecha ni color de alerta. |
+  | `prob_anio_malo` vs `prob_anio_malo_tipica` | "**Más riesgo que lo habitual** (normalmente son 2 de cada 10)" | Cociente ≥ 1,3 → "Más riesgo que lo habitual"; ≤ 0,77 → "Menos riesgo que lo habitual"; en el medio → "Riesgo parecido a lo habitual". |
+  | `rinde_kg_ha.esperado` y `.normal` | "Rinde esperado: **34 qq/ha** (lo normal en la zona es 32 qq/ha, **+6%**)" | Porcentaje = `esperado / normal − 1`, redondeado a entero. Entre −2% y +2%: "similar a lo normal". |
+  | `rinde_kg_ha.anio_malo` / `.anio_bueno` | "En un año malo: **~24 qq/ha** · En un año bueno: **~38 qq/ha**" | Barra horizontal con el rango, una marca en el esperado y una línea en lo normal. El "~" indica que es aproximado. |
+  | `anios_evaluados` + `fase_enso` | "Comparamos con **12 campañas con El Niño** desde 1981 en esta zona" | `nina` → "La Niña (años más secos)", `nino` → "El Niño (años más húmedos)", `neutro` → "años neutros (ni Niño ni Niña)". |
+  | `departamento_referencia` | "Lo normal de la zona es el promedio de **Pergamino (Buenos Aires)** según el Ministerio de Agricultura (MAGyP). Tu lote puede rendir distinto." | Si `distancia_km > 30`: agregar "(el departamento más cercano, a 42 km)". |
+  | `sub_scores.hidroclimatico` | El anillo "/100" se elimina. Si hay `rinde_kg_ha`, manda el "+6%" de la fila de rinde. Si no hay (coberturas, fuera de cobertura), se muestra "**+3% sobre un año normal**" | Desvío % = `hidroclimatico − 50` (por la definición de la escala MAGyP). Entre −2 y +2: "en línea con un año normal". No se muestran dos porcentajes distintos para el mismo cultivo: `hidroclimatico` incluye la penalización por demanda hídrica y el kg/ha no (ML-17). |
+  | `sub_scores.suelo` | "Aporte al suelo: **Muy bueno / Bueno / Regular / Malo**" | ≥ 75 / ≥ 55 / ≥ 35 / < 35. El número queda en el detalle técnico. |
+  | `rinde_kg_ha = null` en coberturas | "Cultivo de servicio: no se cosecha, su valor está en el suelo y el agua que deja." | — |
+  | `rinde_kg_ha.motivo_sin_dato` (otros casos) | El motivo tal cual viene, por ejemplo "Tu lote está fuera de la zona con datos de rinde (región pampeana)." | — |
+  | Todos los campos de ML-16 en `null` en un cultivo MAGyP | Se muestra solo la categoría actual ("Riesgo medio") | Bundle sin distribución predictiva. No se muestra ninguna frecuencia. |
+
+- **Estados cuando el backend no responde (fuente única: `components/AvisoEstadoDatos.tsx`):**
+
+  | Qué pasó | Cómo se detecta | Qué muestra el panel |
+  | :--- | :--- | :--- |
+  | **Servidor despertando** (Render Free duerme tras 15 min sin uso; la primera consulta tarda 30–60 s) | El pedido sigue abierto después de 5 s | Indicador de carga con "**Despertando el servidor, puede tardar hasta un minuto…**". El pedido no se corta antes de **75 s** (`AbortController`). Si hay un resultado guardado, se muestra mientras tanto con el aviso de la última fila. |
+  | **Falla un servicio externo** | `503` con `{"detail", "fuente"}` (BACK-7) | "**No pudimos consultar {fuente} en este momento.** Probá de nuevo en unos minutos." + botón **Reintentar**. Nombres para `fuente`: `nasa_power` → "los datos satelitales de NASA", `soilgrids` → "el mapa de suelos", `srtm` → "el relieve del terreno". |
+  | **Pedido inválido** | `422` | El mensaje del backend tal cual (por ejemplo, la campaña que no corresponde a la fecha), sin botón de reintentar. |
+  | **Backend caído o sin red** | Error de red, timeout de 75 s o `5xx` sin `fuente` | Si hay un resultado guardado para ese lote y esa configuración: se muestra completo con el aviso "**Sin conexión con el servidor. Te mostramos el último resultado de este lote, del 12/11 a las 10:40.**" + **Reintentar**. Si no hay: "**No pudimos conectarnos con el servidor.** Revisá tu conexión o probá de nuevo en unos minutos." + **Reintentar**. Nunca datos de ejemplo. |
+
+  - **Qué se guarda (`services/ultimoResultado.ts`):**
+    - Cada respuesta **real** y exitosa de `/simulate` sin What-If se guarda en `localStorage` con la fecha de consulta. Las de ejemplo nunca se guardan.
+    - La clave es el `field_id` (o, sin campo guardado, la coordenada redondeada a 3 decimales) + `campana` + `cultivo_anterior` + `objetivo_productor`.
+    - Se guarda una entrada por clave, hasta 20 en total, y se descartan primero las más viejas.
+    - Un resultado de otra campaña (invierno o verano) no se reutiliza.
+    - Todas las lecturas y escrituras van en `try/catch`, porque `localStorage` puede estar bloqueado. Sin `localStorage`, el panel muestra el error sin resultado guardado.
+  - **What-If sin conexión:** los controles quedan deshabilitados con "Necesitás conexión para simular escenarios". No se simula en el navegador.
+  - **Antigüedad:** si el resultado guardado tiene más de 7 días, el aviso agrega "**puede estar desactualizado: la humedad del suelo cambia de una semana a otra**".
+
+- **Especificación Técnica:**
+  1. `types/api.ts`: agregar `RindeKgHa`, `DepartamentoReferencia`, `FaseEnso` y los campos opcionales de BACK-27 en `RankingCultivoItem`, `RecomendacionPrincipal`, `DistribucionHidroclimatica` y `SimulateResponse`.
+  2. `utils/lenguajeProductor.ts` (nuevo):
+     - `frecuenciaAnioMalo(p)`, `comparacionHabitual(p, pTipica)`, `frecuenciaHabitual(pTipica, cultivo)`, `rindeVsNormal(esperado, normal)`, `textoFaseEnso(fase)`, `textoAporteSuelo(s)`, `textoDesvioNormal(hidro)`.
+     - Todas devuelven texto y, cuando aplica, un nivel (`bueno | neutro | malo`) para el color. Sin dependencias de React.
+  3. `utils/formatters.ts`: `kgHaAQq(kg)` y `formatQq(kg)` → `"34 qq/ha"`.
+  4. `components/RiesgoRindeResumen.tsx` (nuevo): bloque reutilizable (también lo usa FRONT-37) con tres filas:
+     - (a) Riesgo de año malo: frecuencia grande más la comparación con lo habitual si `anticipa_diferencias`; si no, la frecuencia habitual con la aclaración de que todavía no se anticipan diferencias.
+     - (b) Rinde esperado frente a lo normal.
+     - (c) Barra año malo / año bueno.
+     - Al pie, la línea de "Comparamos con…" y la fuente.
+     - El color nunca va solo: siempre acompaña un texto o un ícono (accesibilidad).
+  5. `components/RecommendationPanel.tsx`:
+     - En la tarjeta expandida de cada cultivo y en la recomendación principal, reemplazar el anillo "/100" por `RiesgoRindeResumen`.
+     - En la fila compacta del ranking, mostrar al lado del nombre "34 qq/ha · 3 de cada 10 con rinde bajo" (o "34 qq/ha · riesgo habitual" si `anticipa_diferencias` es `false`).
+     - Desplegable "Ver detalle técnico" con una tabla: probabilidad (%), probabilidad típica (%), si anticipa diferencias, rinde esperado, año malo y año bueno en kg/ha, puntajes (promedio, año malo y año bueno con el error real, P10 y P90 del clima de los años análogos, suelo), años evaluados, código y distancia del departamento.
+  6. `services/apiClient.ts`:
+     - `simulateCropRotation` recibe un `signal` y usa un timeout de 75 s.
+     - Ante una respuesta no exitosa, lanza un error tipado `SimulacionError { tipo: 'servicio_externo' | 'invalido' | 'sin_conexion', fuente?, mensaje }` en lugar de un `Error` genérico. Lee `fuente` del cuerpo del `503`.
+     - `generateSimulatedResponse` devuelve los campos nuevos en `null` y `es_ejemplo: true`.
+  7. `services/ultimoResultado.ts` (nuevo): `guardarUltimoResultado(clave, respuesta)` y `leerUltimoResultado(clave) -> { respuesta, consultadoEn } | null`, con las reglas de la sección de estados.
+  8. `components/AvisoEstadoDatos.tsx` (nuevo): los avisos de la tabla de estados (despertando, servicio externo, inválido, sin conexión con o sin resultado guardado, modo demostración) con su botón **Reintentar**.
+  9. `App.tsx` (solo el flujo de la simulación):
+     - Eliminar el `generateSimulatedResponse` del bloque `catch`.
+     - Guardar las respuestas reales, y ante un error, decidir el estado con `SimulacionError` y `leerUltimoResultado`.
+     - Disparar el aviso de "despertando" a los 5 s y conectar el botón **Reintentar**.
+     - No se toca nada más de `App.tsx`, para no chocar con quien trabaja en el panel histórico.
+- **Pendiente detectado, fuera de esta tarea:** `baselineResult` en `App.tsx` (alrededor de la línea 464) también usa `generateSimulatedResponse` para la línea base de Info general y el valor de humedad del What-If. Hay que coordinarlo con quien está sacando los datos demo: debería salir de `GET /api/v1/telemetry` (FRONT-34).
+- **Ejemplo para un cultivo sin anticipación (Trigo, Pergamino):**
+  > **Trigo**
+  > En esta zona, **1 de cada 4** campañas de trigo termina con rinde bajo. Para este cultivo todavía no podemos anticipar si este año viene mejor o peor que lo habitual.
+  > Rinde esperado: **38 qq/ha** (similar a lo normal en la zona) · En un año malo: ~25 qq/ha · En un año bueno: ~48 qq/ha
+- **Ejemplo de cómo debe leerse (Soja de 2da tras trigo, Marcos Juárez):**
+  > **Soja de 2da** · Recomendado
+  > **2 de cada 10** campañas como esta terminan con rinde bajo · *Menos riesgo que lo habitual (normalmente 3 de cada 10)*
+  > Rinde esperado: **29 qq/ha** (lo normal en la zona es 28 qq/ha, +4%)
+  > En un año malo: ~22 qq/ha ━━━━━●━━━ En un año bueno: ~34 qq/ha
+  > Comparamos con 12 campañas con El Niño (años más húmedos) desde 1981 en esta zona. Lo normal es el promedio de Marcos Juárez (Córdoba), MAGyP. Tu lote puede rendir distinto.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build && npm run lint`
+  - Revisión visual con estos casos:
+    - Un cultivo MAGyP con todos los datos.
+    - Una cobertura (`rinde_kg_ha = null`).
+    - Backend apagado **con** un resultado guardado: se ve el último resultado real con su fecha y **Reintentar**.
+    - Backend apagado **sin** resultado guardado: mensaje de error y **Reintentar**, sin datos de ejemplo.
+    - `503` simulado de NASA POWER: "No pudimos consultar los datos satelitales de NASA…".
+    - Respuesta demorada más de 5 s (por ejemplo, con *throttling* en DevTools): aparece "Despertando el servidor…".
+    - `USE_SIMULATED_MODE` activado: aviso fijo de modo demostración, sin frecuencias ni qq/ha.
+- **Resultado de la Verificación (2026-11-15):** `[~]` hasta la revisión visual del desarrollador.
+  - `npx tsc -b`, `npm run build` y `npm run lint` sin errores (el lint solo tiene las advertencias `set-state-in-effect` que ya existían en el proyecto).
+  - Implementado: `utils/lenguajeProductor.ts` (tabla de traducción), `formatQq` / `kgHaAQq`, `RiesgoRindeResumen.tsx` (riesgo, rinde, barra de rango, "Comparamos con…" y fuente), `RecommendationPanel.tsx` (sin anillo "/100"; fila compacta "80 qq/ha · 2 de cada 10 con rinde bajo"; aporte al suelo en palabras; "Ver detalle técnico"), `ultimoResultado.ts`, `AvisoEstadoDatos.tsx`, `SimulacionError` y timeout de 75 s en `apiClient.ts`, y en `App.tsx` solo el flujo de la simulación (sin datos de ejemplo por error, aviso de "despertando" a los 5 s, último resultado guardado, Reintentar, What-If deshabilitado sin conexión).
+  - **Agregado respecto de la especificación:** `/simulate` ahora manda `field_id` y el token cuando el usuario tiene sesión, para usar el suelo, la topografía (servicio único de datos del lote, BACK-24) y el departamento guardados (BACK-28). Los 401/404/422 de ese `field_id` se muestran con el mensaje del backend, no como "sin conexión".
+  - Datos reales verificados contra el backend (Pergamino, 15/11/2026, El Niño ONI +2,46): maíz tardío 2 de cada 10 contra 1 de cada 4 habitual, 79,5 qq/ha contra 77 normal; girasol y sorgo solo con la frecuencia habitual y el rinde normal.
+  - **Decisión de presentación:** cuando hay frecuencia de año malo, la fila compacta no muestra el badge de categoría ("Riesgo alto"), que mezcla clima y suelo. El problema de suelo se sigue viendo en "Aporte al suelo: Malo" (rojo). Sin frecuencia (respuestas viejas), el badge queda como antes.
+  - **Pendiente:** revisión visual con los casos de la Definition of Done.
+
+---
+
+### `[~]` FRONT-37: Registrar siembra y seguimiento de la campaña
+- **Objetivo:** Que el productor registre qué sembró y cuándo, y que después, cada vez que entra, vea **cómo viene la campaña**: en qué parte del período que define el rinde está, si el riesgo subió o bajó desde que sembró y por qué (cuánto llovió, cuántos días de calor hubo), y el rinde esperado actualizado. Para una empresa, es la misma vista en el lote de cada cliente.
+- **Archivos Permitidos:** `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/RegistrarSiembraForm.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx` (nuevo), `frontend/src/components/RiesgoRindeResumen.tsx`, `frontend/src/utils/lenguajeProductor.ts`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **Solo para usuarios registrados con el campo guardado.** En modo demo se muestra la sección deshabilitada con "Registrate y guardá tu lote para seguir la campaña".
+  2. **La fecha de siembra es `fecha_inicio`.** El formulario dice "Fecha de siembra", nunca "fecha de inicio".
+  3. **Sin librerías nuevas de gráficos:** el gráfico semanal es un SVG propio (el proyecto hoy no tiene librería de gráficos).
+  4. **El mismo lenguaje y la misma tabla de traducción de FRONT-36.** Se reusa `RiesgoRindeResumen` para el estado actual.
+- **Textos por etapa (fuente: `utils/lenguajeProductor.ts`):**
+
+  | Situación | Texto |
+  | :--- | :--- |
+  | `etapa = previa` | "Sembraste **Soja de 1ra** el 12/11. El período que define el rinde (floración y llenado de granos) arranca alrededor del **6/1**. Hasta entonces, el riesgo es el mismo que al sembrar." |
+  | `etapa = en_curso` | "**Semana 6 de 13** del período que define el rinde (floración y llenado)." + barra de avance |
+  | `etapa = terminado` | "El período que define el rinde terminó el 5/4. Lo que queda depende de la cosecha." |
+  | Evolución del riesgo | "Riesgo de año malo: **5 de cada 10** (al sembrar era 3 de cada 10) ▲ **subió**" (▲ subió / ▼ bajó / = se mantiene, con una diferencia mínima de 1 de cada 10). |
+  | Por qué (de `observado`) | "Desde el 6/1 llovieron **85 mm**, **la mitad de lo normal** para estas fechas, y hubo **9 días de más de 34 °C**." Lluvia: cociente < 0,7 "bastante menos que lo normal" / < 0,9 "algo menos" / ≤ 1,1 "parecido a lo normal" / ≤ 1,3 "algo más" / mayor "bastante más". Calor, heladas y tormentas fuertes se mencionan solo si son más de 0. |
+  | Rinde | Bloque de FRONT-36: "Rinde esperado hoy: **27 qq/ha** (lo normal es 31 qq/ha, −13%) · En un año malo: ~22 · En un año bueno: ~31". Se agrega: "El rango se achica a medida que avanza la campaña." |
+  | Atraso del dato | "Último dato satelital: 10/1 (los datos llegan con 3 a 7 días de atraso)." |
+  | Lo que no ve | "Usa clima regional: no ve tormentas locales, plagas, enfermedades ni el manejo del lote." |
+  | Cultivo de servicio | "Para cultivos de servicio no hay seguimiento de rinde." (422 del backend) |
+
+- **Especificación Técnica:**
+  1. `types/api.ts`: `CampaignCreate`, `SeguimientoResponse`, `PuntoSeguimiento` y `ClimaObservado` (BACK-29).
+  2. `services/fieldsClient.ts`: `createCampaign(fieldId, data, token)` (el `POST` ya existe en el backend) y `fetchSeguimiento(fieldId, campaignId, token, signal?)`.
+  3. `components/RegistrarSiembraForm.tsx`:
+     - Campos: cultivo (solo los de la campaña vigente, con nombres legibles de `CULTIVOS_CATALOGO`) y fecha de siembra (no puede ser futura ni de hace más de 9 meses).
+     - La campaña se completa sola según el cultivo.
+     - Botón "Registrar siembra".
+  4. `components/SeguimientoCampana.tsx`:
+     - Encabezado con cultivo y fecha de siembra.
+     - Texto de etapa y barra de avance.
+     - Evolución del riesgo con flecha.
+     - "Por qué" a partir de `observado`.
+     - `RiesgoRindeResumen` con el último punto de la serie.
+     - **Gráfico SVG semanal:** eje X con las fechas (dd/mm), línea de "cuántas de cada 10" y banda año malo / año bueno en qq/ha en un segundo panel, con una línea punteada en lo habitual. Cada punto con tooltip en el mismo lenguaje ("Semana del 20/1: 4 de cada 10").
+     - Letra chica con el atraso del dato y lo que no ve.
+     - "Ver detalle técnico" con la tabla semanal (fecha, días observados, probabilidad %, rinde esperado, año malo y año bueno en kg/ha).
+  5. `App.tsx`: con el campo seleccionado, si tiene una campaña sin `fecha_fin` y sembrada hace menos de 9 meses, mostrar `SeguimientoCampana` arriba de la recomendación. Si no tiene, mostrar el botón "Registrar siembra". Cancelar la consulta cuando se cambia de campo.
+  6. Estados: cargando ("Consultando datos satelitales…"), error 503 ("No pudimos consultar NASA POWER en este momento. Probá de nuevo en unos minutos.") y 422 con el mensaje del backend.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build && npm run lint`
+  - Revisión visual de las tres etapas con datos reales de una campaña de prueba.
+- **Resultado de la Verificación (2026-11-15):** `[~]` hasta la revisión visual del desarrollador.
+  - `npx tsc -b`, `npm run build` y `npm run lint` sin errores (solo las advertencias `set-state-in-effect` que ya tenía el proyecto).
+  - Implementado: tipos de BACK-29 y `CampaignCreateRequest`; `createCampaign`, `fetchSeguimiento` y `SeguimientoError` en `fieldsClient.ts`; `RegistrarSiembraForm.tsx`; `SeguimientoCampana.tsx` (encabezado, etapa y semana, barra de avance, evolución del riesgo con flecha, "por qué" desde `observado`, `RiesgoRindeResumen` con el último punto, gráfico SVG semanal con banda de qq/ha y líneas de lo habitual, letra chica, detalle técnico); textos en `lenguajeProductor.ts` (`textoEtapa`, `textoEvolucion`, `textoPorQue`, `comparacionLluvia`, `textoUltimoDato`); en `App.tsx` la campaña en curso (sin fecha de fin, sembrada hace menos de 9 meses, cultivo con rinde), su consulta y el formulario, arriba de la planificación.
+  - **Cambio respecto de la especificación:** el formulario ofrece **los 8 cultivos con rinde**, agrupados por campaña, y no solo los de la campaña vigente: en noviembre (verano vigente) un trigo sembrado en junio está justo en su período crítico. La campaña sale del cultivo.
+  - Estados: cargando ("Consultando datos satelitales…"), `503` con el nombre de la fuente y Reintentar, `422` con el mensaje del backend, sin conexión con Reintentar. En modo demo: "Registrate y guardá tu lote para seguir la campaña semana a semana."
+  - **Pendiente:** revisión visual de las tres etapas con una campaña de prueba (requiere las columnas de BACK-28 en Supabase).
+  - **Correcciones tras la primera revisión visual (2026-11-15):**
+    - *Info general* tomaba la siembra en curso como "último cultivo" (antecesor). Ahora `App.tsx` guarda todas las campañas del lote: la más reciente sin fecha de fin y con seguimiento es la **campaña en curso**, y el "último cultivo" es la más reciente que no es esa.
+    - Las frecuencias se escriben en una sola escala (ver FRONT-36) y la flecha de evolución sigue a lo que se lee: si las dos frecuencias se escriben igual, "se mantiene".
+    - En la etapa `previa` ya no se muestra la línea de evolución (un solo punto, repetía el recuadro de riesgo).
+
+---
+
+### `[~]` FRONT-38: Cerrar y borrar la campaña en curso
+- **Objetivo:** Sin esto, una siembra seguía apareciendo como campaña en curso hasta 9 meses después aunque ya se hubiera cosechado, y no había forma de corregir una carga errónea.
+- **Archivos:** `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/AccionesCampana.tsx` (nuevo), `frontend/src/components/SeguimientoCampana.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`.
+- **Decisiones (2026-11-15, pedido del desarrollador):**
+  - Las acciones van al pie de "Cómo viene la campaña" y se muestran siempre, aunque el seguimiento haya fallado (por ejemplo, NASA caída).
+  - **Cerrar campaña (ya cosechada):** fecha de cosecha (entre la siembra y hoy), rinde cosechado en **qq/ha** opcional (se guarda en kg/ha × 100) con la aclaración "Con el rinde real de tu lote el sistema puede comparar lo que esperaba con lo que pasó y aprender de tu campo", y notas opcionales. Al cerrar, la campaña deja de estar en curso, pasa a ser el "último cultivo" de Info general y vuelve a aparecer "Registrar siembra".
+  - **Borrar siembra:** confirmación en línea ("¿Borrar la siembra de Soja de 1ra del 13/11? Se borra también su seguimiento. No se puede deshacer."), con botón en rojo.
+  - Los errores del backend (fechas inválidas) se muestran tal cual, en el idioma del productor.
+- **Verificación (2026-11-15):** `npx tsc -b`, `npm run build` y `npm run lint` sin errores. **Pendiente:** revisión visual.
+
+---
+
+### `[~]` FRONT-39: Información histórica con datos reales
+- **Objetivo:** La pestaña mostraba rotaciones y clima inventados (copiados del lote demo más cercano). Ahora muestra solo datos reales de BACK-31.
+- **Decisiones (2026-11-15, con el desarrollador):** campaña agrícola desde 2006/07; tres datos: *Cosechas del lote y rinde de la zona*, *Lluvia por campaña*, *Agua en las raíces*; se quitan temperatura, evaporación y materia orgánica por año.
+- **Implementación:**
+  - `data/historicalData.ts`: sin serie inventada; métricas, `visualHistorico` (color y textos del lote en el mapa), `fechaGibsCampana` (15 de enero de cada campaña; en la en curso, hasta 7 días atrás), `campanaInicial`, textos de desvío y nivel de lluvia.
+  - `HistoricalPanel.tsx`: control de campaña y reproducción, resumen de la campaña (lluvia contra lo normal, agua en raíces con el mes más seco, cosechas del lote), tabla "Cómo le fue a la zona" en qq/ha contra lo normal, gráfico SVG por campaña (lluvia o agua en raíces) con la línea de lo normal, lista de cosechas por campaña y fuentes al pie.
+  - `MapView.tsx`: el color histórico es el del **lote seleccionado** (con datos reales); los demás campos quedan con su color normal.
+  - `App.tsx`: pide el historial al abrir la pestaña o cambiar de lote (y al cerrar o registrar una campaña), con los avisos de FRONT-36 si falla.
+- **Verificación (2026-11-15):** `npx tsc -b`, `npm run build` y `npm run lint` sin errores. **Pendiente:** revisión visual.
