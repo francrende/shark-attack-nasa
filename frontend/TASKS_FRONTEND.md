@@ -64,6 +64,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | **FRONT-31** | Listado de Campos del Usuario con Menú Desplegable (`⋮`) para Renombrar y Borrar en Pestaña `Campos` | `frontend/src/types/api.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-28`, `FRONT-29` | `[x]` |
 | **FRONT-32** | Edición Interactiva de Polígono de un Campo Existente (`Editar superficie`) desde el Menú Desplegable | `frontend/src/components/MapView.tsx`, `frontend/src/components/FieldsSubheader.tsx`, `frontend/src/components/UserSettingsModal.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css` | `FRONT-31` | `[x]` |
 | **FRONT-33** | Filtro Previo por Provincias (Región Pampeana), Mapa 3D de Argentina y Optimización de Rendimiento | `frontend/src/data/argentinaProvinces.json`, `frontend/src/utils/geo.ts`, `frontend/src/components/ProvinceSelectorScreen.tsx`, `frontend/src/components/MapView.tsx`, `frontend/src/services/authClient.ts`, `frontend/src/types/api.ts`, `frontend/src/theme/mapColors.ts`, `frontend/src/index.css`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/SKILLS_FRONTEND.md` | `FRONT-24`, `FRONT-26` | `[x]` |
+| **FRONT-34** | Conexión de `Info general` a `GET /api/v1/telemetry` al Seleccionar Campo, Fallback de Suelo, Fix de Riesgo Térmico y Último Cultivo desde BD (`BACK-20`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/services/fieldsClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/TASKS_FRONTEND.md` | `FRONT-21`, `BACK-20` | `[x]` |
+| **FRONT-35** | Datos Propios de Suelo/Topografía por Campo (`UserField`), Materia Orgánica en `%` y Consulta Dinámica de NASA POWER con `field_id` (`BACK-21..23`) | `frontend/src/types/api.ts`, `frontend/src/services/apiClient.ts`, `frontend/src/components/TelemetryCards.tsx`, `frontend/src/App.tsx`, `frontend/TASKS_FRONTEND.md` | `FRONT-34`, `BACK-21`, `BACK-22`, `BACK-23` | `[x]` |
 
 ---
 
@@ -660,3 +662,48 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **Optimización sin cambios visuales:** Tooltip posicionado vía `ref` + `translate3d` sin re-renders de React en `onMouseMove`, blur agrupado en `MapBaseRelief`, menos capas redundantes de extrusión 3D, `key={field.id}` estable en capas Leaflet y `React.lazy` para `MapView` y `HistoricalPanel`.
 - **Definition of Done (Comando de Verificación):**
   - `cd frontend && npm run build && npm run lint`
+
+---
+
+### `[x]` FRONT-34: Conexión de `Info general` a `GET /api/v1/telemetry` al Seleccionar Campo, Fallback de Suelo, Fix de Riesgo Térmico y Último Cultivo desde BD (`BACK-20`)
+- **Objetivo:** Mostrar datos satelitales y edáficos reales en la pestaña **Info general** (`Agua en las raíces`, `Humedad para sembrar`, `Riesgo de golpe de calor`, `Materia orgánica del suelo`, textura y rotación previa) apenas el productor selecciona un campo, sin alterar la sección *What-If*.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/apiClient.ts`
+  - `frontend/src/services/fieldsClient.ts`
+  - `frontend/src/components/TelemetryCards.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/App.css`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  1. **Disparo al seleccionar el campo y What-If intacto:** Cada vez que el usuario selecciona un lote (o confirma un polígono nuevo), consultar `GET /api/v1/telemetry?lat=...&lon=...` para poblar `Info general`. No tocar `WhatIfPanel` ni modificar el valor que usa actualmente.
+  2. **Fallback honesto cuando falta el dato de suelo:** Si `perfil_suelo.carbono_organico_g_kg` o `perfil_suelo.textura_predominante` vienen en `null` desde el backend (fallback regional de SoilGrids), mostrar el mensaje `"No se puede mostrar en este momento"` en lugar de inventar cifras y renderizar las `advertencias` recibidas.
+  3. **Último cultivo desde BD:** Si el campo seleccionado está guardado en Supabase y tiene campañas en `GET /api/v1/fields/{field_id}/campaigns`, usar la más reciente para mostrar *Estado tras el último cultivo* en `Info general` apenas se selecciona el lote (antes incluso de correr `POST /api/v1/simulate`).
+- **Especificación Técnica:**
+  1. En `frontend/src/types/api.ts`, corregir `RiesgoTermicoVerano` a `'bajo' | 'medio' | 'alto' | 'critico'` (alineado con `backend/schemas.py`) y agregar los tipos `PerfilSueloTelemetria` (con propiedades `null` posibles), `TopografiaTelemetria` y `TelemetryResponse`.
+  2. En `frontend/src/services/apiClient.ts`, implementar `fetchFieldTelemetry(lat, lon, signal?)` contra `GET /api/v1/telemetry?lat=...&lon=...`.
+  3. En `frontend/src/App.tsx`, disparar la carga de telemetría (con cancelación ante cambios rápidos de campo) y la lectura/uso de la última campaña de `GET /api/v1/fields/{field_id}/campaigns` para usuarios autenticados con lote en BD, combinando prioridad `simulationResult` → `fieldTelemetry` sin tocar `WhatIfPanel`.
+  4. En `frontend/src/components/TelemetryCards.tsx`, actualizar `getHeatRiskMeaning` para cubrir `'bajo' | 'medio' | 'alto' | 'critico'`, incorporar estados de carga/error, mostrar `"No se puede mostrar en este momento"` cuando falte materia orgánica o textura, y mostrar el último cultivo de BD o indicador de sin historial previo.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`
+
+---
+
+### `[x]` FRONT-35: Datos Propios del Campo (`UserField`), Materia Orgánica en `%` y Telemetría Dinámica por `field_id` (`BACK-21`–`BACK-23`)
+- **Objetivo:** Mostrar en `Info general` el perfil de suelo, topografía y **materia orgánica del suelo en `%`** propios de cada campo guardado en `public.fields`, mientras **Agua en las raíces**, **Humedad para sembrar**, **Lluvias 90d** y **Riesgo de golpe de calor** se piden en el momento al seleccionar el lote vía `GET /api/v1/telemetry?lat=...&lon=...&field_id=...`.
+- **Archivos Permitidos:**
+  - `frontend/src/types/api.ts`
+  - `frontend/src/services/apiClient.ts`
+  - `frontend/src/components/TelemetryCards.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/TASKS_FRONTEND.md`
+- **Decisiones Acordadas con el Desarrollador:**
+  - El backend persiste `materia_organica_g_kg` (`carbono_organico_g_kg × 1.724`) y el frontend la muestra convertida a porcentaje (`materia_organica_g_kg / 10`, ej. `2.2%`).
+  - Mientras carga NASA POWER al seleccionar un campo guardado, `Info general` muestra de inmediato los datos propios de suelo y topografía del `UserField` seleccionado (si ya están persistidos) y sincroniza la respuesta actualizada si el backend reintentó SoilGrids/SRTM.
+- **Especificación Técnica:**
+  1. Ampliar `UserField`, `PerfilSueloTelemetria` (`materia_organica_g_kg`) y `TopografiaTelemetria` (`fuente_elevacion`) en `frontend/src/types/api.ts`.
+  2. Actualizar `fetchFieldTelemetry` en `frontend/src/services/apiClient.ts` para enviar `field_id` y el header `Authorization: Bearer ...` cuando estén disponibles.
+  3. En `frontend/src/App.tsx`, pasar `fieldId` y `token` al seleccionar un campo, aprovechar los datos propios del `UserField` seleccionado y actualizar `userFields` cuando la respuesta de telemetría traiga datos refrescados.
+  4. En `frontend/src/components/TelemetryCards.tsx`, calcular y renderizar **Materia orgánica del suelo** en `%` (`materia_organica_g_kg / 10`, o fallback desde `carbono_organico_g_kg × 1.724 / 10`), con umbrales calibrados en `%` (`< 2.9%`, `2.9%–3.5%`, `≥ 3.5%`) y detalle edáfico (`pH`, textura granulométrica, carbono orgánico) dentro del cajón expandible.
+- **Definition of Done (Comando de Verificación):**
+  - `cd frontend && npx tsc -b && npm run build`

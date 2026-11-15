@@ -57,10 +57,52 @@ create table if not exists public.fields (
   lon double precision not null,
   hectareas double precision check (hectareas is null or hectareas > 0),
   polygon jsonb,
+  -- Propiedades edáficas propias del campo (SoilGrids / respaldo regional + materia orgánica)
+  ph double precision,
+  limo_pct double precision,
+  arena_pct double precision,
+  arcilla_pct double precision,
+  textura_predominante text,
+  carbono_organico_g_kg double precision,
+  materia_organica_g_kg double precision,
+  suelo_fuente text,
+  suelo_advertencias jsonb not null default '[]'::jsonb,
+  suelo_localidad_fallback text,
+  suelo_distancia_fuente_km double precision,
+  reintentar_soilgrids boolean not null default true,
+  -- Propiedades topográficas propias del campo (SRTM / respaldo regional)
+  elevacion_m double precision,
+  pendiente_terreno_pct double precision,
+  fuente_elevacion text,
+  topo_fuente text,
+  topo_advertencias jsonb not null default '[]'::jsonb,
+  topo_localidad_fallback text,
+  topo_distancia_fuente_km double precision,
+  reintentar_srtm boolean not null default true,
   created_at timestamptz not null default now()
 );
 
 alter table public.fields add column if not exists polygon jsonb;
+alter table public.fields add column if not exists ph double precision;
+alter table public.fields add column if not exists limo_pct double precision;
+alter table public.fields add column if not exists arena_pct double precision;
+alter table public.fields add column if not exists arcilla_pct double precision;
+alter table public.fields add column if not exists textura_predominante text;
+alter table public.fields add column if not exists carbono_organico_g_kg double precision;
+alter table public.fields add column if not exists materia_organica_g_kg double precision;
+alter table public.fields add column if not exists suelo_fuente text;
+alter table public.fields add column if not exists suelo_advertencias jsonb not null default '[]'::jsonb;
+alter table public.fields add column if not exists suelo_localidad_fallback text;
+alter table public.fields add column if not exists suelo_distancia_fuente_km double precision;
+alter table public.fields add column if not exists reintentar_soilgrids boolean not null default true;
+alter table public.fields add column if not exists elevacion_m double precision;
+alter table public.fields add column if not exists pendiente_terreno_pct double precision;
+alter table public.fields add column if not exists fuente_elevacion text;
+alter table public.fields add column if not exists topo_fuente text;
+alter table public.fields add column if not exists topo_advertencias jsonb not null default '[]'::jsonb;
+alter table public.fields add column if not exists topo_localidad_fallback text;
+alter table public.fields add column if not exists topo_distancia_fuente_km double precision;
+alter table public.fields add column if not exists reintentar_srtm boolean not null default true;
 
 create index if not exists idx_fields_user_id on public.fields (user_id);
 

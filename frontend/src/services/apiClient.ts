@@ -5,12 +5,14 @@ import {
 } from '../data/demoFields'
 import type {
   Campana,
+  Coordenadas,
   CultivoAnterior,
   CultivoId,
   RankingCultivoItem,
   RiesgoNivel,
   SimulateRequest,
   SimulateResponse,
+  TelemetryResponse,
 } from '../types/api'
 
 /**
@@ -21,7 +23,9 @@ import type {
  */
 export const USE_SIMULATED_MODE = false
 // VITE_API_URL es la base del backend (igual que authClient y fieldsClient).
-const BACKEND_API_URL = `${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '')}/api/v1/simulate`
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '')
+const BACKEND_API_URL = `${API_BASE_URL}/api/v1/simulate`
+const TELEMETRY_API_URL = `${API_BASE_URL}/api/v1/telemetry`
 
 // ============================================================================
 // MATRIZ DE TRANSICIÓN AGRONÓMICA Y SCORING EN FRONTEND (Secciones 4.2 a 4.4)
@@ -496,6 +500,59 @@ export function generateSimulatedResponse(
     },
     ranking_cultivos: evaluados,
   }
+}
+
+export interface FetchFieldTelemetryOptions {
+  fieldId?: string | null
+  token?: string | null
+  signal?: AbortSignal
+}
+
+/**
+ * Consulta la telemetría inmediata de un lote (`GET /api/v1/telemetry`) sin
+ * requerir campaña ni cultivo antecesor ni disparar el modelo ML.
+ */
+export async function fetchFieldTelemetry(
+  coordenadas: Coordenadas,
+  optionsOrSignal?: AbortSignal | FetchFieldTelemetryOptions
+): Promise<TelemetryResponse> {
+  const options: FetchFieldTelemetryOptions =
+    optionsOrSignal instanceof AbortSignal
+      ? { signal: optionsOrSignal }
+      : (optionsOrSignal ?? {})
+
+  const url = new URL(TELEMETRY_API_URL)
+  url.searchParams.set('lat', String(coordenadas.lat))
+  url.searchParams.set('lon', String(coordenadas.lon))
+  if (options.fieldId) {
+    url.searchParams.set('field_id', options.fieldId)
+  }
+
+  const headers: Record<string, string> = {}
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers,
+    signal: options.signal,
+  })
+
+  if (!response.ok) {
+    let detail = `Error HTTP ${response.status} al consultar /api/v1/telemetry`
+    try {
+      const payload = (await response.json()) as { detail?: string }
+      if (typeof payload?.detail === 'string' && payload.detail.trim()) {
+        detail = payload.detail
+      }
+    } catch {
+      // Conservar mensaje HTTP por defecto
+    }
+    throw new Error(detail)
+  }
+
+  return (await response.json()) as TelemetryResponse
 }
 
 /**
