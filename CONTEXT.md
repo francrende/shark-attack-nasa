@@ -18,6 +18,7 @@ Para no construir código descartable en la hackathon pero tampoco bloquear el e
 ### 2.1. Tech Stack Base
 - **Frontend:** React + TypeScript + Vite (UI/UX enfocada en el productor, mapa interactivo con Leaflet / Mapbox GL superponiendo capas satelitales WMTS/WMS de la NASA).
 - **Backend:** Python + FastAPI (Arquitectura modular dividida en `routers/`, `services/`, `providers/` y `ml/`).
+- **Base de Datos y Auth:** Supabase (PostgreSQL + Supabase Auth + Row Level Security) conectado desde FastAPI mediante `supabase-py` (`backend/sql/schema.sql`).
 - **Data/ML:** `scikit-learn` (`HistGradientBoostingRegressor` / `RandomForestRegressor`) + `Pandas`/`Polars` para series temporales climáticas y motor híbrido de decisión multicriterio (MCDA).
 - **Despliegue (Deploy):** Frontend en Vercel | Backend en Render/Railway.
 - **Puertos Locales Habituales:** Frontend `:5173` (o `:3000`) | Backend `:8000`.
@@ -289,16 +290,21 @@ El proceso que cumple el productor o asesor al utilizar la herramienta sigue cua
 
 ## 7. Guía Rápida de Instalación (Setup del Equipo)
 
-Pasos para dejar el entorno local listo después de clonar o hacer `git pull` del repositorio. No se requiere ningún motor de base de datos externo.
+Pasos para dejar el entorno local listo después de clonar o hacer `git pull` del repositorio. El backend se conecta a **Supabase** (PostgreSQL + Auth) mediante variables de entorno.
 
 ### 7.1. Estructura del Repositorio
 ```text
 shark-attack-nasa/
 ├── backend/
 │   ├── ml/                # Entrenamiento (train_baseline.py), predictor y TASKS_ML.md
-│   ├── providers/         # Clientes HTTP (NASA POWER API, NASA SRTM / OpenTopoData, ISRIC SoilGrids API)
-│   ├── routers/           # Endpoints FastAPI (/api/v1/simulate)
+│   ├── providers/         # Clientes externos (supabase_client.py, NASA POWER, SRTM, SoilGrids)
+│   ├── routers/           # Endpoints FastAPI (auth.py, fields.py, campaigns.py, simulación)
 │   ├── services/          # Lógica de negocio y matriz de rotación agronómica
+│   ├── sql/               # Esquema PostgreSQL y políticas RLS para Supabase (schema.sql)
+│   ├── config.py          # Configuración con pydantic-settings (.env)
+│   ├── main.py            # Entrypoint FastAPI, CORS, /health y registro de routers
+│   ├── schemas.py         # Modelos Pydantic de request/response
+│   ├── .env.example       # Plantilla de variables de entorno (SUPABASE_URL, SUPABASE_KEY)
 │   ├── requirements.txt   # Dependencias de Python
 │   └── TASKS_BACKEND.md   # Tablero y protocolo de tareas atómicas de Backend
 ├── frontend/              # Aplicación React + TypeScript + Vite + Leaflet
@@ -306,6 +312,17 @@ shark-attack-nasa/
 │   └── TASKS_FRONTEND.md  # Tablero y protocolo de tareas atómicas de Frontend
 └── CONTEXT.md             # Documentación de arquitectura, contratos y metodología
 ```
+
+### 7.2. Configurar Base de Datos y Auth en Supabase
+1. Crear un proyecto en **Supabase** (categoría *B2B SaaS application*) y copiar `SUPABASE_URL` (URL base del proyecto, sin `/rest/v1/`) y `SUPABASE_KEY` (anon/publishable key).
+2. Copiar `backend/.env.example` a `backend/.env` y completar las credenciales.
+   - *Estado actual del entorno:* Proyecto Supabase creado (`https://kjiddadksvosdaoyapfu.supabase.co`) y archivo local `backend/.env` configurado con `SUPABASE_URL`, `SUPABASE_KEY` y `CORS_ORIGINS`.
+3. Ejecutar el script [`backend/sql/schema.sql`](./backend/sql/schema.sql) en el **SQL Editor** de Supabase para crear las tablas `profiles`, `fields` y `campaigns` (incluye trigger de alta automática de perfil y políticas **RLS** por usuario).
+4. **Endpoints disponibles en Backend (`/docs`):**
+   - **Auth (`/api/v1/auth`):** `POST /register`, `POST /login`, `GET /me` (Bearer JWT).
+   - **Campos (`/api/v1/fields`):** `GET /`, `POST /`, `GET /{field_id}`, `PATCH /{field_id}`, `DELETE /{field_id}`.
+   - **Campañas e Historial (`/api/v1/fields/{field_id}/campaigns`):** `GET /`, `POST /`, `PATCH /{campaign_id}`, `DELETE /{campaign_id}` (guarda `campana`, `cultivo`, `fecha_inicio`, `fecha_fin`, `rinde_kg_ha`, `resultado_notas` y `simulacion_json`).
+   - **Healthcheck:** `GET /health`.
 
 ### 7.2. Levantar el Frontend (`React + TypeScript + Vite`)
 ```bash
