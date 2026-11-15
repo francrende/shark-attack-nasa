@@ -54,7 +54,7 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-16` | Deploy en Render (creación): Web Service Free desde `main`, versiones fijas, `/health` con `HEAD` | `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md` | `BACK-13` | `[x]` |
 | `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[~]` |
 | `BACK-18` | Capa de caché persistente en Supabase (`provider_cache`): precarga al arrancar, escritura en segundo plano | `backend/sql/schema.sql`, `backend/providers/cache_supabase.py`, `backend/providers/test_cache_supabase.py`, `backend/config.py`, `backend/.env.example`, `backend/main.py`, `backend/conftest.py` | `BACK-10`, tabla `provider_cache` (la crea la desarrolladora) | `[x]` |
-| `BACK-19` | Grilla de suelo ISRIC cada 100 km en Supabase como respaldo antes de GeoINTA | `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/test_soilgrids.py`, `backend/main.py` | `BACK-18` | `[~]` |
+| `BACK-19` | Grilla de suelo ISRIC cada 100 km en Supabase como respaldo antes de GeoINTA | `backend/providers/soilgrids.py`, `backend/providers/generar_precache.py`, `backend/providers/test_soilgrids.py`, `backend/main.py` | `BACK-18` | `[x]` |
 
 ---
 
@@ -748,6 +748,12 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   - **`Out of memory` o reinicios en Metrics:** subir a Starter (misma RAM, pero sin dormir) o a Standard (2 GB).
 
 ### `[~]` BACK-17: Deploy en Render — conexión con el frontend y keep-alive
+> **Avance (15/11/2026):**
+> - **Frontend en Vercel:** `https://shark-attack-nasa.vercel.app`. El bundle publicado apunta a `https://shark-attack-nasa.onrender.com`, así que `VITE_API_URL` se aplicó en el build.
+> - **CORS:** `CORS_ORIGINS` en Render incluye la URL de Vercel. El preflight `OPTIONS /api/v1/simulate` con ese `Origin` da 200 con `access-control-allow-origin: https://shark-attack-nasa.vercel.app`.
+> - **Keep-alive:** ping configurado por la desarrolladora.
+> - **Falta:** la prueba de punta a punta en el navegador (login demo, crear campo y simular sin errores de CORS) y confirmar la *Site URL* en Supabase.
+>
 - **Objetivo:** Que el frontend publicado en Vercel use el backend de Render para el login, los campos y `/simulate`, sin errores de CORS, y que el servicio no se duerma.
 - **Bloqueante:** el frontend todavía no está en Vercel (15/11/2026). Hasta entonces se puede probar desde `localhost:5173` apuntando a Render (paso 1).
 - **Archivos Permitidos:** `backend/TASKS_BACKEND.md`. El resto son variables en los dashboards. **No se toca `frontend/*`:** el frontend ya lee `VITE_API_URL` en `authClient.ts`, `fieldsClient.ts` y `apiClient.ts`. Lo que necesite el track de frontend se le pasa como prompt.
@@ -864,7 +870,13 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     3. **Manual Deploy → Restart** en Render.
     4. El mismo punto responde sin consultar a ISRIC (el log no muestra la llamada) y `/health` da `cache_persistente: true`.
 
-### `[~]` BACK-19: Grilla de suelo ISRIC cada 100 km (respaldo en Supabase)
+### `[x]` BACK-19: Grilla de suelo ISRIC cada 100 km (respaldo en Supabase)
+> **Verificación en Render (15/11/2026, `main` en `45ec49d`):**
+> - **Health:** `/health` da `cache_filas_precargadas: 87` y `grilla_suelo_puntos: 83`.
+> - **`/simulate` en verano, ISRIC sin responder a tiempo** (antes los dos daban `503`):
+>   - (−29,0, −60,0): **200**, perfil `franco_arcilloso` con carbono 12,8 g/kg del punto de grilla a 46 km, con `ADV_GRILLA`.
+>   - (−28,05, −59,0), extremo norte de Santa Fe: **200**, con el punto de grilla a 106 km. Entra gracias al radio de 120 km.
+>
 > **Implementación (15/11/2026):**
 > - **`soilgrids.py`:**
 >   - Se agregan `registrar_grilla`, `_punto_grilla_mas_cercano` y `_perfil_de_grilla`, la `Fuente` `"grilla_isric"` y `ADV_GRILLA`.
@@ -886,7 +898,6 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 > - **Generación (15/11/2026):** `generar_precache grilla` guardó **83/84 puntos** en `provider_cache` (`suelo_grilla`), sin escrituras fallidas. 3 puntos salieron de un vecino a 500 m.
 >   - El que falta es (−30,677, −62,535), en la laguna Mar Chiquita (Córdoba). Ni el punto ni sus vecinos tienen dato y es determinístico: reintentar no sirve.
 >   - Sin ese punto la cobertura no cambia: el peor caso sigue en 111,4 km, por debajo del radio de 120 km.
-> - **Falta:** merge a `main`, deploy y el DoD en Render (`grilla_suelo_puntos: 83` en `/health`, y (−29,0, −60,0) sin `503`).
 - **Objetivo:** Que ningún punto de las provincias habilitadas termine en `503` cuando ISRIC no responde. Para eso se usa el perfil real de ISRIC del punto de una grilla precargada más cercano, que trae textura y carbono, no solo arcilla.
 - **Archivos Permitidos:**
   - `backend/providers/soilgrids.py`: la cascada.
