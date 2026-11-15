@@ -950,6 +950,76 @@ h1.brand-wordmark {
   color: var(--color-text);
 }
 
+.metric-unavailable {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-style: italic;
+}
+
+.telemetry-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-gold-yellow-soft);
+  border: 1px solid var(--color-gold-yellow);
+  color: var(--color-gold-yellow-dark);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.telemetry-warning-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.telemetry-error-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-card);
+  border: 1.5px solid var(--color-heat-soil-border);
+  color: var(--color-text);
+}
+
+.telemetry-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 180px;
+  font-size: 12.5px;
+}
+
+.telemetry-error-content p {
+  color: var(--color-text-secondary);
+}
+
+.telemetry-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  background-color: var(--color-bg-elevated, var(--color-bg-card));
+  color: var(--color-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.telemetry-retry-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
 /* ==========================================================================
    TARJETA 1: CONFIGURACIÓN DE CAMPAÑA
    ========================================================================== */

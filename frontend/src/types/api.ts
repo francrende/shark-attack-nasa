@@ -36,7 +36,13 @@ export type ObjetivoProductor =
 
 export type RiesgoNivel = 'bajo' | 'medio' | 'alto' | 'critico'
 
-export type RiesgoTermicoVerano = 'bajo' | 'moderado' | 'alto' | 'extremo'
+export type RiesgoTermicoVerano =
+  | 'bajo'
+  | 'medio'
+  | 'moderado'
+  | 'alto'
+  | 'critico'
+  | 'extremo'
 
 export interface SimulacionWhatIf {
   /** Opcional (0-100): si es null, usa el dato real de NASA POWER (GWETROOT) */
@@ -64,7 +70,64 @@ export interface TelemetriaNasa {
 export interface PerfilSuelo {
   textura_predominante: string
   carbono_organico_g_kg: number
+  materia_organica_g_kg?: number | null
   condicion_rotacion_previa: string
+}
+
+export interface TopografiaTelemetria {
+  elevacion_m: number
+  pendiente_terreno_pct: number
+  fuente: string
+  fuente_elevacion?: string | null
+  localidad_fallback: string | null
+  distancia_fuente_km: number
+  reintentar_srtm?: boolean
+}
+
+export interface PerfilSueloTelemetria {
+  textura_predominante: string | null
+  carbono_organico_g_kg: number | null
+  materia_organica_g_kg?: number | null
+  condicion_rotacion_previa?: string | null
+  arcilla_pct: number | null
+  arena_pct: number | null
+  limo_pct: number | null
+  ph: number | null
+  fuente: string
+  localidad_fallback: string | null
+  distancia_fuente_km: number
+  reintentar_soilgrids?: boolean
+}
+
+export interface TelemetriaNasaInfo {
+  fecha_ultimo_dato_valido: string
+  indice_humedad_radicular_pct: number
+  indice_humedad_superficial_pct: number
+  tendencia_humedad_15d_pct?: number
+  anomalia_lluvia_90d_pct: number | null
+  frecuencia_tormentas_extremas_90d?: number
+  riesgo_termico_verano: RiesgoTermicoVerano | string | null
+}
+
+export interface TelemetryResponse {
+  ubicacion: Coordenadas
+  telemetria_nasa: TelemetriaNasaInfo | null
+  topografia_srtm: TopografiaTelemetria | null
+  perfil_suelo: PerfilSueloTelemetria
+  advertencias?: string[]
+}
+
+export interface FieldCampaign {
+  id: string
+  field_id: string
+  user_id: string
+  campana: Campana
+  cultivo: string
+  fecha_inicio: string
+  fecha_fin: string | null
+  rinde_kg_ha: number | null
+  resultado_notas: string | null
+  created_at: string
 }
 
 export interface SubScores {
@@ -101,6 +164,7 @@ export interface SimulateResponse {
   perfil_suelo: PerfilSuelo
   recomendacion_principal: RecomendacionPrincipal
   ranking_cultivos: RankingCultivoItem[]
+  advertencias?: string[]
 }
 
 // ============================================================================
@@ -205,6 +269,28 @@ export interface UserField {
   hectareas: number | null
   created_at?: string
   polygon?: [number, number][] | null
+  // Datos propios de suelo (SoilGrids / respaldo regional + materia orgánica)
+  ph?: number | null
+  limo_pct?: number | null
+  arena_pct?: number | null
+  arcilla_pct?: number | null
+  textura_predominante?: string | null
+  carbono_organico_g_kg?: number | null
+  materia_organica_g_kg?: number | null
+  suelo_fuente?: string | null
+  suelo_advertencias?: string[]
+  suelo_localidad_fallback?: string | null
+  suelo_distancia_fuente_km?: number | null
+  reintentar_soilgrids?: boolean
+  // Datos propios de topografía (SRTM / respaldo regional)
+  elevacion_m?: number | null
+  pendiente_terreno_pct?: number | null
+  fuente_elevacion?: string | null
+  topo_fuente?: string | null
+  topo_advertencias?: string[]
+  topo_localidad_fallback?: string | null
+  topo_distancia_fuente_km?: number | null
+  reintentar_srtm?: boolean
 }
 
 export interface FieldCreateRequest {

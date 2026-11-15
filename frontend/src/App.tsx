@@ -31,6 +31,7 @@ import {
   type HistoricalMetricId,
 } from './data/historicalData'
 import {
+  fetchFieldTelemetry,
   generateSimulatedResponse,
   simulateCropRotation,
 } from './services/apiClient'
@@ -43,6 +44,7 @@ import {
 import {
   createUserField,
   deleteUserField,
+  listFieldCampaigns,
   listUserFields,
   loginDemoAccount,
   removeCachedFieldPolygon,
@@ -55,9 +57,13 @@ import type {
   Campana,
   Coordenadas,
   CultivoAnterior,
+  FieldCampaign,
   ObjetivoProductor,
+  PerfilSueloTelemetria,
   SimulacionWhatIf,
   SimulateResponse,
+  TelemetryResponse,
+  TopografiaTelemetria,
   UserField,
   UserProfile,
 } from './types/api'
@@ -82,6 +88,54 @@ function sanitizeProvinceIds(ids: string[] | null | undefined): string[] {
 function getProvincesCenter(provinceIds: string[]): Coordenadas {
   const [[south, west], [north, east]] = getProvincesBounds(provinceIds)
   return { lat: (south + north) / 2, lon: (west + east) / 2 }
+}
+
+function getStoredSoilFromField(
+  field: UserField | null
+): PerfilSueloTelemetria | null {
+  if (!field) return null
+  const hasAny =
+    field.materia_organica_g_kg != null ||
+    field.carbono_organico_g_kg != null ||
+    Boolean(field.textura_predominante) ||
+    field.arcilla_pct != null
+  if (!hasAny) return null
+  return {
+    textura_predominante: field.textura_predominante ?? null,
+    carbono_organico_g_kg: field.carbono_organico_g_kg ?? null,
+    materia_organica_g_kg: field.materia_organica_g_kg ?? null,
+    arcilla_pct: field.arcilla_pct ?? null,
+    arena_pct: field.arena_pct ?? null,
+    limo_pct: field.limo_pct ?? null,
+    ph: field.ph ?? null,
+    fuente: field.suelo_fuente ?? 'desconocida',
+    localidad_fallback: field.suelo_localidad_fallback ?? null,
+    distancia_fuente_km: field.suelo_distancia_fuente_km ?? 0,
+    reintentar_soilgrids: field.reintentar_soilgrids,
+  }
+}
+
+function getStoredTopoFromField(
+  field: UserField | null
+): TopografiaTelemetria | null {
+  if (
+    !field ||
+    field.elevacion_m === null ||
+    field.elevacion_m === undefined ||
+    field.pendiente_terreno_pct === null ||
+    field.pendiente_terreno_pct === undefined
+  ) {
+    return null
+  }
+  return {
+    elevacion_m: field.elevacion_m,
+    pendiente_terreno_pct: field.pendiente_terreno_pct,
+    fuente: field.topo_fuente ?? 'desconocida',
+    fuente_elevacion: field.fuente_elevacion ?? null,
+    localidad_fallback: field.topo_localidad_fallback ?? null,
+    distancia_fuente_km: field.topo_distancia_fuente_km ?? 0,
+    reintentar_srtm: field.reintentar_srtm,
+  }
 }
 
 export function App() {
@@ -179,6 +233,15 @@ export function App() {
   const [isHistoricalReady, setIsHistoricalReady] = useState<boolean>(false)
   const [hasPlanned, setHasPlanned] = useState<boolean>(false)
 
+  // Telemetría inmediata de Info general y último cultivo guardado en BD (FRONT-34)
+  const [fieldTelemetry, setFieldTelemetry] =
+    useState<TelemetryResponse | null>(null)
+  const [isTelemetryLoading, setIsTelemetryLoading] = useState<boolean>(false)
+  const [telemetryError, setTelemetryError] = useState<string | null>(null)
+  const [telemetryRetryCount, setTelemetryRetryCount] = useState<number>(0)
+  const [latestFieldCampaign, setLatestFieldCampaign] =
+    useState<FieldCampaign | null>(null)
+
   // Estado de la pestaña 'Información histórica' (10 años en vivo con el mapa)
   const [historicalYear, setHistoricalYear] = useState<number>(2026)
   const [historicalMetric, setHistoricalMetric] =
@@ -263,6 +326,138 @@ export function App() {
     if (!isRotationReady) return
     setHasPlanned(true)
   }
+
+  // Telemetría inmediata de Info general al seleccionar o guardar un campo (FRONT-34 / FRONT-35)
+  const selectedLat = selectedCoords.lat
+  const selectedLon = selectedCoords.lon
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' && authStatus !== 'demo') return
+    if (!isProvinceFilterApplied || isFieldsLoading) return
+    if (isDrawingNewField || editingPolygonField !== null) return
+
+    const controller = new AbortController()
+    setFieldTelemetry(null)
+    setTelemetryError(null)
+    setIsTelemetryLoading(true)
+
+    fetchFieldTelemetry(
+      { lat: selectedLat, lon: selectedLon },
+      {
+        fieldId: selectedFieldId,
+        token: activeToken,
+        signal: controller.signal,
+      }
+    )
+      .then((data) => {
+        if (controller.signal.aborted) return
+        setFieldTelemetry(data)
+        if (selectedFieldId) {
+          setUserFields((prev) =>
+            prev.map((field) => {
+              if (field.id !== selectedFieldId) return field
+              return {
+                ...field,
+                ph: data.perfil_suelo.ph ?? field.ph,
+                limo_pct: data.perfil_suelo.limo_pct ?? field.limo_pct,
+                arena_pct: data.perfil_suelo.arena_pct ?? field.arena_pct,
+                arcilla_pct: data.perfil_suelo.arcilla_pct ?? field.arcilla_pct,
+                textura_predominante:
+                  data.perfil_suelo.textura_predominante ??
+                  field.textura_predominante,
+                carbono_organico_g_kg:
+                  data.perfil_suelo.carbono_organico_g_kg ??
+                  field.carbono_organico_g_kg,
+                materia_organica_g_kg:
+                  data.perfil_suelo.materia_organica_g_kg ??
+                  field.materia_organica_g_kg,
+                suelo_fuente: data.perfil_suelo.fuente,
+                suelo_localidad_fallback: data.perfil_suelo.localidad_fallback,
+                suelo_distancia_fuente_km:
+                  data.perfil_suelo.distancia_fuente_km,
+                reintentar_soilgrids: data.perfil_suelo.reintentar_soilgrids,
+                ...(data.topografia_srtm
+                  ? {
+                      elevacion_m: data.topografia_srtm.elevacion_m,
+                      pendiente_terreno_pct:
+                        data.topografia_srtm.pendiente_terreno_pct,
+                      fuente_elevacion:
+                        data.topografia_srtm.fuente_elevacion ??
+                        field.fuente_elevacion,
+                      topo_fuente: data.topografia_srtm.fuente,
+                      topo_localidad_fallback:
+                        data.topografia_srtm.localidad_fallback,
+                      topo_distancia_fuente_km:
+                        data.topografia_srtm.distancia_fuente_km,
+                      reintentar_srtm: data.topografia_srtm.reintentar_srtm,
+                    }
+                  : {}),
+              }
+            })
+          )
+        }
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        setFieldTelemetry(null)
+        setTelemetryError(
+          err instanceof Error
+            ? err.message
+            : 'No fue posible obtener la telemetría del lote.'
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsTelemetryLoading(false)
+        }
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [
+    authStatus,
+    isProvinceFilterApplied,
+    isFieldsLoading,
+    isDrawingNewField,
+    editingPolygonField,
+    selectedFieldId,
+    activeToken,
+    selectedLat,
+    selectedLon,
+    telemetryRetryCount,
+  ])
+
+  // Último cultivo guardado en BD para el campo seleccionado (FRONT-34)
+  useEffect(() => {
+    if (
+      (authStatus !== 'authenticated' && authStatus !== 'demo') ||
+      !activeToken ||
+      !selectedFieldId
+    ) {
+      setLatestFieldCampaign(null)
+      return
+    }
+
+    const controller = new AbortController()
+    setLatestFieldCampaign(null)
+
+    listFieldCampaigns(activeToken, selectedFieldId, controller.signal)
+      .then((campaigns) => {
+        if (!controller.signal.aborted) {
+          setLatestFieldCampaign(campaigns[0] ?? null)
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setLatestFieldCampaign(null)
+        }
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [authStatus, activeToken, selectedFieldId])
 
   // Telemetría base para Info general y valor real de humedad en What-If
   const baselineResult = useMemo(() => {
@@ -926,16 +1121,38 @@ export function App() {
 
             {activeTab === 'info_general' && (
               <TelemetryCards
-                ubicacion={baselineResult.ubicacion}
+                ubicacion={
+                  simulationResult?.ubicacion ??
+                  fieldTelemetry?.ubicacion ??
+                  selectedCoords
+                }
                 loteLabel={currentLoteLabel}
                 superficieHa={currentSuperficieHa}
                 telemetria={
                   simulationResult?.telemetria_nasa ??
-                  baselineResult.telemetria_nasa
+                  fieldTelemetry?.telemetria_nasa ??
+                  null
                 }
                 perfilSuelo={
-                  simulationResult?.perfil_suelo ?? baselineResult.perfil_suelo
+                  simulationResult?.perfil_suelo ??
+                  fieldTelemetry?.perfil_suelo ??
+                  getStoredSoilFromField(selectedUserField)
                 }
+                topografia={
+                  fieldTelemetry?.topografia_srtm ??
+                  getStoredTopoFromField(selectedUserField)
+                }
+                advertencias={
+                  simulationResult?.advertencias ??
+                  fieldTelemetry?.advertencias ?? [
+                    ...(selectedUserField?.suelo_advertencias ?? []),
+                    ...(selectedUserField?.topo_advertencias ?? []),
+                  ]
+                }
+                latestCampaign={latestFieldCampaign}
+                isLoading={isTelemetryLoading && !simulationResult}
+                errorMessage={!simulationResult ? telemetryError : null}
+                onRetry={() => setTelemetryRetryCount((c) => c + 1)}
                 isWhatIfActive={isWhatIfActive}
               />
             )}

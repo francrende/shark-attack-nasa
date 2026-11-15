@@ -1,4 +1,5 @@
 import type {
+  FieldCampaign,
   FieldCreateRequest,
   FieldUpdateRequest,
   UserField,
@@ -145,4 +146,23 @@ export async function deleteUserField(
     },
     'No fue posible eliminar el campo seleccionado.'
   )
+}
+
+export async function listFieldCampaigns(
+  token: string,
+  fieldId: string,
+  signal?: AbortSignal
+): Promise<FieldCampaign[]> {
+  const data = await requestBackendJson<FieldCampaign[]>(
+    `/api/v1/fields/${fieldId}/campaigns`,
+    {
+      method: 'GET',
+      signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    'No fue posible obtener el historial de cultivos del campo.'
+  )
+  return Array.isArray(data) ? data : []
 }

@@ -30,6 +30,7 @@ from providers.nasa_telemetry import ESPACIO_HIST, cargar_climatologia_precalcul
 from providers.soilgrids import ESPACIO_GRILLA, registrar_grilla  # noqa: E402
 from routers import auth, campaigns, fields  # noqa: E402
 from routers.simulate import router as simulate_router  # noqa: E402
+from routers.telemetry import router as telemetry_router  # noqa: E402
 
 settings = get_settings()
 
@@ -90,6 +91,7 @@ app.include_router(auth.router)
 app.include_router(fields.router)
 app.include_router(campaigns.router)
 app.include_router(simulate_router)
+app.include_router(telemetry_router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
