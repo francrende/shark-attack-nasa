@@ -49,9 +49,13 @@ app.include_router(campaigns.router)
 app.include_router(simulate_router)
 
 
-@app.get("/health", tags=["Health"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
 def health_check() -> dict[str, str | bool]:
-    """Verifica el estado del servidor y si Supabase está configurado."""
+    """Verifica el estado del servidor y si Supabase está configurado.
+
+    Acepta HEAD además de GET (BACK-16): algunos servicios de ping (UptimeRobot)
+    consultan con HEAD, y sin esto FastAPI responde 405.
+    """
     return {
         "status": "ok",
         "supabase_configured": settings.is_supabase_configured,

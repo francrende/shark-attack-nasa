@@ -51,6 +51,8 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-13` | Endpoint `POST /api/v1/simulate`: `BACK-12` → ensemble `ML-5` → contrato §5, app FastAPI con CORS y carga del modelo al arrancar *(antes BACK-7)* | `backend/main.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/schemas.py`, `backend/routers/test_simulate.py` | `BACK-12`, `ML-5` | `[x]` |
 | `BACK-14` | Persistencia y endpoint `PATCH /api/v1/auth/me/provinces` para filtro inicial de provincias pampeanas (`FRONT-33`) | `backend/routers/auth.py`, `backend/schemas.py`, `backend/sql/schema.sql` | `BACK-2`, `BACK-3` | `[x]` |
 | `BACK-15` | Endpoint `PATCH /api/v1/auth/me` para actualizar `nombre`, `email` y `password` del usuario autenticado (`FRONT-30`) *(antes BACK-8)* | `backend/routers/auth.py`, `backend/schemas.py` | `BACK-3` | `[ ]` |
+| `BACK-16` | Deploy en Render (creación): Web Service Free desde `main`, versiones fijas, `/health` con `HEAD` | `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md` | `BACK-13` | `[~]` |
+| `BACK-17` | Deploy en Render (conexión): frontend de Vercel → Render, CORS, ping cada 10 min y prueba de punta a punta | `backend/TASKS_BACKEND.md` (+ variables en los dashboards de Render y Vercel) | `BACK-16`, deploy del frontend en Vercel | `[~]` |
 
 ---
 
@@ -667,6 +669,86 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
   3. Rechazar payloads vacíos (`400 Bad Request`) y mapear errores de Supabase Auth (`AuthApiError`) a respuestas HTTP claras en español.
 - **Definition of Done (Comando de Verificación):**
   - Verificar con `uvicorn` levantado que `PATCH /api/v1/auth/me` responde `200` con el perfil actualizado y que `GET /api/v1/auth/me` refleja los nuevos valores.
+
+---
+
+### 4.3. Deploy en Render (`BACK-16` y `BACK-17`)
+
+### `[~]` BACK-16: Deploy en Render — creación del servicio
+> **Avance (15/11/2026) — paso 1 (repo) hecho:**
+> - **Dependencias:** se instaló `requirements.txt` en el `.venv`. Faltaba `supabase` 2.34.1; scikit-learn siguió en 1.9.1.
+> - **Versiones fijas:** `requirements.txt` quedó con `==`. El bundle del modelo confirma `sklearn_version: 1.9.1`.
+> - **Health:** `/health` acepta `GET` y `HEAD`, y los dos dan 200 con `TestClient`.
+> - **Tests:** `python -m pytest -q` da 252 en verde.
+> - **Falta:** el merge a `main` y los pasos 2 a 4 en el dashboard de Render.
+- **Objetivo:** Dejar el backend corriendo en Render con una URL pública (`https://<servicio>.onrender.com`) que responda `/health`, `/docs` y `POST /api/v1/simulate` con los mismos resultados que en local. La conexión con el frontend queda para BACK-17.
+- **Archivos Permitidos:** `backend/requirements.txt`, `backend/main.py`, `backend/TASKS_BACKEND.md`. El resto de la configuración vive en el dashboard de Render, no en el repo.
+- **Decisiones Acordadas con el Desarrollador (15/11/2026):**
+  - **Plan Free** (512 MB de RAM, duerme tras 15 min sin tráfico) más un ping externo cada 10 min, que se configura en BACK-17. Si el servicio se queda sin memoria, se pasa a Starter o Standard.
+  - **Configuración a mano en el dashboard** de Render. No se agrega `render.yaml` en la raíz del repo, que es compartida.
+  - **Rama `main`** con auto-deploy en cada push. Antes del primer deploy hay que mergear `dolfi` a `main`.
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **Versiones fijas en `requirements.txt`:** el modelo `ml/modelo_agro.joblib` se entrenó con scikit-learn 1.9.1, y con otra versión puede no cargar o predecir distinto. Se fijan con `==` las versiones del `.venv` que pasan los tests: `scikit-learn==1.9.1`, `numpy==2.5.4`, `pandas==3.1.1`, `joblib==1.6.0`, `fastapi==0.163.0`, `uvicorn[standard]==0.54.0`, `pydantic==2.14.3`, `pydantic-settings==2.16.3`, etc.
+    - ⚠️ El `.venv` actual **no tiene `supabase` instalado** (`ModuleNotFoundError: supabase_auth` al importar `main`). Antes de fijar versiones hay que correr `pip install -r requirements.txt` y volver a correr los tests.
+  - **Python 3.14.5**, la misma versión que el `.venv`, con la variable `PYTHON_VERSION` en Render.
+  - **Un solo worker de uvicorn**, porque cada worker carga el modelo y la climatología completa y el plan Free tiene 512 MB.
+  - **`/health` acepta `HEAD`**, porque algunos servicios de ping (UptimeRobot) usan `HEAD`, y FastAPI responde 405 a `HEAD` en una ruta que solo es `GET`.
+  - **La caché sigue en memoria:** se pierde en cada deploy o reinicio. La climatología de NASA viene en el repo (`providers/data/climatologia_pampa.json`), así que lo único que se vuelve a pedir es SoilGrids y SRTM.
+  - **Secretos:** `SUPABASE_URL`, `SUPABASE_KEY` y `CORS_ORIGINS` solo en las variables de entorno de Render. `.env` sigue fuera del repo.
+- **Especificación Técnica:**
+  1. Repo:
+     - Fijar las versiones en `backend/requirements.txt` (ver arriba).
+     - En `main.py`, cambiar `@app.get("/health")` por `@app.api_route("/health", methods=["GET", "HEAD"])`.
+     - Correr `python -m pytest -q`, mergear a `main` y hacer push.
+  2. Render → **New → Web Service** → conectar GitHub → repo `francrende/shark-attack-nasa`:
+     | Campo | Valor |
+     | :--- | :--- |
+     | Branch | `main` |
+     | Root Directory | `backend` |
+     | Runtime | Python 3 |
+     | Build Command | `pip install -r requirements.txt` |
+     | Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+     | Instance Type | Free |
+     | Region | Oregon u Ohio. No hay región en Sudamérica; las APIs de NASA, ISRIC y OpenTopoData no dependen de la región. |
+     | Health Check Path | `/health` |
+     | Auto-Deploy | On Commit |
+  3. Environment Variables:
+     - `PYTHON_VERSION=3.14.5`
+     - `SUPABASE_URL=https://kjiddadksvosdaoyapfu.supabase.co`
+     - `SUPABASE_KEY=<publishable key, la misma del .env local>`
+     - `CORS_ORIGINS=http://localhost:5173,http://localhost:3000`. BACK-17 le suma la URL de Vercel.
+  4. **Create Web Service** y seguir el log del build hasta ver `Application startup complete`.
+- **Definition of Done (Comando de Verificación):**
+  - `curl https://<servicio>.onrender.com/health` devuelve `{"status":"ok","supabase_configured":true}`.
+  - `curl -I https://<servicio>.onrender.com/health` devuelve `200`.
+  - `https://<servicio>.onrender.com/docs` abre Swagger.
+  - `POST /api/v1/simulate` con el body de CONTEXT §5 (Pergamino y la campaña vigente) devuelve 200 con `distribucion_hidroclimatica`.
+  - **Memoria:** después de 3 `/simulate` en puntos distintos, la pestaña **Metrics** de Render queda por debajo de unos 450 MB. Anotar el valor en esta tarea.
+- **Si falla:**
+  - **El build no encuentra Python 3.14.5:** usar la versión 3.14.x más reciente que ofrezca Render. El modelo depende de la versión de scikit-learn, no de la de Python.
+  - **`Out of memory` o reinicios en Metrics:** subir a Starter (misma RAM, pero sin dormir) o a Standard (2 GB).
+
+### `[~]` BACK-17: Deploy en Render — conexión con el frontend y keep-alive
+- **Objetivo:** Que el frontend publicado en Vercel use el backend de Render para el login, los campos y `/simulate`, sin errores de CORS, y que el servicio no se duerma.
+- **Bloqueante:** el frontend todavía no está en Vercel (15/11/2026). Hasta entonces se puede probar desde `localhost:5173` apuntando a Render (paso 1).
+- **Archivos Permitidos:** `backend/TASKS_BACKEND.md`. El resto son variables en los dashboards. **No se toca `frontend/*`:** el frontend ya lee `VITE_API_URL` en `authClient.ts`, `fieldsClient.ts` y `apiClient.ts`. Lo que necesite el track de frontend se le pasa como prompt.
+- **Decisiones Acordadas con el Desarrollador (15/11/2026):**
+  - Keep-alive con un ping externo cada 10 minutos a `/health` (plan Free, ver BACK-16).
+- **Decisiones por defecto del agente (corregir si no aplican):**
+  - **CORS solo para la URL de producción de Vercel**, por ejemplo `https://shark-attack.vercel.app`. Las URLs de preview de Vercel cambian en cada deploy y `allow_origins` no admite comodines. Si hacen falta, se agrega `allow_origin_regex` en `main.py`, en una tarea aparte.
+  - **Ping con cron-job.org** (gratis, hace `GET` cada 10 min). UptimeRobot también sirve, porque `/health` ya acepta `HEAD` desde BACK-16. El plan Free da 750 h por mes, y un servicio despierto todo el mes usa unas 744 h, así que entra justo.
+  - **Supabase Auth:** "Confirm email" sigue desactivado (BACK-5). Se agrega la URL de Vercel como *Site URL* para que los mails de Supabase no apunten a `localhost`.
+- **Especificación Técnica:**
+  1. **Prueba local contra Render, sin esperar a Vercel:** crear `frontend/.env.local` con `VITE_API_URL=https://<servicio>.onrender.com`. Ese archivo está en `.gitignore` (`*.local`) y no se commitea. Correr `npm run dev` y probar el login demo y una simulación.
+  2. **Cuando el frontend esté en Vercel:**
+     - En Vercel → Settings → Environment Variables (Production), cargar `VITE_API_URL=https://<servicio>.onrender.com`, sin `/` al final, y hacer **Redeploy**. Vite incrusta la variable en el build, así que cambiarla sin redeploy no tiene efecto.
+     - En Render → Environment, cambiar `CORS_ORIGINS` a `https://<app>.vercel.app,http://localhost:5173,http://localhost:3000`, sin `/` al final. Render redeploya solo al guardar.
+     - En Supabase → Authentication → URL Configuration: *Site URL* = `https://<app>.vercel.app`.
+  3. **Keep-alive:** en cron-job.org, crear un job `GET https://<servicio>.onrender.com/health` cada 10 minutos, con aviso por mail si falla.
+- **Definition of Done (Comando de Verificación):**
+  - Desde `https://<app>.vercel.app`, con la consola del navegador abierta: login con el usuario demo, crear un campo y correr una simulación, sin errores de CORS.
+  - `curl -H "Origin: https://<app>.vercel.app" -I https://<servicio>.onrender.com/health` incluye `access-control-allow-origin: https://<app>.vercel.app`.
+  - Con el ping corriendo más de 1 hora, el historial de cron-job.org muestra todas las respuestas en 200 y ninguna tarda más de 30 s (arranque en frío).
 
 ---
 
