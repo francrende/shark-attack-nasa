@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 TABLA = "provider_cache"
 # Todo lo que no vence. `nasa_reciente` (TTL 6 h) queda solo en memoria.
 ESPACIOS_PERSISTIDOS: frozenset[str] = frozenset(
-    {"suelo", "topografia", "nasa_elevacion", "nasa_hist", "suelo_grilla"}
+    # BACK-31: "nasa_mensual" (meses de años ya cerrados, no cambian)
+    {"suelo", "topografia", "nasa_elevacion", "nasa_hist", "suelo_grilla", "nasa_mensual"}
 )
 # BACK-26: el clima histórico por celda se lee bajo demanda, no al arrancar (15,8 MB).
 ESPACIOS_BAJO_DEMANDA: frozenset[str] = frozenset({"nasa_hist"})

@@ -362,3 +362,39 @@ def test_escenarios_out_tiene_todos_los_cultivos_y_anios():
     cultivos = {e["cultivo_candidato"] for e in salida}
     assert cultivos == set(cal.CALENDARIO)
     assert {e["anio"] for e in salida if e["cultivo_candidato"] == "trigo"} >= set(range(2006, 2025))
+
+
+# ---------------------------------------------------------------------------
+# ML-17: tendencias por departamento (rinde en kg/ha)
+# ---------------------------------------------------------------------------
+
+
+def test_tendencias_reproducen_la_tendencia_del_label():
+    """La tendencia exportada, proyectada a cada campaña, es la misma que usa el label."""
+    from ml.magyp import MAGYP_CSV, tendencia_en, tendencias_por_departamento
+
+    df = pd.read_csv(MAGYP_CSV, dtype={"departamento_id": str})
+    deps = sorted(df["departamento_id"].unique())[:15]
+    muestra = df[df["departamento_id"].isin(deps)]
+    anios = range(2006, 2025)
+    labels = calcular_labels(muestra, anios)
+    tend = tendencias_por_departamento(muestra, anios)
+    assert len(labels) > 0
+    for (dep, cultivo), g in labels.groupby(["departamento_id", "cultivo_magyp"]):
+        params = tend[dep]["cultivos"][cultivo]
+        esperado = tendencia_en(params, g["anio_campana"].to_numpy())
+        np.testing.assert_allclose(esperado, g["tendencia_kgxha"].to_numpy(), rtol=1e-5)
+
+
+def test_tendencias_json_al_dia():
+    """``tendencias_magyp.json`` coincide con regenerarlo desde ``magyp_pampa.csv``."""
+    import json
+
+    from ml.generate_dataset import ANIOS_TENDENCIA
+    from ml.magyp import MAGYP_CSV, TENDENCIAS_JSON, tendencias_por_departamento
+
+    guardado = json.loads(TENDENCIAS_JSON.read_text(encoding="utf-8"))
+    df = pd.read_csv(MAGYP_CSV, dtype={"departamento_id": str})
+    nuevo = tendencias_por_departamento(df, ANIOS_TENDENCIA)
+    assert guardado["anios"] == [ANIOS_TENDENCIA.start, ANIOS_TENDENCIA.stop - 1]
+    assert guardado["departamentos"] == json.loads(json.dumps(nuevo, ensure_ascii=False))

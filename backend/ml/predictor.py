@@ -28,7 +28,7 @@ from __future__ import annotations
 import threading
 import warnings
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -61,10 +61,16 @@ except ImportError:
 
 try:
     from backend.ml import calendario_siembra as cal
+    from backend.ml import calibracion as calibracion_ml
+    from backend.ml import departamentos as departamentos_ml
+    from backend.ml import rinde as rinde_ml
     from backend.ml.fao_labels import CROP_CATALOG as FAO_CROP_CATALOG
     from backend.providers.enso import NOMBRE_FASE, fase_enso
 except ImportError:
     from ml import calendario_siembra as cal  # type: ignore[no-redef]
+    from ml import calibracion as calibracion_ml  # type: ignore[no-redef]
+    from ml import departamentos as departamentos_ml  # type: ignore[no-redef]
+    from ml import rinde as rinde_ml  # type: ignore[no-redef]
     from ml.fao_labels import CROP_CATALOG as FAO_CROP_CATALOG  # type: ignore[no-redef]
     from providers.enso import NOMBRE_FASE, fase_enso  # type: ignore[no-redef]
 
@@ -144,6 +150,14 @@ DEFAULT_UMBRAL_DESFAVORABLE = 40.0
 # 4 de cada 10 años son malos).
 CRITICAL_HYDRO_THRESHOLD = 30.0
 RISK_LEVELS: tuple[CropRiskLevel, ...] = ("bajo", "medio", "alto", "critico")
+# ML-16: campos de la distribución predictiva que se publican por cultivo.
+CAMPOS_DISTRIBUCION_PREDICTIVA: tuple[str, ...] = (
+    "prob_anio_malo",
+    "prob_anio_malo_tipica",
+    "anticipa_diferencias",
+    "puntaje_anio_malo",
+    "puntaje_anio_bueno",
+)
 
 # Pesos de la fórmula dinámica (CONTEXT.md Sección 4.5)
 OBJECTIVE_WEIGHTS: dict[str, tuple[float, float]] = {
@@ -712,6 +726,12 @@ class AgroPredictor:
         )
         # Columnas numéricas en el orden del bundle (la última es el cultivo codificado).
         self._numeric_cols: list[str] = self.feature_columns[:-1]
+        # ML-16: distribución predictiva (probabilidad de año malo y rango con el error real).
+        # Bundles previos no la traen: los campos nuevos quedan en None.
+        self.calibracion: dict[str, Any] | None = bundle.get("calibracion_anio_malo")
+        # ML-18: distribución predictiva por nivel de avance del período crítico (el error se
+        # achica a medida que se observa el clima). Sin ella se usa la de antes de sembrar.
+        self.seguimiento: dict[str, Any] | None = bundle.get("seguimiento")
 
     # ------------------------------------------------------------------
     # Armado de filas
@@ -837,8 +857,14 @@ class AgroPredictor:
         simulacion_what_if: Mapping[str, float | None] | None = None,
         fecha_corte: date | None = None,
         oni_actual: float | None = None,
+        departamento: Mapping[str, Any] | None = None,
+        motivo_sin_departamento: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Ensemble de años análogos (ML-5, por cultivo desde ML-7).
+
+        ML-17: con ``departamento`` (salida de ``ml.departamentos``) cada cultivo trae
+        ``rinde_kg_ha``; con ``motivo_sin_departamento`` lo trae vacío con ese motivo; sin ninguno
+        de los dos, ``rinde_kg_ha`` es ``None``.
 
         ``escenarios_historicos`` puede ser:
         - una lista común a todos los cultivos (ML-5), con ``pesos`` opcionales; o
@@ -918,7 +944,27 @@ class AgroPredictor:
             promedio = float(np.average(scores, weights=weights))
             worst_idx = int(np.argmin(scores))
             worst = escenarios[worst_idx]
+            # ML-16/ML-17: rinde del propio cultivo, antes de la penalización por demanda hídrica.
+            promedio_bruto = float(np.average(crudos[crop], weights=weights))
+            distribucion = self._distribucion_predictiva(crop, promedio_bruto, relativo=crop in relativos)
+            if departamento is not None:
+                distribucion["rinde_kg_ha"] = rinde_ml.rinde_kg_ha(
+                    crop,
+                    departamento["codigo"],
+                    departamento["nombre"],
+                    self._anio_campana_para(campana, fecha),
+                    None if crop in relativos else calibracion_ml.puntaje_esperado(self.calibracion, crop, promedio_bruto),
+                    distribucion["puntaje_anio_malo"],
+                    distribucion["puntaje_anio_bueno"],
+                )
+            elif motivo_sin_departamento is not None:
+                distribucion["rinde_kg_ha"] = rinde_ml.vacio(
+                    rinde_ml.MOTIVO_SIN_MAGYP if crop in relativos else motivo_sin_departamento
+                )
+            else:
+                distribucion["rinde_kg_ha"] = None
             result[crop] = {
+                **distribucion,
                 "promedio": round(promedio, 1),
                 "p10": round(weighted_percentile(scores, 10.0, weights), 1),
                 "p90": round(weighted_percentile(scores, 90.0, weights), 1),
@@ -932,6 +978,183 @@ class AgroPredictor:
                 },
             }
         return result
+
+    def _distribucion_predictiva(self, crop: str, promedio_bruto: float, *, relativo: bool) -> dict[str, Any]:
+        """ML-16: probabilidad de año malo y rango real (año malo / año bueno) del cultivo.
+
+        Se calculan con el promedio del ensemble **antes** de la penalización por demanda hídrica:
+        esa penalización mide el agua que el cultivo le deja al siguiente, no su propio rinde, y la
+        distribución se ajustó sin ella. Los cultivos sin rinde MAGyP no tienen distribución.
+        """
+        vacio: dict[str, Any] = {
+            "prob_anio_malo": None,
+            "prob_anio_malo_tipica": None,
+            "anticipa_diferencias": None,
+            "puntaje_anio_malo": None,
+            "puntaje_anio_bueno": None,
+        }
+        if relativo or self.calibracion is None:
+            return vacio
+        prob =calibracion_ml.prob_anio_malo(self.calibracion, crop, promedio_bruto)
+        rango = calibracion_ml.rango_predictivo(self.calibracion, crop, promedio_bruto)
+        if prob is None or rango is None:
+            return vacio
+        return {
+            "prob_anio_malo": prob["prob"],
+            "prob_anio_malo_tipica": prob["prob_tipica"],
+            "anticipa_diferencias": prob["anticipa_diferencias"],
+            "puntaje_anio_malo": rango[0],
+            "puntaje_anio_bueno": rango[1],
+        }
+
+    # ------------------------------------------------------------------
+    # ML-18: seguimiento en campaña
+    # ------------------------------------------------------------------
+    def _bloque_avance(self, avance: float) -> tuple[dict[str, Any] | None, bool]:
+        """(distribución del nivel de avance más cercano, si es específica de seguimiento)."""
+        por_nivel = (self.seguimiento or {}).get("por_nivel") or {}
+        if por_nivel:
+            nivel = min(por_nivel, key=lambda k: abs(float(k) - avance))
+            return por_nivel[nivel], True
+        return self.calibracion, False
+
+    def _predict_un_cultivo(
+        self,
+        current: Mapping[str, float],
+        escenarios: Sequence[Mapping[str, Any]],
+        crop: str,
+        campana: Campaign,
+        oni: float | None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Predicción cruda (sin penalización) de un cultivo para cada año análogo, en la siembra."""
+        rows = []
+        for esc in escenarios:
+            vec: dict[str, float] = {
+                **current,
+                **{f: float(esc[f]) for f in FUTURE_FEATURES if f in esc},
+                "dias_hasta_siembra": 0.0,
+            }
+            if oni is not None:
+                vec["oni_actual"] = float(oni)
+            rows.append(self._fila(vec, crop, campana))
+        pesos = np.asarray([float(e.get("peso", 1.0)) for e in escenarios], dtype=float)
+        return self._predict_clipped(np.asarray(rows, dtype=float)), pesos
+
+    def predict_seguimiento(
+        self,
+        features_siembra: Mapping[str, Any],
+        calendario_eventos: dict[int, str],
+        calendario_lluvia: dict[int, str],
+        observado_eventos: dict[int, str],
+        observado_lluvia: dict[int, str],
+        cultivo: str,
+        fecha_siembra: date,
+        ultimo_dato: date,
+        oni_siembra: float | None = None,
+        departamento: Mapping[str, Any] | None = None,
+        paso_dias: int = 7,
+    ) -> dict[str, Any]:
+        """Cómo viene la campaña de un cultivo ya sembrado (ML-18).
+
+        Estado del suelo, ONI y fase ENSO quedan fijos a la fecha de siembra (el régimen con el que
+        se entrenó el modelo: estado al decidir, ``dias_hasta_siembra = 0``). Lo que avanza es el
+        período crítico: sus días ya observados reemplazan a los de cada año análogo
+        (``escenarios_en_curso``). Devuelve la serie semanal de probabilidad de año malo y rinde.
+        """
+        try:
+            from backend.ml import escenarios as escenarios_ml
+        except ImportError:
+            from ml import escenarios as escenarios_ml  # type: ignore[no-redef]
+
+        if cultivo not in self.cultivos_entrenados:
+            raise ValueError(f"Sin rinde histórico para seguir {cultivo}: solo cultivos con rinde MAGyP")
+        campana: Campaign = cal.CALENDARIO[cultivo]["campana"]  # type: ignore[assignment]
+        current = {f: float(features_siembra[f]) for f in CURRENT_FEATURES}
+        oni = oni_siembra if oni_siembra is not None else features_siembra.get("oni_actual")
+        anio_c = cal.anio_campana(fecha_siembra)
+        inicio = escenarios_ml.inicio_periodo_critico_real(cultivo, fecha_siembra)
+        fin = inicio + timedelta(days=cal.DIAS_PERIODO_CRITICO - 1)
+        corte = min(ultimo_dato, fin)
+
+        cortes = [inicio - timedelta(days=1)]  # en la siembra: nada observado todavía
+        if ultimo_dato >= inicio:
+            p = inicio + timedelta(days=paso_dias - 1)
+            while p < corte:
+                cortes.append(p)
+                p += timedelta(days=paso_dias)
+            cortes.append(corte)
+
+        cache_pesos: dict[Any, dict[int, float]] = {}
+        serie: list[dict[str, Any]] = []
+        escenarios: list[dict[str, Any]] = []
+        d = 0
+        bloque: dict[str, Any] | None = None
+        especifico = False
+        for c in cortes:
+            escenarios, d = escenarios_ml.escenarios_en_curso(
+                calendario_eventos, calendario_lluvia, observado_eventos, observado_lluvia,
+                cultivo, fecha_siembra, c, oni, anio_campana=anio_c, cache_pesos=cache_pesos,
+            )
+            if not escenarios:
+                raise ValueError("No hay años análogos completos para el período crítico de este cultivo")
+            crudos, pesos = self._predict_un_cultivo(current, escenarios, cultivo, campana, oni)
+            promedio = float(np.average(crudos, weights=pesos))
+            avance = d / cal.DIAS_PERIODO_CRITICO
+            bloque, especifico = self._bloque_avance(avance)
+            prob = calibracion_ml.prob_anio_malo(bloque, cultivo, promedio)
+            rango = calibracion_ml.rango_predictivo(bloque, cultivo, promedio)
+            punto: dict[str, Any] = {
+                "fecha": fecha_siembra if d == 0 else c,
+                "dias_observados": d,
+                "avance": round(avance, 3),
+                "promedio": round(promedio, 1),
+                "prob_anio_malo": prob["prob"] if prob else None,
+                "puntaje_anio_malo": rango[0] if rango else None,
+                "puntaje_anio_bueno": rango[1] if rango else None,
+                "rinde_kg_ha": None,
+            }
+            if departamento is not None:
+                punto["rinde_kg_ha"] = rinde_ml.rinde_kg_ha(
+                    cultivo, departamento["codigo"], departamento["nombre"], anio_c,
+                    calibracion_ml.puntaje_esperado(bloque, cultivo, promedio),
+                    punto["puntaje_anio_malo"], punto["puntaje_anio_bueno"],
+                )
+            serie.append(punto)
+
+        if ultimo_dato < inicio:
+            etapa = "previa"
+        elif ultimo_dato >= fin:
+            etapa = "terminado"
+        else:
+            etapa = "en_curso"
+        prob_final = calibracion_ml.prob_anio_malo(bloque, cultivo, serie[-1]["promedio"])
+        normal = (
+            rinde_ml.rinde_normal_kg_ha(cultivo, departamento["codigo"], anio_c) if departamento is not None else None
+        )
+        return {
+            "cultivo": cultivo,
+            "campana": campana,
+            "fecha_siembra": fecha_siembra,
+            "etapa": etapa,
+            "inicio_periodo_critico": inicio,
+            "fin_periodo_critico": fin,
+            "dias_observados": d,
+            "dias_periodo_critico": cal.DIAS_PERIODO_CRITICO,
+            "fecha_ultimo_dato": ultimo_dato,
+            "serie": serie,
+            "observado": escenarios_ml.clima_observado(
+                calendario_eventos, calendario_lluvia, observado_eventos, observado_lluvia,
+                inicio, d, [int(e["anio"]) for e in escenarios], anio_c,
+            ),
+            "prob_anio_malo_tipica": prob_final["prob_tipica"] if prob_final else None,
+            "anticipa_diferencias": prob_final["anticipa_diferencias"] if prob_final else None,
+            "rinde_normal_kg_ha": rinde_ml._redondear(normal) if normal is not None else None,
+            "fase_enso_siembra": (
+                {"fase": fase_enso(float(oni)), "oni": round(float(oni), 2)} if oni is not None else None
+            ),
+            "anios_analogos": len(escenarios),
+            "rango_por_avance": especifico,
+        }
 
     def build_key_ml_factors(
         self,
@@ -1159,9 +1382,11 @@ class AgroPredictor:
         elif lowest_crop != winner_crop and lowest_crop in sub_scores_by_crop:
             low_subs = sub_scores_by_crop[lowest_crop]
             if lowest_crop in p10 and winner_crop in p10 and p10[lowest_crop] < p10[winner_crop] - 1.0:
+                # El P10 del ensemble mide solo la variación del clima entre años análogos, no el
+                # peor 10% de los rindes reales (ML-16): se describe como lo que es.
                 motivo = (
-                    f"rindes más variables en años como este: su peor 10% de años da "
-                    f"{p10[lowest_crop]:.0f}, contra {p10[winner_crop]:.0f}"
+                    f"más sensible al clima de años como este: en los años análogos más "
+                    f"desfavorables baja a {p10[lowest_crop]:.0f}, contra {p10[winner_crop]:.0f}"
                 )
             elif low_subs["hidroclimatico"] < winner_subs["hidroclimatico"] - 1.0:
                 motivo = (
@@ -1234,6 +1459,7 @@ class AgroPredictor:
         *,
         fecha_corte: date | None = None,
         oni_actual: float | None = None,
+        departamento_codigo: str | None = None,
     ) -> dict[str, Any]:
         """Ejecuta el pipeline completo de decisión (ML + Matriz Agronómica + Anomalías).
 
@@ -1250,8 +1476,12 @@ class AgroPredictor:
         ML-7: ``escenarios_historicos`` puede ser ``{cultivo: [...]}`` (período crítico de cada
         cultivo, con ``peso`` por ONI). ``fecha_corte`` (por defecto ``fecha_ultimo_dato_valido``)
         define ``dias_hasta_siembra`` y el flag ``fuera_de_ventana_siembra`` de cada cultivo.
+
+        ML-17: el rinde en kg/ha usa el departamento ``departamento_codigo`` (el guardado del
+        campo, BACK-28) o, si no se pasa, el más cercano a ``ubicacion``.
         """
         fecha = fecha_corte or date.fromisoformat(str(fecha_ultimo_dato_valido)[:10])
+        departamento, motivo_sin_departamento = resolver_departamento(departamento_codigo, ubicacion)
         override_humedad = None
         variacion_lluvia = None
         if simulacion_what_if:
@@ -1270,6 +1500,8 @@ class AgroPredictor:
                 simulacion_what_if=simulacion_what_if,
                 fecha_corte=fecha,
                 oni_actual=oni_actual,
+                departamento=departamento,
+                motivo_sin_departamento=motivo_sin_departamento,
             )
             hydro_scores = {crop: dist["promedio"] for crop, dist in ensemble.items()}
             # Vector representativo (mediana de los escenarios) para anomalías y explicación
@@ -1445,6 +1677,10 @@ class AgroPredictor:
                 public_item["score_hidroclimatico_p10"] = dist["p10"]
                 public_item["anios_desfavorables"] = dist["anios_desfavorables"]
                 public_item["anios_evaluados"] = dist["anios_evaluados"]
+                # ML-16: distribución predictiva (None en cultivos sin rinde MAGyP).
+                for campo in CAMPOS_DISTRIBUCION_PREDICTIVA:
+                    public_item[campo] = dist[campo]
+                public_item["rinde_kg_ha"] = dist["rinde_kg_ha"]  # ML-17
             ranking_public.append(public_item)
 
         recomendacion_principal: dict[str, Any] = {
@@ -1455,6 +1691,7 @@ class AgroPredictor:
         }
         if ensemble is not None:
             recomendacion_principal["distribucion_hidroclimatica"] = ensemble[winner_crop]
+            recomendacion_principal["rinde_kg_ha"] = ensemble[winner_crop]["rinde_kg_ha"]
         recomendacion_principal.update(
             {
                 "perfil_mercado": winner_soil.perfil_mercado,
@@ -1528,7 +1765,26 @@ class AgroPredictor:
                 ],
             },
             "comparacion_estrategias": estrategias_enriquecidas,
+            "departamento_referencia": departamento,  # ML-17 (None fuera de cobertura)
         }
+
+
+def resolver_departamento(
+    departamento_codigo: str | None, ubicacion: Mapping[str, float] | None
+) -> tuple[dict[str, Any] | None, str | None]:
+    """(departamento de referencia, motivo si no hay) para el rinde en kg/ha (ML-17)."""
+    if departamento_codigo:
+        lat = float(ubicacion["lat"]) if ubicacion else None
+        lon = float(ubicacion["lon"]) if ubicacion else None
+        dep = departamentos_ml.departamento_por_codigo(departamento_codigo, lat, lon)
+        if dep is not None:
+            return dep, None
+    if ubicacion is None:
+        return None, rinde_ml.MOTIVO_SIN_UBICACION
+    dep = departamentos_ml.departamento_mas_cercano(float(ubicacion["lat"]), float(ubicacion["lon"]))
+    if dep is None:
+        return None, rinde_ml.MOTIVO_FUERA_DE_COBERTURA
+    return dep, None
 
 
 _PREDICTOR_LOCK = threading.Lock()
@@ -1561,6 +1817,7 @@ def run_recommendation(
     *,
     fecha_corte: date | None = None,
     oni_actual: float | None = None,
+    departamento_codigo: str | None = None,
 ) -> dict[str, Any]:
     """Función de alto nivel lista para ser invocada desde ``simulation_service.py``.
 
@@ -1582,4 +1839,5 @@ def run_recommendation(
         umbral_desfavorable=umbral_desfavorable,
         fecha_corte=fecha_corte,
         oni_actual=oni_actual,
+        departamento_codigo=departamento_codigo,
     )

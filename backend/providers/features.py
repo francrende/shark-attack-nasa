@@ -216,10 +216,31 @@ def features_ventana(
     lluvia = _tramo(calendario_lluvia, inicio, dias, ancho=2)
     if eventos is None or lluvia is None:
         return None
+    return features_de_tramos(eventos, lluvia)
+
+
+def tramo(calendario: dict[int, str], inicio: date, dias: int, ancho: int = 1) -> str | None:
+    """Versión pública de ``_tramo`` (ML-18: ventanas armadas con dos tramos)."""
+    if dias <= 0:
+        return ""
+    return _tramo(calendario, inicio, dias, ancho)
+
+
+def features_de_tramos(eventos: str, lluvia: str) -> dict[str, Any]:
+    """Tormentas, calor, heladas y lluvia (con topes) de un tramo ya armado.
+
+    ML-18: el seguimiento une los días observados de la campaña con el resto de cada año
+    análogo y calcula con esta misma función, igual que ``features_ventana``.
+    """
     tormentas, calor, helada = _contar(eventos)
     return aplicar_topes(
         dict(zip(FEATURES_PERIODO_CRITICO, (tormentas, calor, helada, round(sum(decodificar_lluvia(lluvia)), 1))))
     )
+
+
+def contar_eventos(chars: Iterable[str]) -> tuple[int, int, int]:
+    """(tormentas, días de calor, heladas) de un tramo de eventos, sin topes (para mostrar)."""
+    return _contar(chars)
 
 
 def _contar(chars: Iterable[str]) -> tuple[int, int, int]:

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import time
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
+import pandas as pd
 
+from backend.ml import calibracion, departamentos, escenarios, rinde
 from backend.ml.predictor import (
+    CAMPOS_DISTRIBUCION_PREDICTIVA,
     CURRENT_FEATURES,
     DEFAULT_UMBRAL_DESFAVORABLE,
     FUTURE_FEATURES,
@@ -30,7 +33,7 @@ from backend.ml.predictor import (
     run_recommendation,
     weighted_percentile,
 )
-from backend.providers.features import FEATURES_ACTUALES, FEATURES_PERIODO_CRITICO
+from backend.providers.features import FEATURES_ACTUALES, FEATURES_PERIODO_CRITICO, features_ventana
 from backend.services.rotation_matrix import evaluate_campaign_soil, penalizacion_demanda_hidrica
 
 
@@ -459,7 +462,10 @@ class TestEnsembleML5(unittest.TestCase):
         ens = self._ens(self.current, ENSEMBLE_SCENARIOS, "verano")
         rec = resp["recomendacion_principal"]
         winner = rec["cultivo"]
-        self.assertEqual(rec["distribucion_hidroclimatica"], ens[winner])
+        # rinde_kg_ha (ML-17) depende de la ubicación, que _ens no pasa: se compara aparte.
+        sin_rinde = lambda d: {k: v for k, v in d.items() if k != "rinde_kg_ha"}  # noqa: E731
+        self.assertEqual(sin_rinde(rec["distribucion_hidroclimatica"]), sin_rinde(ens[winner]))
+        self.assertEqual(rec["rinde_kg_ha"], rec["distribucion_hidroclimatica"]["rinde_kg_ha"])
         self.assertEqual(rec["sub_scores"]["hidroclimatico"], ens[winner]["promedio"])
         self.assertIn("años análogos", rec["explicacion"])
         self.assertIn(build_ensemble_risk_sentence(ens[winner]), rec["explicacion"])
@@ -776,5 +782,339 @@ class TestExplicacionML15(unittest.TestCase):
         self.assertEqual(enumerar(["A", "B", "C"]), "A, B y C")
 
 
+class TestDistribucionPredictivaML16(unittest.TestCase):
+    """ML-16: probabilidad de año malo y rango real con el error fuera de muestra."""
+
+    MAIZ_SOJA = ("maiz_temprano", "maiz_tardio", "soja_primera", "soja_segunda")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.predictor = get_predictor()
+        cls.cal = cls.predictor.calibracion
+        cls.current = {
+            "gwetroot_saturacion_pct": 34.0, "gwettop_saturacion_pct": 28.5, "tendencia_humedad_15d_pct": -12.0,
+            "anomalia_lluvia_90d_pct": -24.2, "indice_aridez_evaporativa": 0.52, "pendiente_terreno_pct": 1.8,
+            "elevacion_m": 78.5, "textura_arcilla_pct": 24.5,
+        }
+
+    def _ens(self, campana: str = "verano", fecha: date = FECHA) -> dict[str, dict]:
+        return self.predictor.predict_ensemble(self.current, ENSEMBLE_SCENARIOS, campana, fecha_corte=fecha)
+
+    # --- funciones puras de ml/calibracion.py ---
+
+    def test_resumen_ensemble_coincide_con_weighted_percentile(self) -> None:
+        rng = np.random.default_rng(0)
+        rid = np.repeat(np.arange(3), 7)
+        pred = rng.uniform(20, 80, len(rid))
+        peso = rng.choice([0.0, 1.0, 2.0], len(rid), p=[0.2, 0.5, 0.3])
+        peso[::7] = 1.0  # cada fila con al menos un año análogo
+        prom, p10 = calibracion.resumen_ensemble(rid, pred, peso, 3)
+        for i in range(3):
+            m = (rid == i) & (peso > 0)
+            self.assertAlmostEqual(prom[i], float(np.average(pred[m], weights=peso[m])), places=9)
+            self.assertAlmostEqual(p10[i], weighted_percentile(pred[m], 10.0, peso[m]), places=9)
+
+    def test_prob_menor_es_monotona_y_acotada(self) -> None:
+        grilla = calibracion.cuantiles_ponderados(np.linspace(-40, 30, 500), np.ones(500))
+        x = np.linspace(-80, 80, 50)
+        p = calibracion.prob_menor(grilla, x)
+        self.assertTrue(np.all(np.diff(p) >= 0.0))
+        self.assertGreater(p.min(), 0.0)
+        self.assertLess(p.max(), 1.0)
+
+    def test_tope_redondea_hacia_arriba_y_ignora_tramos_chicos(self) -> None:
+        tramos = [
+            {"frecuencia_real": 0.21, "fraccion_peso": 0.5},
+            {"frecuencia_real": 0.33, "fraccion_peso": 0.3},
+            {"frecuencia_real": 0.90, "fraccion_peso": 0.001},  # tramo casi vacío: no cuenta
+        ]
+        self.assertAlmostEqual(calibracion.tope_desde_diagrama(tramos), 0.35)
+
+    def test_calibrar_da_cobertura_correcta_con_datos_sinteticos(self) -> None:
+        """Con residuos iid, el año malo / año bueno dejan ~10% afuera de cada lado."""
+        rng = np.random.default_rng(1)
+        n = 6000
+        df = pd.DataFrame({
+            "anio_campana": rng.integers(2006, 2025, n),
+            "cultivo_candidato": rng.choice(["trigo", "soja_primera"], n),
+            "promedio": rng.uniform(40, 60, n),
+            "p10": 0.0,
+            "peso": 1.0,
+        })
+        df["puntaje_real"] = df["promedio"] + rng.normal(0, 20, n)
+        cal = calibracion.calibrar(df)
+        self.assertAlmostEqual(cal["metricas"]["cobertura_anio_malo"], 0.10, delta=0.02)
+        self.assertAlmostEqual(cal["metricas"]["cobertura_anio_bueno"], 0.10, delta=0.02)
+        self.assertEqual(set(cal["cuantiles_residuo"]), {"trigo", "soja_primera"})
+        self.assertEqual(len(cal["cuantiles_residuo"]["trigo"]), len(calibracion.NIVELES))
+
+    # --- bundle real ---
+
+    def test_bundle_trae_calibracion_fuera_de_muestra(self) -> None:
+        self.assertIsNotNone(self.cal)
+        self.assertEqual(self.cal["version"], calibracion.VERSION_CALIBRACION)
+        self.assertEqual(len(self.cal["campanas"]), 19)
+        met = self.cal["metricas"]
+        self.assertGreater(met["brier_skill"], 0.0)
+        self.assertAlmostEqual(met["cobertura_anio_malo"], 0.10, delta=0.02)
+        self.assertAlmostEqual(met["cobertura_anio_bueno"], 0.10, delta=0.02)
+        self.assertEqual(set(self.cal["cuantiles_residuo"]), set(self.predictor.cultivos_entrenados))
+
+    def test_probabilidad_solo_en_cultivos_que_anticipan(self) -> None:
+        ens = self._ens("verano")
+        for crop, d in ens.items():
+            anticipa = self.cal["prob_valida_por_cultivo"][crop]
+            self.assertEqual(d["anticipa_diferencias"], anticipa, crop)
+            self.assertIsNotNone(d["prob_anio_malo_tipica"], crop)
+            if anticipa:
+                self.assertIsNotNone(d["prob_anio_malo"], crop)
+                self.assertGreaterEqual(d["prob_anio_malo"], 0.0)
+                self.assertLessEqual(d["prob_anio_malo"], self.cal["tope_prob"])
+            else:
+                self.assertIsNone(d["prob_anio_malo"], crop)
+        # Con los datos actuales, maíz y soja anticipan; si cambia, revisar FRONT-36.
+        for crop in self.MAIZ_SOJA:
+            self.assertTrue(ens[crop]["anticipa_diferencias"], crop)
+
+    def test_rango_real_es_mas_ancho_que_el_del_ensemble(self) -> None:
+        """Si anticipa: alrededor del promedio y más ancho que el ensemble. Si no: el histórico."""
+        for crop, d in self._ens("verano").items():
+            if d["anticipa_diferencias"]:
+                self.assertLess(d["puntaje_anio_malo"], d["promedio"] + penalizacion_demanda_hidrica(crop, 34.0) + 1e-6, crop)
+                self.assertGreater(d["puntaje_anio_bueno"], d["promedio"], crop)
+                self.assertLess(d["puntaje_anio_malo"], d["p10"], crop)
+            else:
+                g = self.cal["cuantiles_puntaje_real"][crop]
+                self.assertAlmostEqual(d["puntaje_anio_malo"], calibracion.cuantil(g, 0.10), places=1)
+                self.assertAlmostEqual(d["puntaje_anio_bueno"], calibracion.cuantil(g, 0.90), places=1)
+
+    def test_cultivo_que_no_anticipa_usa_lo_normal(self) -> None:
+        """Sin anticipación, el rinde esperado es el normal aunque el modelo diga otra cosa."""
+        self.assertFalse(calibracion.anticipa(self.cal, "trigo"))
+        self.assertEqual(calibracion.puntaje_esperado(self.cal, "trigo", 23.0), 50.0)
+        self.assertTrue(calibracion.anticipa(self.cal, "soja_primera"))
+        self.assertEqual(calibracion.puntaje_esperado(self.cal, "soja_primera", 23.0), 23.0)
+        self.assertEqual(calibracion.puntaje_esperado(None, "trigo", 23.0), 23.0)
+
+    def test_prob_baja_cuando_sube_el_promedio(self) -> None:
+        crop = "soja_primera"
+        probs = [calibracion.prob_anio_malo(self.cal, crop, x)["prob"] for x in (35.0, 45.0, 55.0, 65.0)]
+        self.assertEqual(probs, sorted(probs, reverse=True))
+        self.assertGreater(probs[0], probs[-1])
+
+    def test_coberturas_sin_distribucion(self) -> None:
+        ens = self._ens("invierno", date(2026, 5, 1))
+        for crop in ("vicia_cobertura", "avena_cobertura", "camelina"):
+            for campo in CAMPOS_DISTRIBUCION_PREDICTIVA:
+                self.assertIsNone(ens[crop][campo], f"{crop}.{campo}")
+        self.assertIsNotNone(ens["trigo"]["prob_anio_malo_tipica"])
+
+    def test_bundle_sin_calibracion_deja_campos_en_none(self) -> None:
+        original = self.predictor.calibracion
+        try:
+            self.predictor.calibracion = None
+            for d in self._ens("verano").values():
+                for campo in CAMPOS_DISTRIBUCION_PREDICTIVA:
+                    self.assertIsNone(d[campo])
+        finally:
+            self.predictor.calibracion = original
+
+    def test_ranking_publico_trae_los_campos(self) -> None:
+        out = run_recommendation(
+            features={**self.current, "frecuencia_tormentas_extremas": 1.0, "frecuencia_estres_termico": 6.0,
+                      "frecuencia_riesgo_helada": 0.0},
+            campana="verano", cultivo_anterior="soja_primera", objetivo_productor="equilibrio",
+            escenarios_historicos=ENSEMBLE_SCENARIOS,
+        )
+        for item in out["ranking_cultivos"]:
+            for campo in CAMPOS_DISTRIBUCION_PREDICTIVA:
+                self.assertIn(campo, item)
+        dist = out["recomendacion_principal"]["distribucion_hidroclimatica"]
+        self.assertIn("prob_anio_malo_tipica", dist)
+
+
+class TestRindeKgHaML17(unittest.TestCase):
+    """ML-17: rinde en kg/ha con la tendencia MAGyP del departamento más cercano."""
+
+    PERGAMINO = {"lat": -33.95, "lon": -60.57}
+    MENDOZA = {"lat": -32.89, "lon": -68.83}
+    CURRENT = {
+        "gwetroot_saturacion_pct": 46.0, "gwettop_saturacion_pct": 40.0, "tendencia_humedad_15d_pct": -3.0,
+        "anomalia_lluvia_90d_pct": -10.0, "indice_aridez_evaporativa": 0.6, "pendiente_terreno_pct": 0.8,
+        "elevacion_m": 80.0, "textura_arcilla_pct": 25.0,
+    }
+
+    def _rec(self, campana: str = "verano", fecha: date = date(2026, 11, 15), **kwargs) -> dict:
+        return run_recommendation(
+            self.CURRENT, campana=campana, cultivo_anterior="soja_primera",
+            escenarios_historicos=ENSEMBLE_SCENARIOS, fecha_corte=fecha, **kwargs,
+        )
+
+    def test_conversion_invierte_el_label(self) -> None:
+        self.assertAlmostEqual(rinde.rinde_desde_puntaje(50.0, 3000.0), 3000.0)
+        self.assertAlmostEqual(rinde.rinde_desde_puntaje(30.0, 3000.0), 2400.0)
+        self.assertAlmostEqual(rinde.rinde_desde_puntaje(70.0, 3000.0), 3600.0)
+        self.assertEqual(rinde.rinde_desde_puntaje(-80.0, 3000.0), 0.0)
+
+    def test_redondeo_a_50_kg(self) -> None:
+        r = rinde.rinde_kg_ha("soja_primera", "06623", "Pergamino", 2026, 51.3, 20.1, 79.9)
+        for k in ("esperado", "anio_malo", "anio_bueno", "normal"):
+            self.assertEqual(r[k] % 50, 0, k)
+        self.assertLess(r["anio_malo"], r["esperado"])
+        self.assertLess(r["esperado"], r["anio_bueno"])
+
+    def test_departamento_mas_cercano(self) -> None:
+        dep = departamentos.departamento_mas_cercano(**self.PERGAMINO)
+        self.assertEqual(dep["nombre"], "Pergamino")
+        self.assertLess(dep["distancia_km"], departamentos.DISTANCIA_MAXIMA_KM)
+        self.assertIsNone(departamentos.departamento_mas_cercano(**self.MENDOZA))
+        self.assertEqual(departamentos.departamento_por_codigo(dep["codigo"])["nombre"], "Pergamino")
+
+    def test_respuesta_con_rinde_y_departamento(self) -> None:
+        out = self._rec(ubicacion=self.PERGAMINO)
+        self.assertEqual(out["departamento_referencia"]["nombre"], "Pergamino")
+        por_cultivo = {i["cultivo"]: i["rinde_kg_ha"] for i in out["ranking_cultivos"]}
+        for crop, r in por_cultivo.items():
+            self.assertIsNotNone(r["normal"], crop)
+            self.assertLess(r["anio_malo"], r["anio_bueno"], crop)
+        # Los dos maíces comparten el rinde "maíz" de MAGyP.
+        self.assertEqual(por_cultivo["maiz_temprano"]["normal"], por_cultivo["maiz_tardio"]["normal"])
+        ganador = out["recomendacion_principal"]
+        self.assertEqual(ganador["rinde_kg_ha"], por_cultivo[ganador["cultivo"]])
+
+    def test_fuera_de_cobertura(self) -> None:
+        out = self._rec(ubicacion=self.MENDOZA)
+        self.assertIsNone(out["departamento_referencia"])
+        for item in out["ranking_cultivos"]:
+            self.assertIsNone(item["rinde_kg_ha"]["esperado"])
+            self.assertEqual(item["rinde_kg_ha"]["motivo_sin_dato"], rinde.MOTIVO_FUERA_DE_COBERTURA)
+
+    def test_coberturas_sin_rinde(self) -> None:
+        out = self._rec("invierno", date(2026, 5, 1), ubicacion=self.PERGAMINO)
+        por_cultivo = {i["cultivo"]: i["rinde_kg_ha"] for i in out["ranking_cultivos"]}
+        for crop in ("vicia_cobertura", "avena_cobertura", "camelina"):
+            self.assertIsNone(por_cultivo[crop]["esperado"])
+            self.assertEqual(por_cultivo[crop]["motivo_sin_dato"], rinde.MOTIVO_SIN_MAGYP)
+        self.assertIsNotNone(por_cultivo["trigo"]["normal"])
+
+    def test_departamento_guardado_tiene_prioridad(self) -> None:
+        otro = departamentos.departamento_mas_cercano(-31.4, -64.2)  # Córdoba
+        out = self._rec(ubicacion=self.PERGAMINO, departamento_codigo=otro["codigo"])
+        self.assertEqual(out["departamento_referencia"]["codigo"], otro["codigo"])
+        self.assertGreater(out["departamento_referencia"]["distancia_km"], 200.0)  # distancia real del lote
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSeguimientoML18(unittest.TestCase):
+    """ML-18: seguimiento en campaña con ventana mezclada (observado + años análogos)."""
+
+    CULTIVO = "soja_primera"
+    SIEMBRA = date(2026, 11, 10)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from backend.providers.features import codificar_lluvia
+
+        cls.predictor = get_predictor()
+        rng = np.random.default_rng(7)
+
+        def anio(a: int, calor: float) -> tuple[str, str]:
+            n = 366 if a % 4 == 0 else 365
+            ev = "".join(rng.choice(["0", "2"], p=[1 - calor, calor]) for _ in range(n))
+            ll = "".join(codificar_lluvia(float(x)) for x in rng.gamma(0.6, 5.0, n))
+            return ev, ll
+
+        cls.hist_ev, cls.hist_ll = {}, {}
+        for a in range(1981, 2026):
+            cls.hist_ev[a], cls.hist_ll[a] = anio(a, 0.10)
+        # La campaña actual: un verano muy caluroso (para que la probabilidad suba al observarlo).
+        cls.obs_ev, cls.obs_ll = dict(cls.hist_ev), dict(cls.hist_ll)
+        for a in (2026, 2027):
+            cls.obs_ev[a], cls.obs_ll[a] = anio(a, 0.55)
+        cls.actuales = {
+            "gwetroot_saturacion_pct": 46.0, "gwettop_saturacion_pct": 40.0, "tendencia_humedad_15d_pct": -3.0,
+            "anomalia_lluvia_90d_pct": -10.0, "indice_aridez_evaporativa": 0.6, "pendiente_terreno_pct": 0.8,
+            "elevacion_m": 80.0, "textura_arcilla_pct": 25.0, "oni_actual": 0.1,
+        }
+        cls.inicio = escenarios.inicio_periodo_critico_real(cls.CULTIVO, cls.SIEMBRA)
+
+    def _seg(self, ultimo: date, **kw) -> dict:
+        return self.predictor.predict_seguimiento(
+            self.actuales, self.hist_ev, self.hist_ll, self.obs_ev, self.obs_ll,
+            self.CULTIVO, self.SIEMBRA, ultimo, departamento=departamentos.departamento_mas_cercano(-33.95, -60.57), **kw,
+        )
+
+    def test_dias_observados_acotados(self) -> None:
+        i = self.inicio
+        self.assertEqual(escenarios.dias_observados(i, i - timedelta(days=10)), 0)
+        self.assertEqual(escenarios.dias_observados(i, i), 1)
+        self.assertEqual(escenarios.dias_observados(i, i + timedelta(days=200)), 90)
+
+    def test_sin_dias_observados_coincide_con_los_analogos(self) -> None:
+        lista, d = escenarios.escenarios_en_curso(
+            self.hist_ev, self.hist_ll, self.obs_ev, self.obs_ll, self.CULTIVO, self.SIEMBRA,
+            self.inicio - timedelta(days=1), 0.1,
+        )
+        self.assertEqual(d, 0)
+        for e in lista:
+            ref = features_ventana(self.hist_ev, self.hist_ll, escenarios.fecha_equivalente(self.inicio, 2026, e["anio"]), 90)
+            self.assertEqual({k: e[k] for k in ref}, ref)
+
+    def test_todo_observado_da_la_misma_ventana_en_todos_los_anios(self) -> None:
+        lista, d = escenarios.escenarios_en_curso(
+            self.hist_ev, self.hist_ll, self.obs_ev, self.obs_ll, self.CULTIVO, self.SIEMBRA,
+            self.inicio + timedelta(days=120), 0.1,
+        )
+        self.assertEqual(d, 90)
+        observado = features_ventana(self.obs_ev, self.obs_ll, self.inicio, 90)
+        for e in lista:
+            self.assertEqual({k: e[k] for k in observado}, observado)
+
+    def test_etapas_y_serie(self) -> None:
+        previa = self._seg(self.inicio - timedelta(days=5))
+        self.assertEqual(previa["etapa"], "previa")
+        self.assertEqual(len(previa["serie"]), 1)
+        self.assertEqual(previa["serie"][0]["dias_observados"], 0)
+        self.assertIsNone(previa["observado"])
+
+        curso = self._seg(self.inicio + timedelta(days=30))
+        self.assertEqual(curso["etapa"], "en_curso")
+        self.assertEqual(curso["dias_observados"], 31)
+        dias = [p["dias_observados"] for p in curso["serie"]]
+        self.assertEqual(dias[0], 0)
+        self.assertEqual(dias[-1], 31)
+        self.assertEqual(dias, sorted(dias))
+        self.assertEqual(curso["observado"]["dias"], 31)
+        self.assertGreater(curso["observado"]["dias_calor"], 5)
+
+        fin = self._seg(self.inicio + timedelta(days=150))
+        self.assertEqual(fin["etapa"], "terminado")
+        self.assertEqual(fin["serie"][-1]["dias_observados"], 90)
+
+    def test_un_verano_muy_caluroso_sube_la_probabilidad(self) -> None:
+        fin = self._seg(self.inicio + timedelta(days=150))
+        primero, ultimo = fin["serie"][0], fin["serie"][-1]
+        self.assertLess(ultimo["promedio"], primero["promedio"])
+        if primero["prob_anio_malo"] is not None and ultimo["prob_anio_malo"] is not None:
+            self.assertGreaterEqual(ultimo["prob_anio_malo"], primero["prob_anio_malo"])
+        self.assertIsNotNone(ultimo["rinde_kg_ha"]["normal"])
+
+    def test_bundle_con_grillas_por_avance_que_mejoran(self) -> None:
+        seg = self.predictor.seguimiento
+        self.assertIsNotNone(seg)
+        self.assertEqual(seg["niveles"], ["0.00", "0.25", "0.50", "0.75", "1.00"])
+        self.assertTrue(seg["criterio_brier_final_menor_que_inicial"])
+        res = seg["resumen"]
+        self.assertGreater(res["1.00"]["brier_skill"], res["0.00"]["brier_skill"])
+        self.assertLessEqual(res["1.00"]["ancho_rango_medio"], res["0.00"]["ancho_rango_medio"])
+        self.assertTrue(self._seg(self.inicio + timedelta(days=30))["rango_por_avance"])
+
+    def test_cobertura_no_tiene_seguimiento(self) -> None:
+        with self.assertRaises(ValueError):
+            self.predictor.predict_seguimiento(
+                self.actuales, self.hist_ev, self.hist_ll, self.obs_ev, self.obs_ll,
+                "vicia_cobertura", date(2026, 3, 10), date(2026, 5, 1),
+            )

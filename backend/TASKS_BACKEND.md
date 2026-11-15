@@ -62,6 +62,11 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
 | `BACK-24` | Servicio único de datos del lote para `/telemetry` y `/simulate` (política de la sección 4.5) y `field_id` en `/simulate` | `backend/services/datos_lote.py`, `backend/services/telemetry_service.py`, `backend/services/simulation_service.py`, `backend/providers/features.py`, `backend/routers/simulate.py`, `backend/routers/telemetry.py`, `backend/schemas.py`, tests | `BACK-26`, `BACK-22`, `BACK-23` | `[~]` |
 | `BACK-25` | Reintento en segundo plano de ISRIC/SRTM para campos con dato aproximado (cada 5 min, hasta 1 h) y estado visible para el frontend | `backend/services/reintentos_campos.py`, `backend/services/test_reintentos_campos.py`, `backend/routers/fields.py`, `backend/schemas.py`, `backend/main.py` | `BACK-22`, `BACK-18` | `[~]` |
 | `BACK-26` | Clima histórico por celda en Supabase, leído bajo demanda, con `climatologia_pampa.json` como respaldo | `backend/providers/nasa_telemetry.py`, `backend/providers/cache_supabase.py`, `backend/providers/generar_precache.py`, `backend/main.py`, tests | `BACK-18` | `[x]` |
+| `BACK-27` | Campos nuevos en `POST /api/v1/simulate`: probabilidad de año malo, rinde en kg/ha, departamento de referencia y fase ENSO (contrato §5) | `backend/schemas.py`, `backend/services/simulation_service.py`, `backend/routers/test_simulate.py`, `CONTEXT.md`, `backend/TASKS_BACKEND.md` | `ML-16`, `ML-17` | `[x]` |
+| `BACK-28` | `field_id` opcional en `/simulate` (suelo y topografía guardados en `public.fields`) y departamento MAGyP guardado en cada campo | `backend/sql/schema.sql`, `backend/schemas.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/services/field_enrichment_service.py`, `backend/routers/test_simulate.py`, `backend/routers/test_fields_enrichment.py`, `backend/TASKS_BACKEND.md` | `BACK-27`, `BACK-22`, `ML-17` | `[x]` |
+| `BACK-29` | Endpoint `GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento`: seguimiento semanal de una campaña sembrada | `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/services/seguimiento_service.py` (nuevo), `backend/routers/test_seguimiento.py` (nuevo), `CONTEXT.md`, `backend/TASKS_BACKEND.md` | `ML-18`, `BACK-28` | `[x]` |
+| `BACK-30` | Cerrar y borrar campañas: validación de fecha de cosecha (no anterior a la siembra ni futura) en `POST`/`PATCH` y tests del CRUD | `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/routers/test_campaigns.py` (nuevo), `backend/TASKS_BACKEND.md` | `BACK-29` | `[x]` |
+| `BACK-31` | Endpoint `GET /api/v1/historial`: lluvia y agua en raíces por campaña agrícola desde 2006/07 (NASA POWER mensual + diario), rinde de la zona (MAGyP) y cosechas guardadas del lote | `backend/providers/nasa_power.py`, `backend/providers/cache_supabase.py`, `backend/ml/rinde.py`, `backend/services/historial_service.py` (nuevo), `backend/routers/historial.py` (nuevo), `backend/schemas.py`, `backend/main.py`, `backend/routers/test_historial.py` (nuevo) | `BACK-28`, `ML-17` | `[x]` |
 
 ---
 
@@ -1233,6 +1238,148 @@ Cada vez que el desarrollador te pida crear, detallar o avanzar con una tarea de
     - `/health` sigue arrancando rápido, sin bajar `nasa_hist`.
     - Un `/simulate` en una celda pampeana lee esa celda de Supabase.
     - Con `SUPABASE_SECRET_KEY` inválida, sigue funcionando desde el JSON.
+
+### 4.6. Riesgo de año malo, rinde en kg/ha, seguimiento, campañas e historial (`BACK-27` a `BACK-31`)
+
+### `[x]` BACK-27: Campos nuevos en `POST /api/v1/simulate`
+- **Objetivo:** Exponer en el contrato lo que agregan ML-16 y ML-17 (probabilidad de año malo y rinde en kg/ha), junto con el departamento de referencia y la fase ENSO, para que el front pueda explicar contra qué se compara.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/services/simulation_service.py`, `backend/routers/test_simulate.py`, `CONTEXT.md`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **Todos los campos nuevos son opcionales** (`None` por defecto). Los clientes actuales no se rompen y las respuestas viejas guardadas en `campaigns.simulacion_json` siguen siendo válidas.
+  2. **El What-If recalcula la probabilidad y los kg/ha**, porque cambian los puntajes. `telemetria_nasa`, `topografia_srtm` y `perfil_suelo` siguen mostrando el dato real (regla de BACK-13).
+  3. **Unidades en la API:** kg/ha y probabilidades entre 0 y 1. La conversión a qq/ha y a "3 de cada 10" la hace el front (FRONT-36).
+- **Especificación Técnica:**
+  1. `schemas.py`:
+     - `RindeKgHaOut {esperado, anio_malo, anio_bueno, normal: float | None, motivo_sin_dato: str | None}`.
+     - `DepartamentoReferenciaOut {codigo, nombre, provincia, distancia_km}`.
+     - `FaseEnsoOut {fase: Literal["nina", "neutro", "nino"], oni: float, anios_analogos_desde: int}` (1981 desde ML-13).
+     - `DistribucionHidroclimatica` y `RankingCultivoItem`: agregar los campos de ML-16 (`predictor.CAMPOS_DISTRIBUCION_PREDICTIVA`), todos opcionales:
+       - `prob_anio_malo: float | None` (0–1). Es `None` cuando el cultivo no le gana a la frecuencia habitual fuera de muestra (hoy trigo, cebada, girasol y sorgo) y en coberturas.
+       - `prob_anio_malo_tipica: float | None` (0–1): frecuencia habitual de años malos del cultivo.
+       - `anticipa_diferencias: bool | None`: si el sistema anticipa diferencias entre años para ese cultivo.
+       - `puntaje_anio_malo` y `puntaje_anio_bueno: float | None`: el rango real (cuantiles 10 y 90 con el error del modelo). **No** confundir con `p10`/`p90` del ensemble, que solo miden la variación del clima entre años análogos.
+     - `RankingCultivoItem` y `RecomendacionPrincipal`: agregar `rinde_kg_ha: RindeKgHaOut | None` (ML-17).
+     - `SimulateResponse`: agregar `departamento_referencia: DepartamentoReferenciaOut | None` y `fase_enso: FaseEnsoOut | None`.
+  2. `simulation_service.py`: pasar los campos que devuelve el predictor. `fase_enso` se calcula con `providers/enso.fase_enso(oni_actual)`, el mismo ONI que ya se usa para los años análogos.
+  3. `test_simulate.py`:
+     - Los campos nuevos aparecen para un cultivo MAGyP y son `None` para las coberturas.
+     - Con el What-If seco, `prob_anio_malo` no baja en un cultivo con `anticipa_diferencias = true`.
+     - En trigo, `prob_anio_malo` es `None` y `prob_anio_malo_tipica` no.
+     - Una respuesta sin los campos nuevos sigue validando contra `SimulateResponse`.
+  4. `CONTEXT.md` §5: agregar los campos nuevos al ejemplo de respuesta y a las notas de implementación.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q routers/test_simulate.py`
+- **Resultado de la Verificación (2026-11-15):**
+  - `schemas.py`: `RindeKgHaOut`, `CamposDistribucionPredictiva` (base de `DistribucionHidroclimatica` e `ItemRanking`), `DepartamentoReferenciaOut`, `FaseEnsoOut`; `RecomendacionPrincipal.rinde_kg_ha`; `SimulateResponse.departamento_referencia` y `fase_enso`. Todo opcional. Los campos de la distribución predictiva son los de ML-16 (`prob_anio_malo` es `None` en los cultivos que no anticipan).
+  - `simulation_service.py`: `fase_enso` desde el ONI de los insumos (`anios_analogos_desde` = `ANALOGOS_START`).
+  - `routers/test_simulate.py`: 6 tests nuevos (campos en ranking y recomendación, What-If seco, trigo sin probabilidad, fuera de cobertura, fase ENSO, respuesta vieja sin campos nuevos). `pytest -q`: 317 en verde.
+  - `CONTEXT.md` §5: ejemplo de respuesta con los campos nuevos.
+
+---
+
+### `[x]` BACK-28: `field_id` en `/simulate` y departamento MAGyP guardado en cada campo
+- **Nota del merge con main (2026-11-15):** esta tarea se desarrolló en paralelo con el `BACK-24` de la rama `dolfi` (servicio único de datos del lote). Se decidió con el desarrollador **quedarse con el `BACK-24` de main** para el `field_id` (estricto: 401 sin sesión, 404 si el campo no es del usuario, 422 si las coordenadas no coinciden) y conservar de esta tarea solo el **departamento MAGyP guardado** (columnas `departamento_*`, cálculo al crear o mover el campo, y cálculo y guardado en la primera simulación de campos viejos, ahora dentro de `_cargar_campo`). Se quitaron `_leer_campo`, las advertencias de campo no encontrado y `perfil_guardado`/`topografia_guardada` de `construir_insumos_ml`. El departamento guardado ahora informa la distancia real del lote al centroide.
+- **Objetivo:** Implementar la sugerencia de `TASKS_ML.md` (leer de `public.fields` solo las variables de largo plazo) y guardar el departamento MAGyP del campo una sola vez. Así `Info general` y la simulación usan el mismo suelo y la misma topografía, `/simulate` no vuelve a consultar ISRIC ni SRTM, y el seguimiento (BACK-29) tiene el departamento a mano.
+- **Archivos Permitidos:** `backend/sql/schema.sql`, `backend/schemas.py`, `backend/routers/simulate.py`, `backend/services/simulation_service.py`, `backend/services/field_enrichment_service.py`, `backend/routers/test_simulate.py`, `backend/routers/test_fields_enrichment.py`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **`field_id` es opcional y necesita Bearer token.** Sin token, o con un campo que no es del usuario, se ignora y `/simulate` funciona como hoy (coordenadas), con una `advertencia`. No falla, para no romper el modo demo.
+  2. **De `public.fields` solo se leen las variables de largo plazo:** suelo (`arcilla_pct`, `arena_pct`, `carbono_organico_g_kg`, `ph`, `textura_predominante`) y topografía (`elevacion_m`, `pendiente_terreno_pct`), y solo si `reintentar_soilgrids = false` o `reintentar_srtm = false` según corresponda. La telemetría, el ONI y los años análogos se siguen calculando en vivo.
+  3. **Departamento:** se calcula con `ml.departamentos.departamento_mas_cercano` (ML-17) en `POST` y `PATCH` (cuando cambian `lat`, `lon` o `polygon`) y se guarda en el campo. Los campos existentes sin departamento lo calculan la primera vez que se usan.
+- **Especificación Técnica:**
+  1. `schema.sql`: `alter table public.fields add column if not exists departamento_codigo text, departamento_nombre text, departamento_provincia text, departamento_distancia_km double precision`. Lo ejecuta la desarrolladora en Supabase.
+  2. `schemas.py`: `SimulateRequest.field_id: UUID | None = None` (sigue con `extra="forbid"`) y los campos `departamento_*` en `FieldResponse`.
+  3. `field_enrichment_service.py`: poblar `departamento_*` junto con el suelo y la topografía.
+  4. `routers/simulate.py` + `simulation_service.py`:
+     - Dependencia opcional de usuario (el mismo patrón que `routers/telemetry.py`, BACK-23).
+     - Leer el campo y armar los insumos con el suelo y la topografía guardados.
+     - Pasar `departamento_codigo` al predictor.
+  5. Tests:
+     - Con `field_id` y flags en `false` no se llama a ISRIC ni a SRTM.
+     - Sin token se usa el flujo actual.
+     - Un `field_id` ajeno se ignora con advertencia.
+     - El `POST` de un campo guarda el departamento.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q routers/test_simulate.py routers/test_fields_enrichment.py`
+- **Resultado de la Verificación (2026-11-15):**
+  - `schema.sql`: columnas `departamento_codigo`, `departamento_nombre`, `departamento_provincia`, `departamento_distancia_km` en `public.fields`. **Pendiente: ejecutar los `alter table` en el SQL Editor de Supabase** (sin eso, el `POST` de un campo falla al insertar las columnas nuevas).
+  - `field_enrichment_service.py`: `departamento_a_columnas_field` (lo agrega `enriquecer_datos_campo`), `columnas_field_a_perfil_suelo` y `columnas_field_a_topografia` (solo si el dato guardado es definitivo, con las mismas reglas de BACK-23).
+  - `providers/features.construir_insumos_ml(..., perfil_guardado, topografia_guardada)`: no consulta SoilGrids ni SRTM si se los pasa.
+  - `routers/simulate.py`: Bearer opcional y `get_field_store` (el mismo de `/telemetry`, una sola dependencia para sobreescribir). `_leer_campo` nunca falla: sin token, con un campo ajeno o con Supabase caído sigue por coordenadas con una advertencia. Campos viejos sin departamento: se calcula y se guarda en la primera simulación.
+  - `simulation_service.simular(..., campo, advertencias_extra)` y `armar_respuesta(..., departamento_codigo)`.
+  - Tests: 6 en `test_simulate.py` y 1 en `test_fields_enrichment.py` (más asserts de departamento). `pytest -q`: 324 en verde.
+  - **Límite confirmado del centroide:** desde la ciudad de Marcos Juárez (-32,70, -62,10) el centroide más cercano es Belgrano (Santa Fe, 38 km), porque el del departamento Marcos Juárez queda en -33,03. Con el departamento guardado en el campo el error es el mismo, solo que se calcula una vez. Resolverlo bien requiere los polígonos del IGN.
+
+---
+
+### `[x]` BACK-29: Endpoint de seguimiento de una campaña sembrada
+- **Objetivo:** `GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento`. Para una campaña ya sembrada, devuelve cómo cambió el riesgo de año malo y el rinde esperado semana a semana (ML-18) y qué pasó con el clima desde la siembra.
+- **Archivos Permitidos:** `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/services/seguimiento_service.py` (nuevo), `backend/providers/nasa_telemetry.py`, `backend/routers/test_seguimiento.py` (nuevo), `CONTEXT.md`, `backend/TASKS_BACKEND.md`.
+- **Decisiones Acordadas con el Desarrollador (2026-11-15):**
+  1. **`campaigns.fecha_inicio` es la fecha de siembra.** No hace falta cambiar el esquema.
+  2. **Se calcula cuando el usuario lo pide, no con un proceso programado.** Render Free duerme a los 15 minutos y tiene 512 MB. El resultado se guarda en `campaigns.simulacion_json["seguimiento"]` con `fecha_ultimo_dato`. Si NASA POWER no tiene un dato nuevo desde el último cálculo, se devuelve lo guardado sin recalcular.
+  3. **Requiere autenticación.** La campaña tiene que ser del usuario (RLS).
+- **Especificación Técnica:**
+  1. Validaciones (`422` con mensaje claro):
+     - El cultivo no está entre los 8 con rinde MAGyP: "Para cultivos de servicio no hay seguimiento de rinde."
+     - `fecha_inicio` es posterior a hoy: "La siembra todavía no ocurrió."
+     - El campo está fuera de cobertura de departamentos.
+  2. `seguimiento_service.py`:
+     - Pedir a NASA POWER, una sola vez, la serie diaria `[fecha_siembra − 89, hoy]` (hasta unos 250 días). Así cubre el estado del suelo al sembrar y todo el período crítico observado, sin depender de la ventana de 90 días de `nasa_reciente`. Se guarda en caché con clave de celda y rango, con el mismo TTL de 6 h.
+     - Armar los calendarios de la campaña actual con `providers/features.calendario_eventos` y `calendario_lluvia`.
+     - Calcular el ONI a la fecha de siembra con `providers/enso`.
+     - Llamar a `predict_seguimiento` (ML-18) con el departamento del campo (BACK-28).
+  3. `schemas.py`: `SeguimientoResponse`:
+     - De la campaña: `campana_id`, `cultivo`, `fecha_siembra`.
+     - Del período crítico: `etapa`, `inicio_periodo_critico`, `fin_periodo_critico`, `dias_observados`, `dias_periodo_critico`.
+     - Datos: `fecha_ultimo_dato`, `serie` (lista de `PuntoSeguimientoOut`), `observado` (`ClimaObservadoOut`).
+     - Referencias: `prob_anio_malo_tipica`, `rinde_normal_kg_ha`, `fase_enso_siembra`, `departamento_referencia`, `advertencias`.
+     - Advertencias fijas: atraso de 3 a 7 días de NASA POWER; clima regional, que no ve tormentas locales, plagas ni manejo.
+  4. `routers/campaigns.py`: nueva ruta. Ante falla de un servicio externo, `503` con `{"detail", "fuente"}`, igual que `/simulate`.
+  5. `test_seguimiento.py` (con dependencias falsas, sin red):
+     - Etapas `previa`, `en_curso` y `terminado`.
+     - Validaciones 422.
+     - Si no hay dato nuevo, se reutiliza lo guardado.
+     - 503 con `fuente`.
+     - Campaña ajena → 404.
+  6. `CONTEXT.md` §5: contrato del endpoint nuevo.
+- **Criterio de Aceptación:** latencia menor a 3 s con caché fría en local; menor a 300 ms cuando se reutiliza lo guardado.
+- **Definition of Done (Comando de Verificación):**
+  - `cd backend && python -m pytest -q routers/test_seguimiento.py`
+- **Resultado de la Verificación (2026-11-15):**
+  - `services/seguimiento_service.py`: `construir_insumos_seguimiento` (una consulta a NASA POWER desde el 1/1 del año de `siembra − 110 días` hasta hoy, en caché 6 h; estado del suelo al último día válido antes de la siembra; calendarios observados solo hasta el último día con lluvia y temperaturas válidas, sin inventar días con −999), `calcular_seguimiento`, `armar_respuesta`, `resultado_guardado_vigente`. Suelo y topografía guardados del campo si están completos (BACK-28).
+  - `routers/campaigns.py`: `GET /{campaign_id}/seguimiento` con `CampaignStore` (Supabase con RLS), `get_constructor_seguimiento` y `get_hoy` sobreescribibles; guarda en `campaigns.simulacion_json["seguimiento"]` sin pisar el resto del JSON.
+  - `schemas.py`: `SeguimientoResponse`, `PuntoSeguimientoOut`, `ClimaObservadoOut`, `FaseEnsoSiembraOut`.
+  - **Cambios respecto de la especificación:**
+    - Se recalcula **como mucho una vez por día** (o nunca más si el período crítico terminó), en lugar de "si NASA POWER no tiene un dato nuevo": saber si hay dato nuevo obliga a consultar NASA igual.
+    - Un campo **fuera de cobertura no da 422**: se devuelve el riesgo sin rinde en kg/ha y una advertencia, porque la probabilidad sigue siendo útil.
+    - `nasa_telemetry.py` no hizo falta tocarlo.
+  - `routers/test_seguimiento.py`: 8 tests (contrato y guardado, reutilización en el día, etapas, 422, 404, 503, calendarios indexados desde el 1/1). `pytest -q`: en verde.
+  - En vivo (Pergamino, maíz temprano sembrado el 20/09/2026, consulta del 15/11): 2,0 s con caché fría; último dato 12/11, 9 días observados del período crítico, 2,4 mm de lluvia contra 24,4 mm normales; probabilidad 0,24 (típica 0,28), 80 qq/ha esperados contra 77 normales.
+
+### `[x]` BACK-30: Cerrar y borrar campañas
+- **Objetivo:** Que el productor pueda cerrar la campaña al cosechar (fecha de fin, rinde cosechado y notas) o borrarla si la cargó por error. El `PATCH` y el `DELETE` ya existían (BACK-2/5) pero no validaban las fechas.
+- **Archivos:** `backend/schemas.py`, `backend/routers/campaigns.py`, `backend/routers/test_campaigns.py` (nuevo), `backend/TASKS_BACKEND.md`.
+- **Decisiones (2026-11-15, pedido del desarrollador):**
+  - `fecha_inicio` es la siembra y `fecha_fin` la cosecha. La cosecha no puede ser anterior a la siembra (`CampaignCreate` con `model_validator`, y en el `PATCH` contra la fila guardada) ni futura (un día de tolerancia por el huso horario: el servidor está en UTC).
+  - Al cerrar se conserva `simulacion_json` (el seguimiento guardado). El borrado elimina la fila completa, seguimiento incluido.
+  - El rinde cosechado se guarda en kg/ha (`rinde_kg_ha`, ya existente). Es el primer dato de rinde **de lote**: la base para escalar el rinde del departamento al del lote y para ML-19.
+- **Resultado de la Verificación (2026-11-15):** `routers/test_campaigns.py` con 7 tests (cierre con rinde y seguimiento conservado, cosecha anterior a la siembra, cosecha futura, rinde negativo, alta con cosecha anterior, borrado y 404 al repetir, hoy como cosecha). `pytest -q`: 346 en verde.
+
+### `[x]` BACK-31: Historial real del lote por campaña (`GET /api/v1/historial`)
+- **Objetivo:** Reemplazar los datos inventados de la pestaña *Información histórica* (FRONT-39) por datos reales: lluvia en mm y estado del suelo campaña por campaña, rinde de la zona y las cosechas guardadas del lote.
+- **Decisiones acordadas con el desarrollador (2026-11-15):**
+  - **Campaña agrícola** (julio a junio, "2022/23"), **desde 2006/07** (el período de los rindes MAGyP del modelo).
+  - **Estado del suelo = agua en raíces** (`GWETROOT`): promedio de la campaña y el **mes más seco**, contra lo normal de ese mes.
+  - **Rinde de la zona por campaña (MAGyP)** del departamento, contra su rinde normal (la tendencia de ML-17).
+  - Se **quitan** las métricas inventadas (temperatura, evaporación, materia orgánica por año).
+- **Implementación:**
+  - `providers/nasa_power.fetch_monthly_range`: endpoint mensual de NASA POWER (`PRECTOTCORR_SUM`, `GWETROOT`), descarta el mes 13.
+  - `services/historial_service.py`: mensual 2006 → año−2 (caché persistente `nasa_mensual`) + diario desde el 1/1 del año pasado hasta hoy (caché 6 h), porque NASA publica los meses de un año recién cuando terminó. Un mes de lluvia cuenta como completo con dato en ≥ 80% de **sus días calendario** (el mes en curso nunca); el agua en raíces se promedia con ≥ 10 días (así se ve el bache del mes en curso). Lo normal es el promedio de las campañas completas. La campaña en curso se compara solo con los meses completos contra lo normal de esos mismos meses (`lluvia_comparada_hasta`).
+  - `ml/rinde.rinde_zona_por_campana`: rinde MAGyP observado del departamento (mismo filtro que el label) contra la tendencia.
+  - Cosechas del lote: campañas guardadas agrupadas por campaña agrícola de la siembra (`calendario_siembra.anio_campana`: el doble cultivo trigo → soja 2da queda en la misma campaña).
+  - `routers/historial.py`: Bearer y `field_id` opcionales (sin sesión: clima y zona, con advertencia); 503 con `fuente`.
+- **Resultado de la Verificación (2026-11-15):** `routers/test_historial.py` con 10 tests; `pytest -q`: 355 en verde. En vivo (Tandil): 20 campañas completas, lluvia normal 899 mm; 2008/09 569 mm (−37%), 2014/15 1.083 mm (+20%); 2026/27 en curso −5% de julio a octubre y noviembre con 52% de agua en raíces contra 65% normal.
+- **Límite:** el agua en raíces de NASA (MERRA-2) es muy suavizada a escala mensual: en Tandil el promedio por campaña varía entre 62% y 69%. Lo más informativo es el mes más seco contra su normal.
 
 ---
 

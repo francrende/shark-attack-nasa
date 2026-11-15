@@ -16,6 +16,7 @@ from providers.soilgrids import SoilGridsUnavailable
 from providers.srtm import SrtmUnavailable
 from schemas import SimulateRequest, SimulateResponse
 from routers.telemetry import FieldStore, get_field_store
+from services.field_enrichment_service import departamento_a_columnas_field
 from services.simulation_service import ConstructorInsumos, simular
 
 _bearer_opcional = HTTPBearer(auto_error=False)
@@ -69,6 +70,16 @@ async def _cargar_campo(
 
     def persistir(cambios: dict[str, Any]) -> None:
         field_store.update_field(field_id, token, cambios)
+
+    # BACK-28: campos creados antes de tener departamento MAGyP: se calcula y se guarda una vez.
+    if not campo.get("departamento_codigo"):
+        columnas = departamento_a_columnas_field(lat, lon)
+        campo = {**campo, **columnas}
+        if columnas["departamento_codigo"]:
+            try:
+                await run_in_threadpool(persistir, columnas)
+            except Exception:  # noqa: BLE001 - guardar es una optimización: se usa igual
+                pass
 
     request = request.model_copy(update={"coordenadas": request.coordenadas.model_copy(update={"lat": lat, "lon": lon})})
     return request, campo, persistir

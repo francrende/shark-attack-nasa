@@ -8,6 +8,7 @@ import type {
   Coordenadas,
   CultivoAnterior,
   CultivoId,
+  HistorialResponse,
   RankingCultivoItem,
   RiesgoNivel,
   SimulateRequest,
@@ -498,7 +499,11 @@ export function generateSimulatedResponse(
       factores_clave_ml: factoresClave,
       explicacion,
     },
+    // Modo demostración: sin probabilidades ni qq/ha (no se inventan), marcado como ejemplo.
     ranking_cultivos: evaluados,
+    departamento_referencia: null,
+    fase_enso: null,
+    es_ejemplo: true,
   }
 }
 
@@ -555,26 +560,137 @@ export async function fetchFieldTelemetry(
   return (await response.json()) as TelemetryResponse
 }
 
+/** Cuánto se espera a `/simulate` antes de cortar: Render Free tarda 30–60 s en despertar. */
+export const TIMEOUT_SIMULACION_MS = 75_000
+
+export type TipoErrorSimulacion = 'servicio_externo' | 'invalido' | 'sin_conexion'
+
 /**
- * Cliente principal de simulación. Usa el motor simulado en Frontend por defecto
- * mientras el equipo de Backend termina su rama, o consulta `POST /api/v1/simulate`.
+ * Error tipado de `/simulate` (FRONT-36): el panel decide qué mostrar según el tipo, sin caer
+ * nunca a datos de ejemplo.
+ */
+export class SimulacionError extends Error {
+  readonly tipo: TipoErrorSimulacion
+  readonly fuente: string | null
+
+  constructor(tipo: TipoErrorSimulacion, mensaje: string, fuente: string | null = null) {
+    super(mensaje)
+    this.name = 'SimulacionError'
+    this.tipo = tipo
+    this.fuente = fuente
+  }
+}
+
+export interface SimulateOptions {
+  token?: string | null
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+function mensajeDetalle(detail: unknown): string | null {
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    const primero = detail[0] as { msg?: string }
+    if (typeof primero?.msg === 'string') return primero.msg
+  }
+  return null
+}
+
+/**
+ * Cliente de `POST /api/v1/simulate`. El modo de ejemplo solo se usa si `USE_SIMULATED_MODE`
+ * está activado a propósito (presentación sin backend), nunca como respuesta a un error.
  */
 export async function simulateCropRotation(
-  request: SimulateRequest
+  request: SimulateRequest,
+  options: SimulateOptions = {}
 ): Promise<SimulateResponse> {
   if (USE_SIMULATED_MODE) {
     return generateSimulatedResponse(request)
   }
 
-  const response = await fetch(BACKEND_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  })
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_SIMULACION_MS)
+  const cancelarDesdeAfuera = () => controller.abort()
+  options.signal?.addEventListener('abort', cancelarDesdeAfuera)
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`
+  }
+
+  let response: Response
+  try {
+    response = await fetch(BACKEND_API_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (options.signal?.aborted) throw err
+    throw new SimulacionError('sin_conexion', 'No pudimos conectarnos con el servidor.')
+  } finally {
+    window.clearTimeout(timer)
+    options.signal?.removeEventListener('abort', cancelarDesdeAfuera)
+  }
 
   if (!response.ok) {
-    throw new Error(`Error HTTP ${response.status} al consultar /api/v1/simulate`)
+    let cuerpo: { detail?: unknown; fuente?: unknown } = {}
+    try {
+      cuerpo = (await response.json()) as typeof cuerpo
+    } catch {
+      // Cuerpo vacío o no JSON
+    }
+    const detalle = mensajeDetalle(cuerpo.detail)
+    if (response.status === 503 && typeof cuerpo.fuente === 'string') {
+      throw new SimulacionError('servicio_externo', detalle ?? 'Servicio externo no disponible.', cuerpo.fuente)
+    }
+    // 422 (pedido inválido) y, con field_id (BACK-24), 401 sin sesión y 404 campo inexistente o ajeno:
+    // son problemas del pedido, no de conexión. Se muestra el mensaje del backend.
+    if (response.status === 422 || response.status === 401 || response.status === 404) {
+      throw new SimulacionError('invalido', detalle ?? 'El pedido no es válido.')
+    }
+    throw new SimulacionError('sin_conexion', detalle ?? `Error HTTP ${response.status} del servidor.`)
   }
 
   return (await response.json()) as SimulateResponse
+}
+
+
+/**
+ * Historial real del lote por campaña agrícola (`GET /api/v1/historial`, BACK-31 / FRONT-39):
+ * lluvia, agua en raíces, rinde de la zona y, con sesión y campo guardado, sus cosechas.
+ */
+export async function fetchHistorial(
+  coordenadas: Coordenadas,
+  options: { fieldId?: string | null; token?: string | null; signal?: AbortSignal } = {}
+): Promise<HistorialResponse> {
+  const url = new URL(`${API_BASE_URL}/api/v1/historial`)
+  url.searchParams.set('lat', String(coordenadas.lat))
+  url.searchParams.set('lon', String(coordenadas.lon))
+  if (options.fieldId && options.token) url.searchParams.set('field_id', options.fieldId)
+  const headers: Record<string, string> = {}
+  if (options.token) headers.Authorization = `Bearer ${options.token}`
+
+  let response: Response
+  try {
+    response = await fetch(url.toString(), { method: 'GET', headers, signal: options.signal })
+  } catch (err) {
+    if (options.signal?.aborted) throw err
+    throw new SimulacionError('sin_conexion', 'No pudimos conectarnos con el servidor.')
+  }
+  if (!response.ok) {
+    const cuerpo = (await response.json().catch(() => ({}))) as { detail?: unknown; fuente?: unknown }
+    const detalle = mensajeDetalle(cuerpo.detail)
+    if (response.status === 503) {
+      throw new SimulacionError(
+        'servicio_externo',
+        detalle ?? 'Servicio externo no disponible.',
+        typeof cuerpo.fuente === 'string' ? cuerpo.fuente : 'nasa_power'
+      )
+    }
+    if (response.status === 422) throw new SimulacionError('invalido', detalle ?? 'Ubicación inválida.')
+    throw new SimulacionError('sin_conexion', detalle ?? `Error HTTP ${response.status} del servidor.`)
+  }
+  return (await response.json()) as HistorialResponse
 }

@@ -156,6 +156,10 @@ class FieldEnrichmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cols["fuente_elevacion"], "srtm30m")
         self.assertEqual(cols["topo_fuente"], "opentopodata_srtm30m")
         self.assertFalse(cols["reintentar_srtm"])
+        # BACK-28: departamento MAGyP de referencia (ML-17)
+        self.assertEqual(cols["departamento_nombre"], "Pergamino")
+        self.assertEqual(cols["departamento_provincia"], "Buenos Aires")
+        self.assertLess(cols["departamento_distancia_km"], 75.0)
 
     async def test_enriquecer_datos_campo_tolera_falla_de_proveedores(self) -> None:
         async def _fail_suelo(*_args, **_kwargs):
@@ -175,6 +179,12 @@ class FieldEnrichmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(cols["materia_organica_g_kg"])
         self.assertEqual(cols["topo_fuente"], "no_disponible")
         self.assertTrue(cols["reintentar_srtm"])
+
+    def test_departamento_fuera_de_cobertura(self) -> None:
+        from services.field_enrichment_service import departamento_a_columnas_field
+
+        cols = departamento_a_columnas_field(-32.89, -68.83)  # Mendoza
+        self.assertTrue(all(v is None for v in cols.values()))
 
     async def test_create_y_update_field_enriquecen_solo_cuando_corresponde(self) -> None:
         llamadas_enricher: list[tuple[float, float]] = []

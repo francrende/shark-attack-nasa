@@ -57,6 +57,12 @@ export interface SimulateRequest {
   cultivo_anterior: CultivoAnterior
   objetivo_productor: ObjetivoProductor
   simulacion_what_if?: SimulacionWhatIf
+  /**
+   * Campo guardado del usuario (BACK-24; requiere token): suelo y topografía del servicio único de
+   * datos del lote, y su departamento para el rinde normal (BACK-28). Estricto: 401 sin sesión, 404 si
+   * el campo no es del usuario, 422 si las coordenadas no coinciden con las del campo.
+   */
+  field_id?: string | null
 }
 
 export interface TelemetriaNasa {
@@ -130,9 +136,125 @@ export interface FieldCampaign {
   created_at: string
 }
 
+/** Alta de una campaña sembrada (BACK-2: POST /api/v1/fields/{id}/campaigns). fecha_inicio = siembra. */
+export interface CampaignCreateRequest {
+  campana: Campana
+  cultivo: string
+  fecha_inicio: string
+  fecha_fin?: string | null
+}
+
+/** Cierre o edición de una campaña (BACK-30: PATCH). fecha_fin = cosecha; rinde_kg_ha = rinde cosechado. */
+export interface CampaignUpdateRequest {
+  fecha_fin?: string | null
+  rinde_kg_ha?: number | null
+  resultado_notas?: string | null
+}
+
+// ============================================================================
+// SEGUIMIENTO DE CAMPAÑA (BACK-29 / ML-18)
+// ============================================================================
+
+export type EtapaSeguimiento = 'previa' | 'en_curso' | 'terminado'
+
+export interface PuntoSeguimiento {
+  fecha: string
+  dias_observados: number
+  avance: number
+  promedio: number
+  prob_anio_malo: number | null
+  puntaje_anio_malo: number | null
+  puntaje_anio_bueno: number | null
+  rinde_kg_ha: RindeKgHa | null
+}
+
+export interface ClimaObservado {
+  desde: string
+  dias: number
+  lluvia_mm: number
+  lluvia_normal_mm: number | null
+  dias_calor: number
+  heladas: number
+  tormentas: number
+}
+
+export interface SeguimientoResponse {
+  campana_id: string
+  cultivo: string
+  campana: Campana
+  fecha_siembra: string
+  etapa: EtapaSeguimiento
+  inicio_periodo_critico: string
+  fin_periodo_critico: string
+  dias_observados: number
+  dias_periodo_critico: number
+  fecha_ultimo_dato: string
+  serie: PuntoSeguimiento[]
+  observado: ClimaObservado | null
+  prob_anio_malo_tipica: number | null
+  anticipa_diferencias: boolean | null
+  rinde_normal_kg_ha: number | null
+  fase_enso_siembra: { fase: FaseEnsoId; oni: number } | null
+  departamento_referencia: DepartamentoReferencia | null
+  anios_analogos: number
+  rango_por_avance: boolean
+  calculado_el: string
+  advertencias: string[]
+}
+
 export interface SubScores {
   hidroclimatico: number
   suelo: number
+}
+
+/** ML-17: rinde del departamento de referencia en kg/ha (redondeado a 50). */
+export interface RindeKgHa {
+  esperado: number | null
+  anio_malo: number | null
+  anio_bueno: number | null
+  normal: number | null
+  motivo_sin_dato: string | null
+}
+
+/**
+ * ML-16: distribución predictiva con el error real del modelo (CONTEXT §4.8).
+ * Todos opcionales: respuestas viejas o el modo de ejemplo no los traen.
+ */
+export interface CamposDistribucionPredictiva {
+  /** Probabilidad (0–1) de rinde 15% o más bajo lo normal. null si el cultivo no anticipa diferencias. */
+  prob_anio_malo?: number | null
+  /** Frecuencia habitual (0–1) de años malos del cultivo. */
+  prob_anio_malo_tipica?: number | null
+  /** Si el sistema anticipa diferencias entre años para este cultivo (hoy: maíz y soja). */
+  anticipa_diferencias?: boolean | null
+  puntaje_anio_malo?: number | null
+  puntaje_anio_bueno?: number | null
+  rinde_kg_ha?: RindeKgHa | null
+}
+
+export interface DistribucionHidroclimatica extends CamposDistribucionPredictiva {
+  promedio: number
+  /** P10 del clima de los años análogos (no es el peor 10% de los rindes). */
+  p10: number
+  p90: number
+  anios_desfavorables: number
+  anios_evaluados: number
+  umbral_desfavorable: number
+}
+
+export interface DepartamentoReferencia {
+  codigo: string
+  nombre: string
+  provincia: string
+  distancia_km: number
+}
+
+export type FaseEnsoId = 'nina' | 'neutro' | 'nino'
+
+export interface FaseEnso {
+  fase: FaseEnsoId
+  oni: number
+  anios_analogos_desde: number
 }
 
 export interface RecomendacionPrincipal {
@@ -140,11 +262,13 @@ export interface RecomendacionPrincipal {
   secuencia_sugerida: string
   score_final: number
   sub_scores: SubScores
+  distribucion_hidroclimatica?: DistribucionHidroclimatica | null
+  rinde_kg_ha?: RindeKgHa | null
   factores_clave_ml: string[]
   explicacion: string
 }
 
-export interface RankingCultivoItem {
+export interface RankingCultivoItem extends CamposDistribucionPredictiva {
   cultivo: CultivoId | string
   score_final: number
   riesgo: RiesgoNivel
@@ -165,6 +289,12 @@ export interface SimulateResponse {
   recomendacion_principal: RecomendacionPrincipal
   ranking_cultivos: RankingCultivoItem[]
   advertencias?: string[]
+  /** ML-17: departamento MAGyP de referencia; null fuera de cobertura. */
+  departamento_referencia?: DepartamentoReferencia | null
+  /** BACK-27: fase ENSO con la que se eligieron los años análogos. */
+  fase_enso?: FaseEnso | null
+  /** Solo del front: respuesta del modo demostración (datos de ejemplo, no del lote). */
+  es_ejemplo?: boolean
 }
 
 // ============================================================================
@@ -307,4 +437,50 @@ export interface FieldUpdateRequest {
   lon?: number
   hectareas?: number | null
   polygon?: [number, number][] | null
+}
+
+// ============================================================================
+// HISTORIAL DEL LOTE POR CAMPAÑA (BACK-31: GET /api/v1/historial)
+// ============================================================================
+
+export interface RindeZona {
+  /** Cultivo MAGyP: trigo, cebada, maiz, soja_primera, soja_segunda, girasol, sorgo. */
+  cultivo: string
+  rinde_kg_ha: number
+  normal_kg_ha: number | null
+  vs_normal_pct: number | null
+}
+
+export interface CosechaLote {
+  id: string
+  cultivo: string
+  fecha_siembra: string
+  fecha_cosecha: string | null
+  rinde_kg_ha: number | null
+  en_curso: boolean
+}
+
+export interface CampanaHistorial {
+  anio: number
+  etiqueta: string
+  completa: boolean
+  meses_con_dato: number
+  lluvia_mm: number | null
+  lluvia_vs_normal_pct: number | null
+  /** Campaña en curso: último mes completo comparado contra lo normal ("AAAA-MM"). */
+  lluvia_comparada_hasta: string | null
+  agua_raices_promedio_pct: number | null
+  mes_mas_seco: string | null
+  agua_raices_mes_mas_seco_pct: number | null
+  agua_raices_mes_mas_seco_normal_pct: number | null
+  rinde_zona: RindeZona[]
+  cosechas_lote: CosechaLote[]
+}
+
+export interface HistorialResponse {
+  ubicacion: Coordenadas
+  departamento_referencia: DepartamentoReferencia | null
+  normales: { lluvia_mm: number | null; agua_raices_pct: number | null; campanas_completas: number }
+  campanas: CampanaHistorial[]
+  advertencias: string[]
 }

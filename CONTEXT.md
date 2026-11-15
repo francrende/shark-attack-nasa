@@ -133,7 +133,7 @@ Para evitar el error agronómico de comparar cultivos de invierno contra cultivo
        - Producción con años análogos de la misma fase ENSO desde 1981 (ML-12/ML-13): 17.85. Con los mismos años sin filtrar por fase: 18.18.
        - What-If con el clima del período crítico observado: 14.9.
        - Línea base "año normal": 18.4. Línea base FAO: 23.5.
-     - **Detección de años malos:** AUC 0.76, contra 0.52 de "año normal".
+     - **Detección de años malos:** AUC 0.76 en test, contra 0.52 de "año normal". Fuera de muestra en las 19 campañas (ML-16) el AUC baja a 0,61: el test está dominado por la sequía 2022/23 (ver §4.8).
      - **Límite conocido:** antes de sembrar, la predictibilidad está acotada por el clima del período crítico, que todavía no ocurrió. El ranking entre cultivos de un mismo año es débil (ver ML-8 y ML-9).
      - **Fase comercial siguiente:** rindes a escala de lote, NDVI en la campaña (MODIS/Sentinel-2) y ERA5.
 
@@ -231,7 +231,7 @@ Esta sección registra qué hace bien el modelo, qué no, y qué se puede mejora
 **Qué quedó validado (test 2022/23–2024/25 y validación cruzada por campaña):**
 - **Campaña correcta:** el predictor solo evalúa los cultivos de la campaña pedida y el backend rechaza la campaña que no corresponde a la fecha. No depende del modelo.
 - **Reacción al estado del suelo:** con perfil seco bajan todos los cultivos y más los sensibles. En verano el orden es agronómicamente razonable (girasol y sorgo arriba, sojas abajo).
-- **Detección de años malos:** AUC 0,78 en producción, contra 0,52 de la línea base "año normal".
+- **Detección de años malos:** AUC 0,78 en producción en test 2022–2024, contra 0,52 de la línea base "año normal". **Fuera de muestra en las 19 campañas (ML-16) es 0,61, y dentro de una misma campaña 0,535:** el modelo anticipa en parte qué años vienen malos, no qué lotes andan peor ese año (§4.8).
 - **Contra la fórmula FAO:** el modelo es un 23% mejor. La fórmula sola predice peor que decir "año normal".
 
 **Problemas conocidos:**
@@ -251,7 +251,7 @@ Esta sección registra qué hace bien el modelo, qué no, y qué se puede mejora
 **Qué se corrigió en ML-10:** las coberturas tenían label de fórmula FAO y en sequía caían a 6–8 puntos, lo que dejaba al trigo primero aunque fuera el más demandante. Ahora se puntúan relativo a los cultivos reales (FAO-56 `Ky`) y se descuenta la demanda hídrica con perfil seco (§4.5).
 
 **Hoja de ruta, en orden de costo/beneficio:**
-1. **Medir en el régimen correcto:** validación cruzada dejando una campaña afuera sobre las 19 campañas y con años análogos (producción), con el resultado por año. Hoy la selección usa clima observado.
+1. **Medir en el régimen correcto:** hecho en ML-16 para la probabilidad de año malo y el rango (predicciones fuera de muestra de las 19 campañas, §4.8). Falta usar el mismo esquema para elegir hiperparámetros: hoy la selección usa clima observado.
 2. **Modelo directo para producción:** un segundo modelo entrenado solo con lo conocido al decidir (estado actual, ONI, cultivo, días a siembra). El actual queda para el What-If.
 3. ~~**Más años análogos:**~~ Hecho en ML-13 (1981–2025). Con el filtro por fase, producción pasó de 17,91 a 17,85 de MAE y el AUC de años malos de 0,77 a 0,78.
 4. **Más campañas con rinde (ML-9, 1990+):** con tendencia flexible en lugar de lineal (siembra directa, soja RR), asignando el rinde "maíz" anterior a 2010 solo a `maiz_temprano`, y verificando desde cuándo MAGyP separa soja de primera y de segunda.
@@ -259,6 +259,35 @@ Esta sección registra qué hace bien el modelo, qué no, y qué se puede mejora
 6. **Ponderar por superficie sembrada:** hoy un departamento con 1.000 ha pesa igual que uno con 200.000 ha.
 7. **Fecha de siembra de segunda según el antecesor:** hoy la soja de segunda (y el maíz tardío y el sorgo de segunda) usan el mismo calendario después de trigo, cebada o camelina, y el modelo no recibe el antecesor como feature: tras trigo y tras cebada el puntaje de agua y clima es idéntico. La cebada se cosecha 2–3 semanas antes que el trigo, lo que permite sembrar antes y suele dar más rinde. Mejora acotada, sin reentrenar: adelantar el inicio de siembra (y con él el período crítico de los años análogos) cuando el antecesor es cebada, y ajustar el texto del motivo ("noviembre" para cebada, "noviembre-diciembre" para trigo).
 8. **Escala de lote (fase comercial):** rindes de mapas de cosecha, NDVI en la campaña (MODIS / HLS) y consumo de agua medido (ECOSTRESS) en lugar de la tabla orientativa.
+
+### 4.8. Distribución Predictiva: Probabilidad de Año Malo y Rango Real (ML-16)
+
+**Problema que resuelve.** El ensemble de años análogos solo mide cuánto cambia el clima entre años parecidos. Fuera de muestra, el **39%** de los rindes reales cae debajo del P10 del ensemble (debería ser 10%): el rango P10 → promedio es de ~6 puntos y el desvío real del puntaje es de ~24. Mostrar el P10 como "año malo" prometía un piso que se rompe 4 de cada 10 veces.
+
+**Cómo se calcula (`ml/calibracion.py`).**
+- `train_baseline` arma predicciones **fuera de muestra** de las 19 campañas: las 16 de train + val con un modelo entrenado sin esa campaña (mismos hiperparámetros) y las 3 de test con el modelo final. Se usa el promedio del ensemble de producción **antes** de la penalización por demanda hídrica (esa penalización mide el agua que se le deja al cultivo siguiente, no el propio rinde).
+- Por cultivo se guarda la distribución del error real (`puntaje_real − promedio`) en 99 cuantiles. Con ella:
+  - `puntaje_anio_malo` / `puntaje_anio_bueno` = promedio + cuantil 10 / 90 del error.
+  - `prob_anio_malo` = P(puntaje real < 35), con un tope (`tope_prob`, hoy 0,35) en el tramo donde la frecuencia real deja de acompañar a la predicha.
+  - `prob_anio_malo_tipica` = frecuencia de años malos del cultivo en las 19 campañas.
+- **Puerta por cultivo** (`prob_valida_por_cultivo`): la probabilidad solo se publica si le gana a la típica fuera de muestra (dejando una campaña afuera). Si no, `prob_anio_malo = null`, `anticipa_diferencias = false` y se muestra solo la frecuencia habitual.
+- Se recalcula sola en cada entrenamiento (`python -m ml.train_baseline`) o con `--solo-calibrar`.
+
+**Resultados (2026-11-15, fuera de muestra, 19 campañas):**
+
+| Métrica | Valor |
+| :--- | :--- |
+| Brier contra la probabilidad típica | +3,5% (sin 2022/23: +1,9%) |
+| Maíz tardío / soja 2da / maíz temprano / soja 1ra | +8,0% / +7,2% / +5,5% / +4,3% → **se publica la probabilidad** |
+| Trigo / sorgo / girasol / cebada | −1,8% / −1,4% / −0,9% / −0,8% → **solo frecuencia habitual** |
+| Debajo del "año malo" / arriba del "año bueno" | 10,8% / 10,3% (objetivo 10%) |
+| AUC global / dentro de cada campaña | 0,61 / 0,535 |
+
+**Rinde en kg/ha (ML-17).** `rinde_kg_ha = tendencia MAGyP del departamento × (1 + (puntaje − 50) / 100)`, con la misma tendencia del label (`ml/rinde.py`, `ml/data/tendencias_magyp.json`) y el departamento de centroide más cercano (`ml/departamentos.py`, hasta 75 km). En los cultivos que **no anticipan** el esperado es el rinde normal y el rango es el histórico del cultivo: medido en kg/ha, su desvío del modelo es peor que decir "lo normal" (trigo 587 contra 561 kg/ha de error en test). Es el rinde del departamento, no del lote.
+
+**Seguimiento en campaña (ML-18).** Para un cultivo ya sembrado, los días del período crítico que ya pasaron se toman del clima observado y el resto de cada año análogo (`ml/escenarios.escenarios_en_curso`); el estado del suelo, el ONI y la fase ENSO quedan fijos a la fecha de siembra. Cada nivel de avance tiene su propia distribución predictiva medida fuera de muestra en las 19 campañas: la mejora del Brier contra la frecuencia habitual pasa de +3,4% al sembrar a +12,2% con el período crítico completo (AUC 0,61 → 0,70), y desde la mitad del período anticipan 7 de los 8 cultivos. El rango se achica poco (±32 → ±29 puntos). Gráfico: `ml/reports/09_seguimiento_retrospectivo.png`. Endpoint: BACK-29.
+
+**Lectura honesta.** La probabilidad se mueve poco (casi siempre entre 0,2 y 0,35, con 0,26 de media) y por campaña no anticipa la magnitud de 2008/09 ni de 2022/23, ni ve 2017/18 (exceso hídrico). En un año malo el rinde cae entre 35% y 40% respecto de lo normal y en uno bueno sube entre 20% y 33%: es un rango real, pero cambia poco con las condiciones de hoy. El valor más fuerte está en el seguimiento durante la campaña (ML-18), donde el clima del período crítico ya se observa. Mejorar el modelo de producción es ML-19 (gráfico: `ml/reports/08_calibracion_anio_malo.png`).
 
 ---
 
@@ -330,6 +359,13 @@ Formato estándar de comunicación entre el Frontend y el Backend.
       "anios_desfavorables": 1, // años con score < umbral_desfavorable
       "anios_evaluados": 19,
       "umbral_desfavorable": 40.0,
+      // ML-16 (§4.8): distribución predictiva con el error real del modelo
+      "prob_anio_malo": 0.22, // null si el cultivo no anticipa diferencias (hoy trigo, cebada, girasol, sorgo)
+      "prob_anio_malo_tipica": 0.26,
+      "anticipa_diferencias": true,
+      "puntaje_anio_malo": 17.8, // cuantil 10 con el error real (no es el p10 del clima de los análogos)
+      "puntaje_anio_bueno": 82.4,
+      "rinde_kg_ha": { "esperado": 6000, "anio_malo": 3650, "anio_bueno": 7750, "normal": 5850, "motivo_sin_dato": null }, // ML-17
       "peor_escenario": {
         "anio": 2008,
         "score": 44.0,
@@ -338,6 +374,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
         "frecuencia_riesgo_helada": 0
       }
     },
+    "rinde_kg_ha": { "esperado": 6000, "anio_malo": 3650, "anio_bueno": 7750, "normal": 5850, "motivo_sin_dato": null }, // ML-17 (= el del ranking)
     "perfil_mercado": "Bajo costo de implantación y alta estabilidad defensiva; grano comercializable como forraje o exportación.",
     "factores_clave_ml": [
       "Baja saturación hídrica en zona radicular detectada por NASA (34%)",
@@ -348,6 +385,7 @@ Formato estándar de comunicación entre el Frontend y el Backend.
   },
   "ranking_cultivos": [
     // ML-5: score_hidroclimatico_p10, anios_desfavorables y anios_evaluados solo vienen si hay escenarios_historicos
+    // ML-16/ML-17 (BACK-27): cada ítem trae además prob_anio_malo, prob_anio_malo_tipica, anticipa_diferencias, puntaje_anio_malo, puntaje_anio_bueno y rinde_kg_ha
     // ML-7: "fuera_de_ventana_siembra": true si la siembra de ese cultivo ya terminó; ML-11: "motivo_no_sembrable" (texto o null) si hoy no se puede sembrar (lote ocupado por el antecesor o siembra terminada). Los no sembrables van al final del ranking; no se excluyen
     { "cultivo": "sorgo", "score_final": 90.5, "riesgo": "bajo", "fuera_de_ventana_siembra": false, "score_hidroclimatico_p10": 71.5, "anios_desfavorables": 1, "anios_evaluados": 19 },
     { "cultivo": "maiz_tardio", "score_final": 82.5, "riesgo": "medio", "score_hidroclimatico_p10": 58.0, "anios_desfavorables": 2, "anios_evaluados": 19 },
@@ -364,6 +402,8 @@ Formato estándar de comunicación entre el Frontend y el Backend.
     "recomendacion_experto": "Validar agua útil real con muestreo de barreno a 1 metro y consultar al ingeniero agrónomo local antes de definir la densidad de siembra."
   },
   // BACK-13: además vienen "cobertura_12_meses" y "comparacion_estrategias" (ML-3; ver Swagger en /docs)
+  "departamento_referencia": { "codigo": "06623", "nombre": "Pergamino", "provincia": "Buenos Aires", "distancia_km": 12.9 }, // ML-17; null fuera de cobertura
+  "fase_enso": { "fase": "nina", "oni": -1.2, "anios_analogos_desde": 1981 }, // BACK-27
   "advertencias": [] // avisos de calidad de dato (fallback regional de SoilGrids/SRTM, propiedades faltantes)
 }
 ```
@@ -373,6 +413,8 @@ Formato estándar de comunicación entre el Frontend y el Backend.
 > - **ML-12:** `anios_evaluados` es la cantidad de años análogos de la misma fase ENSO (desde ML-13, entre 10 y 22 según la fase y la fecha; los años disponibles son 1981–2024). En verano, `telemetria_nasa.riesgo_termico_verano` se calcula con los días de calor de esos mismos años, no con el promedio histórico. La `explicacion` dice qué fase rige.
 > - **ML-15:** `explicacion` describe el puntaje hidroclimático en la escala MAGyP ("levemente por encima de lo normal (53, donde 50 es un año normal)"), no como porcentaje; justifica el contraste con números (P10 o puntaje); dice si coincide con la práctica habitual, y lista los cultivos que no se pueden sembrar y por qué.
 > - **ML-14:** en verano, `secuencia_sugerida` y `secuencia_anual` empiezan por el invierno que realmente hubo (el antecesor si es de invierno, o `barbecho`). Si el perfil del cultivo sugiere otro invierno, se agrega como `; próximo ciclo: ...`.
+> - **ML-16 / ML-17:** cada cultivo del ranking (y `distribucion_hidroclimatica`) trae `prob_anio_malo` (null si el cultivo no anticipa), `prob_anio_malo_tipica`, `anticipa_diferencias`, `puntaje_anio_malo`, `puntaje_anio_bueno` y `rinde_kg_ha` (`esperado`, `anio_malo`, `anio_bueno`, `normal`, `motivo_sin_dato`); la respuesta trae `departamento_referencia`. Ver §4.8. El esquema Pydantic los expone en BACK-27.
+> - **BACK-29 / ML-18:** `GET /api/v1/fields/{field_id}/campaigns/{campaign_id}/seguimiento` (con sesión) devuelve `etapa` (`previa` / `en_curso` / `terminado`), el período crítico, `serie` semanal (`fecha`, `dias_observados`, `avance`, `prob_anio_malo`, `puntaje_anio_malo`, `puntaje_anio_bueno`, `rinde_kg_ha`), `observado` (lluvia contra la mediana de los análogos, días de calor, heladas, tormentas), probabilidad típica, `anticipa_diferencias`, rinde normal, fase ENSO de la siembra y advertencias fijas (atraso de NASA POWER, clima regional). Se calcula como mucho una vez por día y se guarda en `campaigns.simulacion_json["seguimiento"]`.
 > - **ML-10:** el contrato no cambia. `sub_scores.hidroclimatico`, la distribución y el ranking ya incluyen el descuento por demanda hídrica; cuando aplica, `explicacion` termina con una oración que lo dice.
 > - **Errores:** `422` para un request inválido (campaña u objetivo desconocidos, `cultivo_anterior` fuera de los 11 cultivos o de `ninguno`/`barbecho`/`sin_cultivo`/`null`, rangos del What-If, campos extra, o **campaña que no corresponde a la fecha** según la regla de §4.1: el backend también la rechaza, además del bloqueo del frontend). `503` si un provider no tiene datos.
 

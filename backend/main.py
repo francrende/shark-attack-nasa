@@ -32,6 +32,7 @@ from services.reintentos_campos import detener_reintentos, iniciar_reintentos  #
 from routers import auth, campaigns, fields  # noqa: E402
 from routers.simulate import router as simulate_router  # noqa: E402
 from routers.telemetry import router as telemetry_router  # noqa: E402
+from routers.historial import router as historial_router  # noqa: E402
 
 settings = get_settings()
 
@@ -94,6 +95,7 @@ app.include_router(fields.router)
 app.include_router(campaigns.router)
 app.include_router(simulate_router)
 app.include_router(telemetry_router)
+app.include_router(historial_router)
 
 
 @app.head("/health", include_in_schema=False)  # BACK-16: pings con HEAD; fuera del OpenAPI (sin ID duplicado)
