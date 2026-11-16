@@ -624,7 +624,8 @@ export function App() {
   useEffect(() => {
     setSeguimiento(null)
     setSeguimientoAviso(null)
-    if (authStatus !== 'authenticated' || !activeToken || !selectedFieldId || !campanaEnCurso) {
+    // La cuenta demo es un usuario real en BD: sigue la campaña igual que un usuario registrado.
+    if ((authStatus !== 'authenticated' && authStatus !== 'demo') || !activeToken || !selectedFieldId || !campanaEnCurso) {
       setSeguimientoCargando(false)
       return
     }
@@ -709,7 +710,7 @@ export function App() {
     const controller = new AbortController()
     setHistorialCargando(true)
     setHistorialAviso(null)
-    const conSesion = authStatus === 'authenticated' && activeToken
+    const conSesion = (authStatus === 'authenticated' || authStatus === 'demo') && activeToken
     fetchHistorial(selectedCoords, {
       fieldId: conSesion ? selectedFieldId : null,
       token: conSesion ? activeToken : null,
@@ -1472,7 +1473,7 @@ export function App() {
 
             {activeTab === 'planificacion' && (
               <>
-                {authStatus === 'authenticated' && selectedFieldId && campanaEnCurso && (
+                {(authStatus === 'authenticated' || authStatus === 'demo') && selectedFieldId && campanaEnCurso && (
                   <SeguimientoCampana
                     nombreCultivo={CULTIVOS_CATALOGO[campanaEnCurso.cultivo as CultivoId]?.nombre ?? campanaEnCurso.cultivo}
                     seguimiento={seguimiento}
@@ -1490,13 +1491,8 @@ export function App() {
                     }
                   />
                 )}
-                {authStatus === 'authenticated' && selectedFieldId && !campanaEnCurso && (
+                {(authStatus === 'authenticated' || authStatus === 'demo') && selectedFieldId && !campanaEnCurso && (
                   <RegistrarSiembraForm onRegistrar={handleRegistrarSiembra} />
-                )}
-                {authStatus === 'demo' && (
-                  <section className="panel-section seguimiento-section seguimiento-demo">
-                    <p className="seg-invitacion">Registrate y guardá tu lote para seguir la campaña semana a semana.</p>
-                  </section>
                 )}
                 <CampaignConfigPanel
                   fieldName={selectedUserField?.nombre ?? null}
