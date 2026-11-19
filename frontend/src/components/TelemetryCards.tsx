@@ -160,7 +160,7 @@ export function TelemetryCards({
 
   const headerNode = (
     <div className="section-header-row campaign-header-row">
-      <h2 className="section-title">Info general</h2>
+      <h2 className="section-title">Info. General</h2>
       <span
         className={`campaign-field-tag ${!isFieldAssigned ? 'is-muted' : ''}`}
         title={isFieldAssigned ? `Campo activo: ${loteLabel}` : loteLabel}

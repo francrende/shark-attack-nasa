@@ -1412,7 +1412,7 @@ export function App() {
               }}
             >
               <Info size={14} />
-              <span>Info general</span>
+              <span>Info. General</span>
             </button>
 
             <button
@@ -1424,7 +1424,7 @@ export function App() {
               }}
             >
               <History size={14} />
-              <span>Información histórica</span>
+              <span>Info. Histórica</span>
             </button>
 
             <button

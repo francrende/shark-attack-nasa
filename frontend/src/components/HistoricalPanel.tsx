@@ -198,7 +198,7 @@ export function HistoricalPanel({
       <section className="panel-section historical-controls-section">
         <div className="section-header-row">
           <div>
-            <h2 className="section-title">Información histórica</h2>
+            <h2 className="section-title">Info. Histórica</h2>
             <p className="telemetry-lote-subtitle">{loteLabel}</p>
           </div>
           {actual && <span className="historical-year-hero-badge">{actual.etiqueta}</span>}
