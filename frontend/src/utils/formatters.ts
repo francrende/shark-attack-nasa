@@ -15,7 +15,7 @@ const MESES_CORTOS = [
 
 /**
  * Convierte una fecha ISO ('2026-11-08') a formato humano ('8 nov. 2026').
- * Nunca expone formato ISO en la interfaz (SKILLS_FRONTEND.md §3.4).
+ * Nunca expone formato ISO en la interfaz (frontend/AGENTS.md, Formatos).
  */
 export function formatHumanDate(isoDateStr: string): string {
   const parts = isoDateStr.split('-')

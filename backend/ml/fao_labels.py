@@ -231,7 +231,7 @@ def compute_fao_hydroclimatic_score(
     """
     Calcula el Puntaje de Aptitud Hidroclimática y Topográfica (S_hidroclimatico, 0 a 100)
     integrando las curvas de respuesta FAO GAEZ v4 / FAO-56 y las interacciones no lineales
-    documentadas en CONTEXT.md (Sección 4.2, 4.3 y 4.4).
+    documentadas en backend/ml/AGENTS.md.
     """
     p = CROP_CATALOG[crop_name]
 
@@ -332,7 +332,7 @@ def compute_fao_hydroclimatic_score(
         excess_frost = effective_frost_days - p["frost_tol"]
         score -= (excess_frost**0.90) * p["frost_sens"]
 
-    # 7. Anomalías físicas en curso (CONTEXT.md Sección 4.4):
+    # 7. Anomalías físicas en curso (sin pronósticos forzados, ver AGENTS.md):
     # 7a. Pulso de Secado Rápido (Flash Drought Onset: tendencia_15d < -10%)
     if tendencia_15d < -10.0:
         drying_severity = abs(tendencia_15d + 10.0) / 12.0

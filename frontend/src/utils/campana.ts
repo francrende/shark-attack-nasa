@@ -1,7 +1,7 @@
 import type { Campana } from '../types/api'
 
 /**
- * Regla de campaña vigente (CONTEXT.md §4.1), idéntica a la del backend y el entrenamiento:
+ * Regla de campaña vigente (AGENTS.md raíz), idéntica a la del backend y el entrenamiento:
  * se mira el mes de hoy + 45 días; si cae entre abril y septiembre, la campaña habilitada es
  * invierno, si no, verano. El backend rechaza (422) la campaña que no corresponde a la fecha.
  */

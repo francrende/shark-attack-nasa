@@ -229,7 +229,7 @@ export function calculatePolygonAreaHa(points: [number, number][]): number {
 }
 
 /**
- * Construye la URL WMTS de NASA GIBS (EPSG:3857) según la Sección 3.2 de CONTEXT.md.
+ * Construye la URL WMTS de NASA GIBS (EPSG:3857).
  */
 export function buildNasaGibsTileUrl(
   layerIdentifier: string,

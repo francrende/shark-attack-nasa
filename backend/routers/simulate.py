@@ -1,4 +1,4 @@
-"""Endpoint ``POST /api/v1/simulate`` (BACK-7, contrato de CONTEXT.md §5)."""
+"""Endpoint ``POST /api/v1/simulate`` (contrato en ``schemas.SimulateRequest`` y ``SimulateResponse``)."""
 
 from __future__ import annotations
 

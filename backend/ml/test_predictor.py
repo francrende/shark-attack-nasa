@@ -42,7 +42,7 @@ FECHA = date(2026, 11, 8)
 
 
 class TestAgroPredictorML4(unittest.TestCase):
-    """Verifica inferencia online, MCDA, anomalías, What-If y contrato JSON de CONTEXT.md."""
+    """Verifica inferencia online, MCDA, anomalías, What-If y contrato JSON de backend/schemas.py."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -70,7 +70,7 @@ class TestAgroPredictorML4(unittest.TestCase):
         self.assertEqual(len(self.predictor.crops_catalog["by_name"]), 11)
 
     def test_02_context_md_benchmark_contract_and_ranking(self) -> None:
-        """Verifica que el caso testigo de CONTEXT.md Sección 5 reproduzca ranking, riesgos y estructura."""
+        """Verifica que el caso testigo (−33,95, −60,57, antecesor soja de primera) reproduzca ranking, riesgos y estructura."""
         resp = run_recommendation(
             features=self.context_drought_features,
             campana="verano",
@@ -80,7 +80,7 @@ class TestAgroPredictorML4(unittest.TestCase):
             ubicacion={"lat": -33.95, "lon": -60.57},
         )
 
-        # Bloques obligatorios de CONTEXT.md Sección 5
+        # Bloques obligatorios del contrato de /simulate
         for key in (
             "ubicacion",
             "telemetria_nasa",
@@ -272,7 +272,7 @@ class TestEnsembleML5(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.predictor = get_predictor()
-        # Las 8 features actuales del caso testigo de CONTEXT.md (sin la ventana futura)
+        # Las 8 features actuales del caso testigo (sin la ventana futura)
         cls.current: dict[str, float] = {
             "gwetroot_saturacion_pct": 34.0,
             "gwettop_saturacion_pct": 28.5,

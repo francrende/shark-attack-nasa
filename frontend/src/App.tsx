@@ -240,7 +240,7 @@ export function App() {
     }
   }, [])
 
-  // Por regla de SKILLS_FRONTEND.md §3 y §4, la app inicia directamente en 'Planificación de campaña'
+  // Por regla de frontend/AGENTS.md (Producto y navegación), la app inicia directamente en 'Planificación de campaña'
   const [activeTab, setActiveTab] = useState<NavTabId>('planificacion')
   const [settingsScope, setSettingsScope] =
     useState<SettingsModalScope | null>(null)
@@ -1412,7 +1412,7 @@ export function App() {
               }}
             >
               <Info size={14} />
-              <span>Info general</span>
+              <span>Info. General</span>
             </button>
 
             <button
@@ -1424,7 +1424,7 @@ export function App() {
               }}
             >
               <History size={14} />
-              <span>Información histórica</span>
+              <span>Info. Histórica</span>
             </button>
 
             <button

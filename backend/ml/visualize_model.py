@@ -35,7 +35,7 @@ DATA_DIR = ML_DIR / "data"
 REPORTS_DIR = ML_DIR / "reports"
 MODEL_PATH = ML_DIR / "modelo_agro.joblib"
 
-# Escenario base (benchmark de sequía de CONTEXT.md) sobre el cual se varía 1 feature a la vez.
+# Escenario base (caso testigo de sequía) sobre el cual se varía 1 feature a la vez.
 BASE_SCENARIO: dict[str, float] = {
     "gwetroot_saturacion_pct": 34.0,
     "gwettop_saturacion_pct": 28.5,

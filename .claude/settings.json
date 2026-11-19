@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "multica-cli@multica-cli": true
+  }
+}

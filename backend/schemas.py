@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 
 
 # ---------------------------------------------------------------------------
-# Telemetría NASA (CONTEXT.md §5)
+# Telemetría NASA
 # ---------------------------------------------------------------------------
 
 RiesgoTermico = Literal["bajo", "medio", "alto", "critico"]
@@ -473,7 +473,7 @@ class EstrategiaRotacion(BaseModel):
 
 
 class SimulateResponse(BaseModel):
-    model_config = ConfigDict(json_schema_extra={"description": "Contrato de CONTEXT.md §5."})
+    model_config = ConfigDict(json_schema_extra={"description": "Respuesta de POST /api/v1/simulate."})
 
     ubicacion: Ubicacion
     telemetria_nasa: TelemetriaNasa

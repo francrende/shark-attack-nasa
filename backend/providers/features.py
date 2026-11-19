@@ -3,7 +3,7 @@
 La parte superior del módulo son **funciones puras sin E/S** pensadas para que
 ``backend/ml/generate_dataset.py`` las importe en lugar de mantener su propia copia, de modo
 que entrenamiento e inferencia calculen exactamente igual. Replican hoy la lógica de
-``extract_real_90d_windows`` (esquema de doble ventana de CONTEXT.md §4.3).
+``extract_real_90d_windows`` (estado actual [t-89, t] + período crítico, ver backend/ml/AGENTS.md).
 
 ``construir_insumos_ml`` (al final) es el orquestador online: consulta los providers y
 devuelve las features actuales + los escenarios históricos por año de la ventana futura,

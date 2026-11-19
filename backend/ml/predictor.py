@@ -1,6 +1,6 @@
 """Motor de Inferencia Online, Detección de Anomalías y Decisión Multicriterio (ML-4).
 
-Implementa ``AgroPredictor`` (interfaz ``RecommendationEngine`` de CONTEXT.md):
+Implementa ``AgroPredictor`` (motor de recomendación, ver backend/ml/AGENTS.md):
 1. Carga singleton en memoria de ``backend/ml/modelo_agro.joblib`` (< 15 ms por lote).
 2. Aplica transformaciones internas de simulación *What-If* manteniendo controles
    independientes en la UI pero preservando la consistencia física del vector X.
@@ -86,7 +86,7 @@ AnomalySeverity = Literal["baja", "media", "alta"]
 ML_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL_PATH = ML_DIR / "modelo_agro.joblib"
 
-# Orden estricto de las 15 features del modelo ML-7 (CONTEXT.md §4.3). Debe coincidir con
+# Orden estricto de las 15 features del modelo ML-7 (ver backend/ml/AGENTS.md). Debe coincidir con
 # ``feature_columns`` del bundle (lo verifica ``AgroPredictor``).
 FEATURE_COLUMNS: tuple[str, ...] = (
     "gwetroot_saturacion_pct",
@@ -159,7 +159,7 @@ CAMPOS_DISTRIBUCION_PREDICTIVA: tuple[str, ...] = (
     "puntaje_anio_bueno",
 )
 
-# Pesos de la fórmula dinámica (CONTEXT.md Sección 4.5)
+# Pesos de la fórmula dinámica por objetivo_productor (ver backend/ml/AGENTS.md)
 OBJECTIVE_WEIGHTS: dict[str, tuple[float, float]] = {
     "resiliencia_hidroclimatica": (0.75, 0.25),
     "conservacion_suelo": (0.30, 0.70),
@@ -559,7 +559,7 @@ def detect_physical_anomalies(
     campana: Campaign = "verano",
     cultivo_anterior: str | None = None,
 ) -> list[dict[str, str]]:
-    """Detecta hasta 6 anomalías físicas basadas en evidencia satelital (CONTEXT.md Sección 4.4)."""
+    """Detecta hasta 6 anomalías físicas basadas en evidencia satelital (sin pronósticos forzados)."""
     anomalies: list[dict[str, str]] = []
 
     gwetroot = float(features["gwetroot_saturacion_pct"])
@@ -1464,7 +1464,7 @@ class AgroPredictor:
         """Ejecuta el pipeline completo de decisión (ML + Matriz Agronómica + Anomalías).
 
         Devuelve un diccionario compatible 1:1 con el contrato JSON de ``POST /api/v1/simulate``
-        (CONTEXT.md Sección 5) más los metadatos enriquecidos ``comparacion_estrategias``
+        (contrato de backend/schemas.py) más los metadatos enriquecidos ``comparacion_estrategias``
         y ``cobertura_12_meses`` de ML-3.
 
         Con ``escenarios_historicos`` (ML-5, salida de ``BACK-6``), ``features`` solo necesita
