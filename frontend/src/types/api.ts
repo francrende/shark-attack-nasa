@@ -1,5 +1,5 @@
 // ============================================================================
-// CONTRATOS DE DATOS API JSON (Sección 5 de CONTEXT.md)
+// CONTRATOS DE DATOS API JSON (espejo de backend/schemas.py)
 // ============================================================================
 
 export interface Coordenadas {

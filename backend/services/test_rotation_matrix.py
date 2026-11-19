@@ -56,7 +56,7 @@ class TestRotationMatrix(unittest.TestCase):
                             self.assertLessEqual(res.meses_suelo_desnudo, 12)
 
     def test_context_md_reference_case_calibration(self) -> None:
-        # Caso oficial de CONTEXT.md Sección 5:
+        # Caso testigo del contrato de /simulate:
         # cultivo_anterior="soja_primera", soc=18.4, pendiente=1.8, arcilla=24.5
         sorgo = evaluate_soil_and_rotation(
             cultivo_candidato="sorgo",

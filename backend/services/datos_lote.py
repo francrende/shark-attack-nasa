@@ -1,7 +1,7 @@
 """Servicio único de datos del lote (BACK-24).
 
 Lo usan ``GET /api/v1/telemetry`` (Info general) y ``POST /api/v1/simulate`` (insumos del
-modelo), con la misma política (TASKS_BACKEND §4.5):
+modelo), con la misma política (ver "Política de datos del lote" en backend/AGENTS.md):
 
 - **Datos fijos del lote** (suelo y topografía):
   - Si el campo guardado (``public.fields``) tiene dato real (``reintentar_* = false``), se

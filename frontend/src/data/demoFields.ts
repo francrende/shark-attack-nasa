@@ -286,7 +286,7 @@ export const OBJETIVOS_PRODUCTOR_META: Record<
 }
 
 // ============================================================================
-// CAPAS SATELITALES NASA GIBS (Sección 3.2 de CONTEXT.md)
+// CAPAS SATELITALES NASA GIBS
 // ============================================================================
 
 export const NASA_GIBS_LAYERS: GibsLayerConfig[] = [

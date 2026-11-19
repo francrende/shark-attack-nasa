@@ -1,7 +1,7 @@
 /**
  * Traducción de los datos del modelo a lenguaje de productor (FRONT-36).
  *
- * Fuente única de los textos de la tabla de traducción de TASKS_FRONTEND.md (FRONT-36):
+ * Fuente única de los textos de la tabla de traducción de frontend/AGENTS.md:
  * nada de "P10", "puntaje", "ensemble", "análogos" ni "/100" en la vista principal.
  * Funciones puras, sin React.
  */

@@ -17,9 +17,9 @@ import type {
 } from '../types/api'
 
 /**
- * Por decisión acordada en TASKS_FRONTEND.md (FRONT-1), mientras el equipo de Backend
+ * Por decisión de FRONT-1, mientras el equipo de Backend
  * desarrolla en paralelo su rama, el Frontend opera con datos simulados reactivos 100% fieles
- * al contrato JSON de la Sección 5 de CONTEXT.md.
+ * al contrato JSON de backend/schemas.py.
  * Cuando el Backend esté listo, basta cambiar `USE_SIMULATED_MODE = false`.
  */
 export const USE_SIMULATED_MODE = false
